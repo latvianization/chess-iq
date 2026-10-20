@@ -1,6 +1,7 @@
 import React from 'react';
+import { INLINE_PIECE_DATA_URLS } from './pieceSvgs';
 
-// Import SVG assets directly so Vite bundles and resolves them relative to the deploy path on GitHub Pages
+// Import SVG assets directly so Vite bundles and resolves them relative to deploy path
 import bB from '../assets/pieces/bB.svg';
 import bK from '../assets/pieces/bK.svg';
 import bN from '../assets/pieces/bN.svg';
@@ -30,17 +31,43 @@ const PIECE_ASSETS: Record<string, string> = {
 };
 
 /**
+ * Normalizes any piece representation into standard format like 'bR', 'wQ', etc.
+ * Handles inputs like 'bR', 'br', 'pieces/bR.svg', '/pieces/bR.svg', 'public/pieces/bR.svg'
+ */
+export function normalizePieceCode(input: string): string {
+  if (!input) return 'wP';
+  // Match piece code from any path or filename
+  const match = input.match(/([bw][kqrnbp])(?:\.svg)?$/i);
+  if (match) {
+    const raw = match[1];
+    return `${raw[0].toLowerCase()}${raw[1].toUpperCase()}`;
+  }
+  return input;
+}
+
+/**
  * Resolves piece image URL with 100% resilience:
- * 1. First priority: Vite-bundled hashed asset (works on GitHub Pages subpaths, custom domains, and local preview)
- * 2. Fallback: Relative path using Vite's import.meta.env.BASE_URL
+ * 1. Embedded inline data URI (zero network latency, never 404s on GitHub Pages or custom subpaths)
+ * 2. Vite-bundled hashed asset
+ * 3. Relative path using Vite's BASE_URL (e.g., ./pieces/bR.svg)
  */
 export function getPieceImageUrl(code: string): string {
-  if (PIECE_ASSETS[code]) {
-    return PIECE_ASSETS[code];
+  const norm = normalizePieceCode(code);
+
+  // 1. Direct inline data URI - bulletproof for GitHub Pages and offline
+  if (INLINE_PIECE_DATA_URLS[norm]) {
+    return INLINE_PIECE_DATA_URLS[norm];
   }
+
+  // 2. Vite hashed asset
+  if (PIECE_ASSETS[norm]) {
+    return PIECE_ASSETS[norm];
+  }
+
+  // 3. Fallback: Base-relative public folder
   const base = import.meta.env.BASE_URL || './';
   const cleanBase = base.endsWith('/') ? base : `${base}/`;
-  return `${cleanBase}pieces/${code}.svg`;
+  return `${cleanBase}pieces/${norm}.svg`;
 }
 
 interface PieceProps {
@@ -80,6 +107,13 @@ export const ChessPiece: React.FC<PieceProps> = ({
         src={pieceSrc}
         alt={`${colorName} ${pieceNameMap[type.toLowerCase()] || 'Piece'}`}
         draggable={false}
+        onError={(e) => {
+          // In case any external link failed (e.g. 404 on GitHub Pages), fallback to inline SVG data URL
+          const fallback = INLINE_PIECE_DATA_URLS[pieceCode];
+          if (fallback && e.currentTarget.src !== fallback) {
+            e.currentTarget.src = fallback;
+          }
+        }}
         className={`w-[88%] h-[88%] max-w-full max-h-full object-contain select-none pointer-events-none filter drop-shadow-[0_2px_3px_rgba(0,0,0,0.55)] transition-all duration-200 ease-out ${
           isAnimated ? 'scale-105 animate-in zoom-in-90 duration-200' : 'scale-100'
         }`}

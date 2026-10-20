@@ -4,15 +4,11 @@ import {
   Search,
   Globe,
   FileText,
-  Flame,
   Loader2,
-  Check,
   ChevronRight,
-  Clock,
   User,
 } from 'lucide-react';
 import {
-  PRELOADED_GAMES,
   RawGameSummary,
   fetchChessComGames,
   fetchLichessGames,
@@ -33,7 +29,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   isAnalyzing,
   analysisProgress,
 }) => {
-  const [activeTab, setActiveTab] = useState<'preloaded' | 'chesscom' | 'lichess' | 'pgn'>('preloaded');
+  const [activeTab, setActiveTab] = useState<'chesscom' | 'lichess' | 'pgn'>('chesscom');
   const [username, setUsername] = useState('');
   const [fetching, setFetching] = useState(false);
   const [fetchedGames, setFetchedGames] = useState<RawGameSummary[]>([]);
@@ -82,32 +78,15 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           </button>
         </div>
 
-        {/* Tab Buttons */}
-        <div className="grid grid-cols-4 p-2 gap-1 bg-zinc-100 dark:bg-[#181715] border-b border-zinc-200 dark:border-[#36332e]">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('preloaded');
-              setFetchError(null);
-            }}
-            className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-black transition-all ${
-              activeTab === 'preloaded'
-                ? 'bg-amber-400 text-black border border-black shadow-[1.5px_1.5px_0px_#000000]'
-                : 'text-zinc-600 dark:text-[#9c978f] hover:text-black dark:hover:text-white'
-            }`}
-          >
-            <Flame className="w-3.5 h-3.5 text-orange-600 dark:text-amber-400" />
-            <span className="hidden sm:inline">Master</span>
-            <span>Games</span>
-          </button>
-
+        {/* Tab Buttons: Chess.com, Lichess, Paste PGN */}
+        <div className="grid grid-cols-3 p-2 gap-1.5 bg-zinc-100 dark:bg-[#181715] border-b border-zinc-200 dark:border-[#36332e]">
           <button
             type="button"
             onClick={() => {
               setActiveTab('chesscom');
               setFetchError(null);
             }}
-            className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-black transition-all ${
+            className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-black transition-all ${
               activeTab === 'chesscom'
                 ? 'bg-amber-400 text-black border border-black shadow-[1.5px_1.5px_0px_#000000]'
                 : 'text-zinc-600 dark:text-[#9c978f] hover:text-black dark:hover:text-white'
@@ -123,7 +102,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               setActiveTab('lichess');
               setFetchError(null);
             }}
-            className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-black transition-all ${
+            className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-black transition-all ${
               activeTab === 'lichess'
                 ? 'bg-amber-400 text-black border border-black shadow-[1.5px_1.5px_0px_#000000]'
                 : 'text-zinc-600 dark:text-[#9c978f] hover:text-black dark:hover:text-white'
@@ -139,7 +118,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               setActiveTab('pgn');
               setFetchError(null);
             }}
-            className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-black transition-all ${
+            className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-black transition-all ${
               activeTab === 'pgn'
                 ? 'bg-amber-400 text-black border border-black shadow-[1.5px_1.5px_0px_#000000]'
                 : 'text-zinc-600 dark:text-[#9c978f] hover:text-black dark:hover:text-white'
@@ -156,7 +135,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           {isAnalyzing ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Loader2 className="w-10 h-10 text-amber-500 animate-spin mb-4" />
-              <h4 className="text-base font-black">Analyzing Game with Stockfish Engine...</h4>
+              <h4 className="text-base font-black">Analyzing Imported Game with Stockfish...</h4>
               <p className="text-xs text-zinc-500 dark:text-[#9c978f] mt-1 font-medium">
                 Evaluating ply {analysisProgress.current} of {analysisProgress.total} · Generating comic
                 sound effect badges
@@ -173,33 +152,6 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                   className="h-full bg-amber-400 transition-all duration-150"
                 />
               </div>
-            </div>
-          ) : activeTab === 'preloaded' ? (
-            /* Preloaded Master Games */
-            <div className="flex flex-col gap-3">
-              <span className="text-xs font-bold text-zinc-500 dark:text-[#8e8a83]">
-                Instant demo games with brilliant sacrifices and refutations:
-              </span>
-              {PRELOADED_GAMES.map((item, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => onSelectPgn(item.pgn, item.userColor)}
-                  className="flex items-center justify-between p-3.5 rounded-2xl bg-zinc-50 dark:bg-[#262421] border border-zinc-200 dark:border-[#36332e] hover:border-amber-400 dark:hover:border-amber-400 cursor-pointer active:scale-[0.99] transition-all group shadow-xs"
-                >
-                  <div className="flex flex-col">
-                    <h4 className="text-sm font-black group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors">
-                      {item.title}
-                    </h4>
-                    <span className="text-xs font-medium text-zinc-600 dark:text-[#c7c4c0] mt-0.5">
-                      {item.players}
-                    </span>
-                    <span className="text-[11px] text-zinc-500 dark:text-[#8e8a83] mt-1">
-                      {item.subtitle}
-                    </span>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-zinc-400 dark:text-[#6d6962] group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
-                </div>
-              ))}
             </div>
           ) : activeTab === 'chesscom' || activeTab === 'lichess' ? (
             /* Platform API Search */
@@ -236,7 +188,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               {fetchedGames.length > 0 && (
                 <div className="flex flex-col gap-2">
                   <span className="text-xs font-bold text-zinc-500 dark:text-[#8e8a83]">
-                    Select a recent game to review:
+                    Select a recent game to analyze:
                   </span>
                   {fetchedGames.map((g) => {
                     const isWhite = g.white.toLowerCase() === username.trim().toLowerCase();
@@ -244,19 +196,22 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                       <div
                         key={g.id}
                         onClick={() => onSelectPgn(g.pgn, isWhite ? 'w' : 'b')}
-                        className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 dark:bg-[#262421] border border-zinc-200 dark:border-[#36332e] hover:border-amber-400 cursor-pointer active:scale-98 transition-all"
+                        className="flex items-center justify-between p-3.5 rounded-2xl bg-zinc-50 dark:bg-[#262421] border border-zinc-200 dark:border-[#36332e] hover:border-amber-400 cursor-pointer active:scale-98 transition-all group"
                       >
-                      <div className="flex flex-col">
-                        <span className="text-xs font-black">
-                          {g.white} vs {g.black}
-                        </span>
-                        <span className="text-[11px] text-zinc-500 dark:text-[#8e8a83] mt-0.5">
-                          {g.date} · Result: {g.result}
-                        </span>
-                      </div>
-                      <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-zinc-200 dark:bg-[#181715] text-zinc-800 dark:text-zinc-300">
-                        {g.timeControl}
-                      </span>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-black group-hover:text-amber-500 transition-colors">
+                            {g.white} vs {g.black}
+                          </span>
+                          <span className="text-[11px] text-zinc-500 dark:text-[#8e8a83] mt-0.5">
+                            {g.date} · Result: {g.result}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-zinc-200 dark:bg-[#181715] text-zinc-800 dark:text-zinc-300">
+                            {g.timeControl}
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-zinc-400 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all" />
+                        </div>
                       </div>
                     );
                   })}
@@ -272,7 +227,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               <textarea
                 value={customPgn}
                 onChange={(e) => setCustomPgn(e.target.value)}
-                placeholder="[Event &quot;Live Chess&quot;]&#10;1. e4 e5 2. Nf3 Nc6..."
+                placeholder={'[Event "Live Chess"]\n1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5...'}
                 rows={6}
                 className="w-full p-3 rounded-xl bg-zinc-50 dark:bg-[#181715] border border-zinc-300 dark:border-[#36332e] text-xs font-mono text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-[#68645d] focus:outline-none focus:border-amber-400"
               />

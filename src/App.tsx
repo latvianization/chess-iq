@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Chess, Square } from 'chess.js';
 import { AnalyzedGame, BoardTheme, MoveClassification, PlyEvaluation } from './types/chess';
-import { PRELOADED_GAMES, analyzeFullPgn } from './services/importApi';
+import { analyzeFullPgn } from './services/importApi';
 import { soundService } from './services/sound';
 import { TopBar } from './components/TopBar';
 import { Chessboard, CLASSIFICATION_CONFIG } from './components/Chessboard';
@@ -41,11 +41,6 @@ export default function App() {
   const [overrideFen, setOverrideFen] = useState<string | null>(null);
   const [overrideLastMove, setOverrideLastMove] = useState<{ from: string; to: string } | null>(null);
 
-  // Initial load: Pre-analyze famous Opera Game
-  useEffect(() => {
-    const initialGame = PRELOADED_GAMES[0];
-    runAnalysis(initialGame.pgn, initialGame.userColor);
-  }, []);
 
   const runAnalysis = async (pgn: string, userColorTarget: 'w' | 'b') => {
     setIsAnalyzing(true);
