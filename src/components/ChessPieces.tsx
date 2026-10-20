@@ -1,5 +1,48 @@
 import React from 'react';
 
+// Import SVG assets directly so Vite bundles and resolves them relative to the deploy path on GitHub Pages
+import bB from '../assets/pieces/bB.svg';
+import bK from '../assets/pieces/bK.svg';
+import bN from '../assets/pieces/bN.svg';
+import bP from '../assets/pieces/bP.svg';
+import bQ from '../assets/pieces/bQ.svg';
+import bR from '../assets/pieces/bR.svg';
+import wB from '../assets/pieces/wB.svg';
+import wK from '../assets/pieces/wK.svg';
+import wN from '../assets/pieces/wN.svg';
+import wP from '../assets/pieces/wP.svg';
+import wQ from '../assets/pieces/wQ.svg';
+import wR from '../assets/pieces/wR.svg';
+
+const PIECE_ASSETS: Record<string, string> = {
+  bB,
+  bK,
+  bN,
+  bP,
+  bQ,
+  bR,
+  wB,
+  wK,
+  wN,
+  wP,
+  wQ,
+  wR,
+};
+
+/**
+ * Resolves piece image URL with 100% resilience:
+ * 1. First priority: Vite-bundled hashed asset (works on GitHub Pages subpaths, custom domains, and local preview)
+ * 2. Fallback: Relative path using Vite's import.meta.env.BASE_URL
+ */
+export function getPieceImageUrl(code: string): string {
+  if (PIECE_ASSETS[code]) {
+    return PIECE_ASSETS[code];
+  }
+  const base = import.meta.env.BASE_URL || './';
+  const cleanBase = base.endsWith('/') ? base : `${base}/`;
+  return `${cleanBase}pieces/${code}.svg`;
+}
+
 interface PieceProps {
   type: 'p' | 'n' | 'b' | 'r' | 'q' | 'k';
   color: 'w' | 'b';
@@ -27,13 +70,14 @@ export const ChessPiece: React.FC<PieceProps> = ({
     k: 'King',
   };
   const colorName = color === 'w' ? 'White' : 'Black';
+  const pieceSrc = getPieceImageUrl(pieceCode);
 
   return (
     <div
       className={`relative w-full h-full flex items-center justify-center select-none pointer-events-none ${className}`}
     >
       <img
-        src={`/pieces/${pieceCode}.svg`}
+        src={pieceSrc}
         alt={`${colorName} ${pieceNameMap[type.toLowerCase()] || 'Piece'}`}
         draggable={false}
         className={`w-[88%] h-[88%] max-w-full max-h-full object-contain select-none pointer-events-none filter drop-shadow-[0_2px_3px_rgba(0,0,0,0.55)] transition-all duration-200 ease-out ${
