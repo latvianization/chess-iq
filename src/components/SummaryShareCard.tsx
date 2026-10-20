@@ -218,59 +218,69 @@ export const SummaryShareCard: React.FC<SummaryShareCardProps> = ({ game, userCo
       {/* Visual Preview Card */}
       <div
         ref={cardRef}
-        className="flex flex-col gap-4 p-6 rounded-3xl bg-[#262421] border border-[#36332e] shadow-2xl relative overflow-hidden"
+        className="flex flex-col gap-4 p-6 rounded-3xl bg-white dark:bg-[#262421] border-2 border-black/10 dark:border-[#36332e] shadow-sm relative overflow-hidden"
       >
-        <div className="flex items-center justify-between border-b border-[#36332e] pb-3">
+        <div className="flex items-center justify-between border-b border-zinc-200 dark:border-[#36332e] pb-3">
           <div className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-amber-400" />
-            <span className="font-black tracking-wider text-sm text-white">CHESS GAME REVIEW</span>
+            <Trophy className="w-5 h-5 text-amber-500" />
+            <span className="font-black tracking-wider text-sm text-zinc-900 dark:text-white">
+              CHESS GAME REVIEW
+            </span>
           </div>
-          <span className="text-base font-black font-mono text-amber-400">{game.result}</span>
+          <span className="text-base font-black font-mono text-amber-500 dark:text-amber-400">
+            {game.result}
+          </span>
         </div>
 
         {/* Players */}
         <div className="flex flex-col">
-          <span className="text-lg font-bold text-white">
+          <span className="text-lg font-black text-zinc-900 dark:text-white">
             {userPlayer} ({userElo})
           </span>
-          <span className="text-xs text-[#a8a49e]">
+          <span className="text-xs font-bold text-zinc-500 dark:text-[#a8a49e]">
             vs {oppPlayer} ({oppElo}) · {game.ecoCode} {game.ecoName}
           </span>
         </div>
 
         {/* Big Metrics */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col p-3 rounded-2xl bg-[#1c1b18] border border-[#322f2a]">
-            <span className="text-[11px] font-medium text-[#8e8a83]">ACCURACY</span>
-            <span className="text-3xl font-black font-mono tabular-nums text-emerald-400 mt-1">
+          <div className="flex flex-col p-3 rounded-2xl bg-zinc-50 dark:bg-[#1c1b18] border border-zinc-200 dark:border-[#322f2a]">
+            <span className="text-[11px] font-bold text-zinc-500 dark:text-[#8e8a83]">ACCURACY</span>
+            <span className="text-3xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400 mt-1">
               {game.userAccuracy}%
             </span>
           </div>
-          <div className="flex flex-col p-3 rounded-2xl bg-[#1c1b18] border border-[#322f2a]">
-            <span className="text-[11px] font-medium text-[#8e8a83]">PERFORMANCE ELO</span>
-            <span className="text-3xl font-black font-mono tabular-nums text-amber-300 mt-1">
+          <div className="flex flex-col p-3 rounded-2xl bg-zinc-50 dark:bg-[#1c1b18] border border-zinc-200 dark:border-[#322f2a]">
+            <span className="text-[11px] font-bold text-zinc-500 dark:text-[#8e8a83]">PERFORMANCE ELO</span>
+            <span className="text-3xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-300 mt-1">
               {game.overallGameElo}
             </span>
           </div>
         </div>
 
         {/* Phase Elos */}
-        <div className="flex flex-col p-3 rounded-2xl bg-[#1e1c19] border border-[#36332e]">
-          <span className="text-[10px] uppercase font-bold text-[#8a867f] tracking-wider mb-1.5">
+        <div className="flex flex-col p-3 rounded-2xl bg-zinc-50 dark:bg-[#1e1c19] border border-zinc-200 dark:border-[#36332e]">
+          <span className="text-[10px] uppercase font-black text-zinc-600 dark:text-[#8a867f] tracking-wider mb-1.5">
             Phase Performance
           </span>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div>
-              <span className="text-[10px] text-[#8e8a83]">Opening</span>
-              <div className="font-mono font-bold text-sm text-white">{game.openingElo || 'N/A'}</div>
+              <span className="text-[10px] font-bold text-zinc-500 dark:text-[#8e8a83]">Opening</span>
+              <div className="font-mono font-black text-sm text-zinc-900 dark:text-white">
+                {game.openingElo || 'N/A'}
+              </div>
             </div>
-            <div className="border-x border-[#36332e]">
-              <span className="text-[10px] text-[#8e8a83]">Middlegame</span>
-              <div className="font-mono font-bold text-sm text-white">{game.middlegameElo || 'N/A'}</div>
+            <div className="border-x border-zinc-200 dark:border-[#36332e]">
+              <span className="text-[10px] font-bold text-zinc-500 dark:text-[#8e8a83]">Middlegame</span>
+              <div className="font-mono font-black text-sm text-zinc-900 dark:text-white">
+                {game.middlegameElo || 'N/A'}
+              </div>
             </div>
             <div>
-              <span className="text-[10px] text-[#8e8a83]">Endgame</span>
-              <div className="font-mono font-bold text-sm text-white">{game.endgameElo || 'N/A'}</div>
+              <span className="text-[10px] font-bold text-zinc-500 dark:text-[#8e8a83]">Endgame</span>
+              <div className="font-mono font-black text-sm text-zinc-900 dark:text-white">
+                {game.endgameElo || 'N/A'}
+              </div>
             </div>
           </div>
         </div>
@@ -280,10 +290,10 @@ export const SummaryShareCard: React.FC<SummaryShareCardProps> = ({ game, userCo
           {keyBadges.map((b) => (
             <div
               key={b}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#181715] text-xs font-mono"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-[#181715] text-xs font-mono"
             >
               <span
-                className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold"
+                className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-black border border-black/20"
                 style={{
                   backgroundColor: CLASSIFICATION_CONFIG[b].bg,
                   color: CLASSIFICATION_CONFIG[b].text,
@@ -291,7 +301,7 @@ export const SummaryShareCard: React.FC<SummaryShareCardProps> = ({ game, userCo
               >
                 {CLASSIFICATION_CONFIG[b].label}
               </span>
-              <span className="font-bold text-white">{game.counts[b] || 0}</span>
+              <span className="font-black text-zinc-900 dark:text-white">{game.counts[b] || 0}</span>
             </div>
           ))}
         </div>
@@ -300,19 +310,21 @@ export const SummaryShareCard: React.FC<SummaryShareCardProps> = ({ game, userCo
       {/* Export Action Buttons */}
       <div className="flex items-center gap-3">
         <button
+          type="button"
           onClick={handleExportPng}
           disabled={downloading}
-          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-black font-black text-xs border-2 border-black shadow-[2px_2px_0px_#000000] active:translate-y-0.5 transition-all"
         >
           <Download className="w-4 h-4" />
           <span>{downloading ? 'Generating PNG...' : 'Download PNG Card'}</span>
         </button>
 
         <button
+          type="button"
           onClick={handleShare}
-          className="flex items-center justify-center gap-2 py-3 px-5 rounded-2xl bg-[#262421] border border-[#36332e] text-white hover:bg-[#322f2a] font-semibold text-sm active:scale-95 transition-all"
+          className="flex items-center justify-center gap-2 py-3 px-5 rounded-2xl bg-zinc-100 hover:bg-zinc-200 dark:bg-[#262421] dark:hover:bg-[#322f2a] border border-zinc-300 dark:border-[#36332e] text-zinc-800 dark:text-white font-bold text-xs active:scale-95 transition-all"
         >
-          {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Share2 className="w-4 h-4" />}
+          {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4" />}
           <span>{copied ? 'Copied!' : 'Share'}</span>
         </button>
       </div>

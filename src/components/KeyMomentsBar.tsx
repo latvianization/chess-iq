@@ -46,7 +46,7 @@ export const KeyMomentsBar: React.FC<KeyMomentsBarProps> = ({
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
   const TOOLTIPS: Record<string, string> = {
-    keyMoment: 'Jump to next Brilliant move, Mistake, or Blunder',
+    keyMoment: 'Jump to next Comic Key Moment (BOOM! or SPLAT!)',
     retryMistake: 'Rewind to position before this mistake and find best move',
     showWhy: "Step through engine's tactical continuation on the board",
     threat: "Invert turn to show opponent's immediate tactical threat",
@@ -54,7 +54,7 @@ export const KeyMomentsBar: React.FC<KeyMomentsBarProps> = ({
   };
 
   return (
-    <div className="w-full flex flex-col gap-2 p-2 sm:p-2.5 rounded-2xl bg-[#262421] border border-[#36332e] shadow-lg relative select-none shrink-0">
+    <div className="w-full flex flex-col gap-2 p-2 sm:p-2.5 rounded-2xl bg-white dark:bg-[#262421] border-2 border-black/10 dark:border-[#36332e] shadow-sm relative select-none shrink-0 transition-colors">
       {/* Top action row: Tactical Tools */}
       <div className="flex items-center justify-between gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
         <div className="flex items-center gap-1.5 shrink-0">
@@ -69,48 +69,42 @@ export const KeyMomentsBar: React.FC<KeyMomentsBarProps> = ({
               onMouseEnter={() => setActiveTooltip('keyMoment')}
               onMouseLeave={() => setActiveTooltip(null)}
               disabled={!hasKeyMoments}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-semibold text-xs hover:bg-amber-500/25 active:scale-95 transition-all disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black text-xs border border-black shadow-[1.5px_1.5px_0px_#000000] active:translate-y-0.5 transition-all disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
             >
-              <Zap className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+              <Zap className="w-3.5 h-3.5 fill-black text-black" />
               <span>Key Moment</span>
             </button>
             {activeTooltip === 'keyMoment' && (
-              <div className="absolute left-0 bottom-full mb-2 z-40 px-2.5 py-1.5 rounded-xl bg-[#1c1b18] border border-[#423e38] text-[11px] text-[#edebe9] shadow-2xl whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+              <div className="absolute left-0 bottom-full mb-2 z-40 px-2.5 py-1.5 rounded-xl bg-black text-white text-[11px] font-bold shadow-2xl whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
                 {TOOLTIPS.keyMoment}
               </div>
             )}
           </div>
 
           {/* Retry Mistake Button */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => {
-                soundService.playMove();
-                onRetryMistake();
-              }}
-              onMouseEnter={() => setActiveTooltip('retryMistake')}
-              onMouseLeave={() => setActiveTooltip(null)}
-              disabled={!canRetry}
-              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-semibold active:scale-95 transition-all whitespace-nowrap ${
-                canRetry
-                  ? 'bg-red-500/20 border-red-500/40 text-red-200 hover:bg-red-500/30 shadow-sm shadow-red-500/10 animate-pulse'
-                  : 'bg-[#1e1c19] border-[#36332e] text-[#8e8a83] opacity-40 cursor-not-allowed'
-              }`}
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Retry Mistake</span>
-            </button>
-            {activeTooltip === 'retryMistake' && (
-              <div className="absolute left-0 bottom-full mb-2 z-40 px-2.5 py-1.5 rounded-xl bg-[#1c1b18] border border-[#423e38] text-[11px] text-[#edebe9] shadow-2xl whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
-                {TOOLTIPS.retryMistake}
-              </div>
-            )}
-          </div>
+          {canRetry && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={onRetryMistake}
+                onMouseEnter={() => setActiveTooltip('retryMistake')}
+                onMouseLeave={() => setActiveTooltip(null)}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-orange-100 dark:bg-orange-950/40 border border-orange-300 dark:border-orange-700 text-orange-900 dark:text-orange-300 font-bold text-xs hover:bg-orange-200 active:scale-95 transition-all whitespace-nowrap animate-pulse"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Retry Move</span>
+              </button>
+              {activeTooltip === 'retryMistake' && (
+                <div className="absolute left-0 bottom-full mb-2 z-40 px-2.5 py-1.5 rounded-xl bg-black text-white text-[11px] font-bold shadow-2xl whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+                  {TOOLTIPS.retryMistake}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Show Why PV Continuation - Only shown if at least 2 steps exist */}
+          {/* Show Why / Tactical Refutation */}
           {canShowWhy && (
             <div className="relative">
               <button
@@ -119,17 +113,17 @@ export const KeyMomentsBar: React.FC<KeyMomentsBarProps> = ({
                 onMouseEnter={() => setActiveTooltip('showWhy')}
                 onMouseLeave={() => setActiveTooltip(null)}
                 disabled={isPlayingPv}
-                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-medium active:scale-95 transition-all whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-bold active:scale-95 transition-all whitespace-nowrap ${
                   isPlayingPv
-                    ? 'bg-blue-600 border-blue-500 text-white'
-                    : 'bg-[#1e1c19] border-[#36332e] text-[#c7c4c0] hover:bg-[#2e2b26] hover:text-white'
+                    ? 'bg-blue-600 border-blue-700 text-white shadow-sm'
+                    : 'bg-zinc-100 dark:bg-[#1e1c19] border-zinc-200 dark:border-[#36332e] text-zinc-800 dark:text-[#c7c4c0] hover:bg-zinc-200 dark:hover:bg-[#2e2b26]'
                 }`}
               >
                 <Play className={`w-3.5 h-3.5 ${isPlayingPv ? 'fill-white' : ''}`} />
                 <span>Show Why</span>
               </button>
               {activeTooltip === 'showWhy' && (
-                <div className="absolute right-0 bottom-full mb-2 z-40 px-2.5 py-1.5 rounded-xl bg-[#1c1b18] border border-[#423e38] text-[11px] text-[#edebe9] shadow-2xl whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+                <div className="absolute right-0 bottom-full mb-2 z-40 px-2.5 py-1.5 rounded-xl bg-black text-white text-[11px] font-bold shadow-2xl whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
                   {TOOLTIPS.showWhy}
                 </div>
               )}
@@ -143,17 +137,17 @@ export const KeyMomentsBar: React.FC<KeyMomentsBarProps> = ({
               onClick={onToggleThreat}
               onMouseEnter={() => setActiveTooltip('threat')}
               onMouseLeave={() => setActiveTooltip(null)}
-              className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl border text-xs font-medium active:scale-95 transition-all whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl border text-xs font-bold active:scale-95 transition-all whitespace-nowrap ${
                 isThreatActive
-                  ? 'bg-rose-500/25 border-rose-500 text-rose-300'
-                  : 'bg-[#1e1c19] border-[#36332e] text-[#c7c4c0] hover:bg-[#2e2b26] hover:text-white'
+                  ? 'bg-rose-100 dark:bg-rose-950/40 border-rose-400 text-rose-700 dark:text-rose-300'
+                  : 'bg-zinc-100 dark:bg-[#1e1c19] border-zinc-200 dark:border-[#36332e] text-zinc-800 dark:text-[#c7c4c0] hover:bg-zinc-200 dark:hover:bg-[#2e2b26]'
               }`}
             >
               <ShieldAlert className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Threat</span>
             </button>
             {activeTooltip === 'threat' && (
-              <div className="absolute right-0 bottom-full mb-2 z-40 px-2.5 py-1.5 rounded-xl bg-[#1c1b18] border border-[#423e38] text-[11px] text-[#edebe9] shadow-2xl whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+              <div className="absolute right-0 bottom-full mb-2 z-40 px-2.5 py-1.5 rounded-xl bg-black text-white text-[11px] font-bold shadow-2xl whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
                 {TOOLTIPS.threat}
               </div>
             )}
@@ -166,13 +160,13 @@ export const KeyMomentsBar: React.FC<KeyMomentsBarProps> = ({
               onClick={onFlipBoard}
               onMouseEnter={() => setActiveTooltip('flip')}
               onMouseLeave={() => setActiveTooltip(null)}
-              className="p-1.5 sm:p-2 rounded-xl bg-[#1e1c19] border border-[#36332e] text-[#c7c4c0] hover:bg-[#2e2b26] hover:text-white active:scale-95 transition-all"
+              className="p-1.5 sm:p-2 rounded-xl bg-zinc-100 dark:bg-[#1e1c19] border border-zinc-200 dark:border-[#36332e] text-zinc-700 dark:text-[#c7c4c0] hover:bg-zinc-200 dark:hover:bg-[#2e2b26] hover:text-black dark:hover:text-white active:scale-95 transition-all"
               aria-label="Flip Board"
             >
               <RotateCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
             {activeTooltip === 'flip' && (
-              <div className="absolute right-0 bottom-full mb-2 z-40 px-2.5 py-1.5 rounded-xl bg-[#1c1b18] border border-[#423e38] text-[11px] text-[#edebe9] shadow-2xl whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+              <div className="absolute right-0 bottom-full mb-2 z-40 px-2.5 py-1.5 rounded-xl bg-black text-white text-[11px] font-bold shadow-2xl whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
                 {TOOLTIPS.flip}
               </div>
             )}
@@ -181,13 +175,13 @@ export const KeyMomentsBar: React.FC<KeyMomentsBarProps> = ({
       </div>
 
       {/* Bottom navigation row: Step controls */}
-      <div className="flex items-center justify-between gap-1 pt-1 border-t border-[#36332e]/60">
+      <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-zinc-200 dark:border-[#36332e]/60">
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => onGoToPly(0)}
             disabled={currentPly === 0}
-            className="p-1.5 sm:p-2 rounded-xl text-[#a8a49e] hover:text-white hover:bg-[#322f2a] active:scale-90 transition-all disabled:opacity-30 disabled:pointer-events-none"
+            className="p-1.5 sm:p-2 rounded-xl text-zinc-600 dark:text-[#a8a49e] hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-[#322f2a] active:scale-90 transition-all disabled:opacity-30 disabled:pointer-events-none"
             title="Start of game (↑)"
             aria-label="Start of game"
           >
@@ -197,7 +191,7 @@ export const KeyMomentsBar: React.FC<KeyMomentsBarProps> = ({
             type="button"
             onClick={() => onGoToPly(Math.max(0, currentPly - 1))}
             disabled={currentPly === 0}
-            className="p-1.5 sm:p-2 rounded-xl text-[#a8a49e] hover:text-white hover:bg-[#322f2a] active:scale-90 transition-all disabled:opacity-30 disabled:pointer-events-none"
+            className="p-1.5 sm:p-2 rounded-xl text-zinc-600 dark:text-[#a8a49e] hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-[#322f2a] active:scale-90 transition-all disabled:opacity-30 disabled:pointer-events-none"
             title="Previous move (←)"
             aria-label="Previous move"
           >
@@ -206,12 +200,12 @@ export const KeyMomentsBar: React.FC<KeyMomentsBarProps> = ({
         </div>
 
         {/* Move Counter */}
-        <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-[#c0bcb5]">
-          <span className="tabular-nums font-bold text-white">
+        <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-zinc-700 dark:text-[#c0bcb5]">
+          <span className="tabular-nums font-black text-zinc-900 dark:text-white">
             {currentPly === 0 ? 'Start' : `Ply ${currentPly}`}
           </span>
-          <span className="text-[#6d6962]">/</span>
-          <span className="tabular-nums text-[#8e8a83]">{totalPlies}</span>
+          <span className="text-zinc-400 dark:text-[#6d6962]">/</span>
+          <span className="tabular-nums text-zinc-500 dark:text-[#8e8a83]">{totalPlies}</span>
         </div>
 
         <div className="flex items-center gap-1">
@@ -219,7 +213,7 @@ export const KeyMomentsBar: React.FC<KeyMomentsBarProps> = ({
             type="button"
             onClick={() => onGoToPly(Math.min(totalPlies, currentPly + 1))}
             disabled={currentPly >= totalPlies}
-            className="p-1.5 sm:p-2 rounded-xl text-[#a8a49e] hover:text-white hover:bg-[#322f2a] active:scale-90 transition-all disabled:opacity-30 disabled:pointer-events-none"
+            className="p-1.5 sm:p-2 rounded-xl text-zinc-600 dark:text-[#a8a49e] hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-[#322f2a] active:scale-90 transition-all disabled:opacity-30 disabled:pointer-events-none"
             title="Next move (→)"
             aria-label="Next move"
           >
@@ -229,7 +223,7 @@ export const KeyMomentsBar: React.FC<KeyMomentsBarProps> = ({
             type="button"
             onClick={() => onGoToPly(totalPlies)}
             disabled={currentPly >= totalPlies}
-            className="p-1.5 sm:p-2 rounded-xl text-[#a8a49e] hover:text-white hover:bg-[#322f2a] active:scale-90 transition-all disabled:opacity-30 disabled:pointer-events-none"
+            className="p-1.5 sm:p-2 rounded-xl text-zinc-600 dark:text-[#a8a49e] hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-[#322f2a] active:scale-90 transition-all disabled:opacity-30 disabled:pointer-events-none"
             title="End of game (↓)"
             aria-label="End of game"
           >

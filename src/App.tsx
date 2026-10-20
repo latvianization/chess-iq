@@ -16,8 +16,10 @@ import { SummaryShareCard } from './components/SummaryShareCard';
 import { PlayVsBot } from './components/PlayVsBot';
 import { ImportModal } from './components/ImportModal';
 import { Clock, Play, Sparkles, PlusCircle, Bot } from 'lucide-react';
+import { getComicBadge } from './services/comicBadges';
 
 export default function App() {
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [appMode, setAppMode] = useState<'review' | 'bot'>('review');
   const [boardTheme, setBoardTheme] = useState<BoardTheme>('green');
   const [isDeepReview, setIsDeepReview] = useState(false);
@@ -201,7 +203,11 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#161512] text-[#edebe9]">
+    <div
+      className={`min-h-screen flex flex-col ${
+        isDarkMode ? 'dark bg-[#161512] text-[#edebe9]' : 'bg-[#faf8f5] text-zinc-900'
+      } transition-colors duration-200`}
+    >
       {/* Top Bar with 3-zone contract */}
       <TopBar
         appMode={appMode}
@@ -213,6 +219,8 @@ export default function App() {
         onChangeTheme={setBoardTheme}
         hasActiveGame={!!game}
         onExitReview={handleExitReview}
+        isDarkMode={isDarkMode}
+        onToggleThemeMode={() => setIsDarkMode(!isDarkMode)}
       />
 
       {/* Main View Area */}
@@ -221,6 +229,7 @@ export default function App() {
         {appMode === 'bot' && (
           <PlayVsBot
             theme={boardTheme}
+            isDarkMode={isDarkMode}
             onAnalyzeGame={(pgn, userColor) => runAnalysis(pgn, userColor)}
             onExit={() => setAppMode('review')}
           />
@@ -234,7 +243,7 @@ export default function App() {
                 {/* Top Row Split: Board & Controls */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
                   {/* Left 7 Columns: STICKY on Mobile so board and step navigation NEVER move or scroll away */}
-                  <div className="lg:col-span-7 sticky top-0 lg:static z-30 bg-[#161512] pb-2 pt-1 flex flex-col gap-2 sm:gap-3 border-b lg:border-b-0 border-[#2b2823] shadow-lg lg:shadow-none">
+                  <div className="lg:col-span-7 sticky top-0 lg:static z-30 bg-[#faf8f5] dark:bg-[#161512] pb-2 pt-1 flex flex-col gap-2 sm:gap-3 border-b lg:border-b-0 border-zinc-200 dark:border-[#2b2823] shadow-md lg:shadow-none">
                     <div className="flex items-stretch justify-center gap-2 sm:gap-3 w-full">
                       {/* Vertical Animated EvalBar */}
                       <div className="shrink-0 flex items-stretch">
@@ -264,41 +273,45 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Move Notation Strip under Board */}
-                    <div className="flex items-center justify-between px-3 py-1.5 sm:py-2 rounded-xl bg-[#211f1c] border border-[#36332e] text-xs">
+                    {/* Move Notation Strip under Board with Comic Sound Effect Badge */}
+                    <div className="flex items-center justify-between px-3 py-1.5 sm:py-2 rounded-xl bg-white dark:bg-[#211f1c] border-2 border-black/10 dark:border-[#36332e] text-xs shadow-sm">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-[#8e8a83]">
+                        <span className="font-mono text-zinc-500 dark:text-[#8e8a83] font-bold">
                           {currentEval
                             ? `${Math.floor((currentEval.ply - 1) / 2) + 1}${
                                 currentEval.color === 'w' ? '.' : '...'
                               }`
                             : '0.'}
                         </span>
-                        <span className="font-bold text-white text-sm">
+                        <span className="font-black text-zinc-900 dark:text-white text-sm">
                           {currentEval ? currentEval.san : 'Initial Position'}
                         </span>
-                        {currentEval && (
-                          <span
-                            className="px-2 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider"
-                            style={{
-                              backgroundColor: CLASSIFICATION_CONFIG[currentEval.classification].bg,
-                              color: CLASSIFICATION_CONFIG[currentEval.classification].text,
-                            }}
-                          >
-                            {CLASSIFICATION_CONFIG[currentEval.classification].name}
-                          </span>
-                        )}
+                        {currentEval && (() => {
+                          const comic = getComicBadge(currentEval.classification, currentEval.ply);
+                          return (
+                            <span
+                              className="px-2 py-0.5 rounded-md font-black text-[10px] uppercase tracking-wider border-2 border-black shadow-[1.5px_1.5px_0px_#000000] flex items-center gap-1 select-none"
+                              style={{
+                                backgroundColor: comic.bg,
+                                color: comic.text,
+                              }}
+                            >
+                              <span>{comic.symbol}</span>
+                              <span>{comic.term}</span>
+                            </span>
+                          );
+                        })()}
                       </div>
 
                       {currentEval && currentEval.clock !== undefined && currentEval.clock !== null && (
-                        <div className="flex items-center gap-1.5 text-[#a8a49e] font-mono text-[11px]">
-                          <Clock className="w-3.5 h-3.5 text-[#78746c]" />
+                        <div className="flex items-center gap-1.5 text-zinc-500 dark:text-[#a8a49e] font-mono text-[11px] font-bold">
+                          <Clock className="w-3.5 h-3.5 text-zinc-400 dark:text-[#78746c]" />
                           <span>
                             {Math.floor(currentEval.clock / 60)}:
                             {(currentEval.clock % 60).toFixed(0).padStart(2, '0')}
                           </span>
                           {currentEval.timeSpent && (
-                            <span className="text-[#6d6962]">
+                            <span className="text-zinc-400 dark:text-[#6d6962]">
                               ({currentEval.timeSpent.toFixed(1)}s)
                             </span>
                           )}
@@ -439,30 +452,35 @@ export default function App() {
               </>
             ) : (
               /* Zero State: No active review (Exited review) */
-              <div className="w-full max-w-2xl mx-auto flex flex-col items-center justify-center p-12 text-center rounded-3xl bg-[#211f1c] border border-[#36332e] shadow-2xl">
-                <span className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-3xl mb-4">
+              <div className="w-full max-w-2xl mx-auto flex flex-col items-center justify-center p-8 sm:p-12 text-center rounded-3xl bg-white dark:bg-[#211f1c] border-2 border-black/10 dark:border-[#36332e] shadow-lg">
+                <span className="w-16 h-16 rounded-2xl bg-amber-400 text-black border-2 border-black flex items-center justify-center text-3xl mb-4 shadow-[2px_2px_0px_#000000]">
                   ♟
                 </span>
-                <h3 className="text-xl font-bold text-white">No Game Currently in Review</h3>
-                <p className="text-xs text-[#9c978f] max-w-md mt-1.5 leading-relaxed">
-                  Import a game from Chess.com, Lichess, or paste any PGN to run full 3-Tier engine diagnostics, or practice against our bot arena.
+                <h3 className="text-xl font-black text-zinc-900 dark:text-white">
+                  No Game Currently in Review
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-[#9c978f] max-w-md mt-1.5 leading-relaxed font-medium">
+                  Import a game from Chess.com, Lichess, or paste any PGN to run full 3-Tier engine
+                  diagnostics with comic sound effect badges, or challenge our 33-bot arena!
                 </p>
 
                 <div className="flex items-center gap-3 mt-6">
                   <button
+                    type="button"
                     onClick={() => setIsImportModalOpen(true)}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-black font-black text-xs border-2 border-black shadow-[2px_2px_0px_#000000] active:translate-y-0.5 transition-all"
                   >
                     <PlusCircle className="w-4 h-4" />
                     <span>Import Game</span>
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => setAppMode('bot')}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#2e2b26] hover:bg-[#3d3933] text-white font-semibold text-xs active:scale-95 transition-all"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-zinc-100 hover:bg-zinc-200 dark:bg-[#2e2b26] dark:hover:bg-[#3d3933] text-zinc-800 dark:text-white font-bold text-xs border border-zinc-300 dark:border-transparent active:scale-95 transition-all"
                   >
                     <Bot className="w-4 h-4" />
-                    <span>Play vs Bots</span>
+                    <span>Play 33 Bots</span>
                   </button>
                 </div>
               </div>

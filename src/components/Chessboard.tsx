@@ -18,6 +18,8 @@ interface ChessboardProps {
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
 
+import { getComicBadge, COMIC_DICTIONARY } from '../services/comicBadges';
+
 // Board colors by theme
 const THEME_COLORS: Record<BoardTheme, { light: string; dark: string; border: string }> = {
   green: {
@@ -39,18 +41,18 @@ const THEME_COLORS: Record<BoardTheme, { light: string; dark: string; border: st
 
 export const CLASSIFICATION_CONFIG: Record<
   MoveClassification,
-  { label: string; bg: string; text: string; name: string }
+  { label: string; bg: string; text: string; name: string; comicTerm: string; symbol: string }
 > = {
-  brilliant: { label: '!!', bg: '#00e6cb', text: '#052c28', name: 'Brilliant' },
-  great: { label: '!', bg: '#3b82f6', text: '#ffffff', name: 'Great Move' },
-  best: { label: '★', bg: '#22c55e', text: '#ffffff', name: 'Best Move' },
-  excellent: { label: '✓', bg: '#4ade80', text: '#052e16', name: 'Excellent' },
-  good: { label: '·', bg: '#86efac', text: '#14532d', name: 'Good' },
-  book: { label: '📖', bg: '#a855f7', text: '#ffffff', name: 'Book' },
-  inaccuracy: { label: '?!', bg: '#eab308', text: '#422006', name: 'Inaccuracy' },
-  mistake: { label: '?', bg: '#f97316', text: '#ffffff', name: 'Mistake' },
-  blunder: { label: '??', bg: '#ef4444', text: '#ffffff', name: 'Blunder' },
-  missed_win: { label: '✖', bg: '#dc2626', text: '#ffffff', name: 'Missed Win' },
+  brilliant: { label: '!!', bg: '#06b6d4', text: '#ffffff', name: 'Brilliant', comicTerm: 'KABOOM!', symbol: '💥' },
+  great: { label: '!', bg: '#3b82f6', text: '#ffffff', name: 'Great Move', comicTerm: 'POW!', symbol: '⚡' },
+  best: { label: '★', bg: '#10b981', text: '#ffffff', name: 'Best Move', comicTerm: 'ZAP!', symbol: '🎯' },
+  excellent: { label: '✓', bg: '#22c55e', text: '#ffffff', name: 'Excellent', comicTerm: 'NICE!', symbol: '✨' },
+  good: { label: '·', bg: '#84cc16', text: '#ffffff', name: 'Good', comicTerm: 'SOLID!', symbol: '👍' },
+  book: { label: '📖', bg: '#8b5cf6', text: '#ffffff', name: 'Book', comicTerm: 'THEORY!', symbol: '📖' },
+  inaccuracy: { label: '?!', bg: '#eab308', text: '#000000', name: 'Inaccuracy', comicTerm: 'HMM?', symbol: '🤔' },
+  mistake: { label: '?', bg: '#f97316', text: '#ffffff', name: 'Mistake', comicTerm: 'OUCH!', symbol: '🩹' },
+  blunder: { label: '??', bg: '#ef4444', text: '#ffffff', name: 'Blunder', comicTerm: 'SPLAT!', symbol: '💥' },
+  missed_win: { label: '✖', bg: '#be123c', text: '#ffffff', name: 'Missed Win', comicTerm: 'NOOO!', symbol: '💨' },
 };
 
 export const Chessboard: React.FC<ChessboardProps> = ({
@@ -239,18 +241,23 @@ export const Chessboard: React.FC<ChessboardProps> = ({
                   />
                 )}
 
-                {/* Move Classification Badge */}
-                {badge && badge.square === square && (
-                  <div
-                    className="absolute -top-1.5 -right-1.5 z-20 flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full shadow-lg border-2 border-[#161512] font-black text-[10px] sm:text-xs animate-in zoom-in-75 duration-200"
-                    style={{
-                      backgroundColor: CLASSIFICATION_CONFIG[badge.classification].bg,
-                      color: CLASSIFICATION_CONFIG[badge.classification].text,
-                    }}
-                  >
-                    {CLASSIFICATION_CONFIG[badge.classification].label}
-                  </div>
-                )}
+                {/* Move Comic Sound Effect Badge */}
+                {badge && badge.square === square && (() => {
+                  const comic = getComicBadge(badge.classification, badge.square);
+                  return (
+                    <div
+                      className="absolute -top-2.5 -right-2.5 sm:-top-3 sm:-right-3 z-30 flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border-2 border-black font-black text-[9px] sm:text-[11px] tracking-tight uppercase shadow-[2px_2px_0px_#000000] animate-in zoom-in-75 duration-200 select-none pointer-events-none rotate-[-6deg]"
+                      style={{
+                        backgroundColor: comic.bg,
+                        color: comic.text,
+                      }}
+                      title={`${comic.term} (${CLASSIFICATION_CONFIG[badge.classification].name})`}
+                    >
+                      <span className="text-[10px] sm:text-xs leading-none">{comic.symbol}</span>
+                      <span className="font-extrabold tracking-tight">{comic.term}</span>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })
