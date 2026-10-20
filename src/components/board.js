@@ -1,0 +1,300 @@
+/**
+ * Vanilla JS Chessboard Component
+ * Renders an interactive 8x8 chessboard with SVG piece rendering,
+ * move highlights, arrows, and comic sound effect badges.
+ */
+
+import { INLINE_PIECE_DATA_URLS } from './pieceSvgs.js';
+import { getComicBadge, COMIC_DICTIONARY } from '../services/comicBadges.js';
+
+const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
+
+const THEMES = {
+  green: { light: '#ebecd0', dark: '#739552' },
+  wood: { light: '#f0d9b5', dark: '#b58863' },
+  icy: { light: '#dee3e6', dark: '#587a9f' },
+};
+
+export class Chessboard {
+  constructor(containerEl, options = {}) {
+    this.container = containerEl;
+    this.fen = options.fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    this.orientation = options.orientation || 'w';
+    this.theme = options.theme || 'green';
+    this.interactive = options.interactive || false;
+    this.onMove = options.onMove || null; // (from, to) => {}
+    this.legalMovesFrom = options.legalMovesFrom || null; // (square) => string[] destinations
+    this.lastMove = options.lastMove || null; // { from, to }
+    this.bestMove = options.bestMove || null; // { from, to }
+    this.threatMove = options.threatMove || null; // { from, to }
+    this.badge = options.badge || null; // { square, classification }
+
+    this.selectedSquare = null;
+    this.possibleDests = [];
+
+    this.render();
+  }
+
+  setProps(newProps) {
+    let shouldRerender = false;
+    ['fen', 'orientation', 'theme', 'interactive', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'threatMove', 'badge'].forEach((k) => {
+      if (newProps[k] !== undefined && newProps[k] !== this[k]) {
+        this[k] = newProps[k];
+        shouldRerender = true;
+      }
+    });
+
+    if (newProps.selectedSquare !== undefined) {
+      this.selectedSquare = newProps.selectedSquare;
+      this.possibleDests = this.legalMovesFrom && this.selectedSquare ? this.legalMovesFrom(this.selectedSquare) : [];
+      shouldRerender = true;
+    }
+
+    if (shouldRerender) {
+      this.render();
+    }
+  }
+
+  parseFen(fen) {
+    const rows = fen.split(' ')[0].split('/');
+    const board = [];
+    for (const r of rows) {
+      const row = [];
+      for (const char of r) {
+        if (/\d/.test(char)) {
+          const emptyCount = parseInt(char, 10);
+          for (let i = 0; i < emptyCount; i++) row.push(null);
+        } else {
+          row.push(char);
+        }
+      }
+      board.push(row);
+    }
+    return board;
+  }
+
+  handleSquareClick(square, piece) {
+    if (!this.interactive) return;
+
+    if (this.selectedSquare) {
+      if (this.selectedSquare === square) {
+        // Deselect
+        this.selectedSquare = null;
+        this.possibleDests = [];
+        this.render();
+        return;
+      }
+
+      // Check if clicking a destination
+      if (this.possibleDests.includes(square)) {
+        const from = this.selectedSquare;
+        this.selectedSquare = null;
+        this.possibleDests = [];
+        this.render();
+        if (this.onMove) {
+          this.onMove(from, square);
+        }
+        return;
+      }
+    }
+
+    // Try selecting piece
+    if (piece) {
+      this.selectedSquare = square;
+      this.possibleDests = this.legalMovesFrom ? this.legalMovesFrom(square) : [];
+      this.render();
+    } else {
+      this.selectedSquare = null;
+      this.possibleDests = [];
+      this.render();
+    }
+  }
+
+  render() {
+    this.container.innerHTML = '';
+
+    const boardWrapper = document.createElement('div');
+    boardWrapper.className = 'board-container';
+
+    const grid = document.createElement('div');
+    grid.className = 'board-grid';
+
+    const board = this.parseFen(this.fen);
+    const files = this.orientation === 'w' ? FILES : [...FILES].reverse();
+    const ranks = this.orientation === 'w' ? RANKS : [...RANKS].reverse();
+    const themeColors = THEMES[this.theme] || THEMES.green;
+
+    ranks.forEach((rank, rIdx) => {
+      files.forEach((file, fIdx) => {
+        const square = `${file}${rank}`;
+        const isDark = (rIdx + fIdx) % 2 === 1;
+        const squareColor = isDark ? themeColors.dark : themeColors.light;
+
+        const sqDiv = document.createElement('div');
+        sqDiv.className = 'board-square';
+        sqDiv.dataset.square = square;
+
+        // Last move highlight
+        const isLastMove = this.lastMove && (this.lastMove.from === square || this.lastMove.to === square);
+        const isSelected = this.selectedSquare === square;
+
+        if (isSelected) {
+          sqDiv.classList.add('selected');
+        } else if (isLastMove) {
+          sqDiv.classList.add(isDark ? 'last-move-dark' : 'last-move-light');
+        } else {
+          sqDiv.style.backgroundColor = squareColor;
+        }
+
+        // Square coordinates on edges
+        if (rIdx === 7) {
+          const fileLabel = document.createElement('span');
+          fileLabel.className = 'square-coord-file';
+          fileLabel.style.color = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)';
+          fileLabel.textContent = file;
+          sqDiv.appendChild(fileLabel);
+        }
+        if (fIdx === 0) {
+          const rankLabel = document.createElement('span');
+          rankLabel.className = 'square-coord-rank';
+          rankLabel.style.color = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)';
+          rankLabel.textContent = rank;
+          sqDiv.appendChild(rankLabel);
+        }
+
+        // Piece
+        const origR = RANKS.indexOf(rank);
+        const origF = FILES.indexOf(file);
+        const pieceChar = board[origR] ? board[origR][origF] : null;
+
+        if (pieceChar) {
+          const colorCode = pieceChar === pieceChar.toUpperCase() ? 'w' : 'b';
+          const typeCode = pieceChar.toUpperCase();
+          const pieceKey = `${colorCode}${typeCode}`;
+          const pieceSrc = INLINE_PIECE_DATA_URLS[pieceKey] || `./pieces/${pieceKey}.svg`;
+
+          const img = document.createElement('img');
+          img.src = pieceSrc;
+          img.className = 'piece-img';
+          img.alt = `${colorCode === 'w' ? 'White' : 'Black'} ${typeCode}`;
+          img.draggable = false;
+          sqDiv.appendChild(img);
+        }
+
+        // Possible destination dot or capture ring
+        if (this.possibleDests.includes(square)) {
+          if (pieceChar) {
+            const ring = document.createElement('div');
+            ring.className = 'capture-ring';
+            sqDiv.appendChild(ring);
+          } else {
+            const dot = document.createElement('div');
+            dot.className = 'move-dot';
+            sqDiv.appendChild(dot);
+          }
+        }
+
+        // Comic Badge
+        if (this.badge && this.badge.square === square) {
+          const comic = getComicBadge(this.badge.classification, square);
+          const badgeEl = document.createElement('div');
+          badgeEl.className = 'comic-square-badge';
+          badgeEl.style.backgroundColor = comic.bg;
+          badgeEl.style.color = comic.text;
+          badgeEl.title = `${comic.term} (${COMIC_DICTIONARY[this.badge.classification]?.standardLabel || ''})`;
+          badgeEl.innerHTML = `<span>${comic.symbol}</span><span>${comic.term}</span>`;
+          sqDiv.appendChild(badgeEl);
+        }
+
+        sqDiv.addEventListener('click', () => {
+          this.handleSquareClick(square, pieceChar);
+        });
+
+        grid.appendChild(sqDiv);
+      });
+    });
+
+    boardWrapper.appendChild(grid);
+
+    // SVG Arrows Layer (Best move, threat arrow)
+    const svgLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svgLayer.setAttribute('class', 'position-absolute top-0 start-0 w-100 h-100 pointer-events-none');
+    svgLayer.style.pointerEvents = 'none';
+    svgLayer.style.zIndex = '15';
+
+    if (this.bestMove && this.bestMove.from && this.bestMove.to) {
+      this.drawArrow(svgLayer, this.bestMove.from, this.bestMove.to, '#22c55e', false, 'best-move');
+    }
+    if (this.threatMove && this.threatMove.from && this.threatMove.to) {
+      this.drawArrow(svgLayer, this.threatMove.from, this.threatMove.to, '#ef4444', true, 'threat-move');
+    }
+
+    boardWrapper.appendChild(svgLayer);
+    this.container.appendChild(boardWrapper);
+  }
+
+  drawArrow(svg, fromSq, toSq, color, dashed = false, idPrefix = 'arrow') {
+    const getCoords = (sq) => {
+      if (!sq || sq.length < 2) return null;
+      const f = sq[0];
+      const r = sq[1];
+      const files = this.orientation === 'w' ? FILES : [...FILES].reverse();
+      const ranks = this.orientation === 'w' ? RANKS : [...RANKS].reverse();
+      const x = files.indexOf(f);
+      const y = ranks.indexOf(r);
+      if (x === -1 || y === -1) return null;
+      return { x, y };
+    };
+
+    const c1 = getCoords(fromSq);
+    const c2 = getCoords(toSq);
+    if (!c1 || !c2) return;
+
+    const x1 = (c1.x + 0.5) * 12.5;
+    const y1 = (c1.y + 0.5) * 12.5;
+    const x2 = (c2.x + 0.5) * 12.5;
+    const y2 = (c2.y + 0.5) * 12.5;
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const angle = Math.atan2(dy, dx);
+    const dist = Math.hypot(dx, dy);
+    if (dist < 1) return;
+
+    const endX = x1 + Math.cos(angle) * (dist - 3.5);
+    const endY = y1 + Math.sin(angle) * (dist - 3.5);
+
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', `marker-${idPrefix}`);
+    marker.setAttribute('markerWidth', '6');
+    marker.setAttribute('markerHeight', '6');
+    marker.setAttribute('refX', '4');
+    marker.setAttribute('refY', '3');
+    marker.setAttribute('orient', 'auto');
+
+    const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    polygon.setAttribute('points', '0 0, 6 3, 0 6');
+    polygon.setAttribute('fill', color);
+    polygon.setAttribute('opacity', '0.9');
+    marker.appendChild(polygon);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', `${x1}%`);
+    line.setAttribute('y1', `${y1}%`);
+    line.setAttribute('x2', `${endX}%`);
+    line.setAttribute('y2', `${endY}%`);
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', '3.5');
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('opacity', '0.9');
+    if (dashed) {
+      line.setAttribute('stroke-dasharray', '5,5');
+    }
+    line.setAttribute('marker-end', `url(#marker-${idPrefix})`);
+    svg.appendChild(line);
+  }
+}

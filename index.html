@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -13,8 +13,70 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   </head>
-  <body class="bg-[#faf8f5] dark:bg-[#161512] text-zinc-900 dark:text-[#e8e6e3] antialiased selection:bg-amber-400 selection:text-black">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+  <body>
+    <!-- Top Navigation Bar -->
+    <header class="navbar navbar-expand-lg border-bottom bg-body-tertiary sticky-top px-3 px-sm-4 py-2" style="border-width: 2px !important; border-color: #1a1a1a !important;">
+      <div class="container-fluid px-0 d-flex align-items-center justify-content-between">
+        <!-- Brand & Mode Switcher -->
+        <div class="d-flex align-items-center gap-3">
+          <a class="navbar-brand d-flex align-items-center gap-2 fw-black mb-0 text-decoration-none" href="#">
+            <span class="badge bg-warning text-dark border border-dark rounded-3 px-2 py-1 shadow-sm fs-6">⚡</span>
+            <span class="fw-black fs-5 tracking-tight text-body">CHESS <span class="text-warning">TOON</span></span>
+          </a>
+
+          <!-- Mode Switcher Pill Group -->
+          <div class="btn-group p-1 bg-body rounded-4 border border-dark" role="group">
+            <button type="button" class="btn btn-sm btn-warning comic-btn px-3 active" id="nav-mode-review">
+              <i class="bi bi-search me-1"></i> Review
+            </button>
+            <button type="button" class="btn btn-sm btn-light comic-btn px-3" id="nav-mode-bot">
+              <i class="bi bi-robot me-1"></i> 33 Bots
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: Actions & Theme Toggle -->
+        <div class="d-flex align-items-center gap-2">
+          <!-- Board Theme Dropdown -->
+          <div class="dropdown">
+            <button class="btn btn-sm btn-light comic-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Board Theme">
+              <i class="bi bi-palette"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow">
+              <li><button class="dropdown-item fw-bold" data-board-theme="green">🟢 Tournament Green</button></li>
+              <li><button class="dropdown-item fw-bold" data-board-theme="wood">🪵 Warm Wood</button></li>
+              <li><button class="dropdown-item fw-bold" data-board-theme="icy">❄️ Cool Icy</button></li>
+            </ul>
+          </div>
+
+          <!-- Theme Toggle (Light / Dark) -->
+          <button type="button" class="btn btn-sm btn-light comic-btn" id="nav-btn-theme" title="Toggle Light/Dark Theme">
+            <i class="bi bi-sun-fill text-warning" id="theme-toggle-icon"></i>
+          </button>
+
+          <!-- Import Game Button -->
+          <button type="button" class="btn btn-sm btn-warning comic-btn px-3" id="nav-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal">
+            <i class="bi bi-cloud-arrow-up-fill me-1"></i>
+            <span class="d-none d-sm-inline">Import Game</span>
+            <span class="d-sm-none">Import</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Application Container -->
+    <main class="container-fluid max-w-7xl px-2 px-sm-4 py-3 py-sm-4">
+      <!-- Mode 1: Review Mode View -->
+      <section id="review-view"></section>
+
+      <!-- Mode 2: Play vs 33 Bots View -->
+      <section id="bot-view" class="d-none"></section>
+    </main>
+
+    <!-- Bootstrap 5 Import Modal -->
+    <div class="modal fade" id="import-modal" tabindex="-1" aria-hidden="true"></div>
+
+    <!-- Vanilla JS Application Entry Point -->
+    <script type="module" src="./src/main.js"></script>
   </body>
 </html>
