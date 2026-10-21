@@ -16,7 +16,7 @@
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
-    "bootstrap": "^5.3.8",
+    "bootstrap": "^6.0.0-alpha.1",
     "bootstrap-icons": "^1.13.2",
     "canvas-confetti": "^1.9.4",
     "chess.js": "^1.4.0",

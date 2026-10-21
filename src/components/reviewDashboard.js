@@ -647,18 +647,18 @@ export class ReviewDashboard {
         ? Math.round((this.analysisProgress.current / this.analysisProgress.total) * 100)
         : 10;
       this.container.innerHTML = `
-        <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-xl mx-auto my-5 shadow-lg" id="review-analysis-card">
+        <div class="d-flex flex-column align-items-center justify-content-center p-4 sm:p-5 text-center comic-card max-w-xl mx-auto my-5 shadow-lg" id="review-analysis-card">
           <div class="spinner-border text-warning mb-3" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
           <h4 class="fw-black mb-1">Analyzing Game with Stockfish...</h4>
-          <p class="text-secondary small mb-3 fw-bold" id="review-analysis-subtitle">
+          <p class="fg-secondary small mb-3 fw-bold" id="review-analysis-subtitle">
             ${this.analysisProgress.total > 0 ? `Evaluating ply ${this.analysisProgress.current} of ${this.analysisProgress.total}...` : 'Starting rapid engine analysis...'}
           </p>
           <div class="progress w-100 max-w-md mx-auto mb-2" style="height: 14px; border: 2px solid #000000; border-radius: 999px; background: rgba(0,0,0,0.08);">
             <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" id="review-analysis-bar" style="width: ${pct}%; transition: width 0.15s ease;"></div>
           </div>
-          <div class="d-flex align-items-center justify-content-between w-100 max-w-md text-secondary small font-monospace fw-bold px-1">
+          <div class="d-flex align-items-center justify-content-between w-100 max-w-md fg-secondary small font-monospace fw-bold px-1">
             <span id="review-analysis-step">${this.analysisProgress.total > 0 ? `${this.analysisProgress.current} / ${this.analysisProgress.total} plies` : 'Initializing...'}</span>
-            <span class="badge bg-warning-subtle text-warning border border-warning-subtle" id="review-analysis-eta">Estimating time...</span>
+            <span class="badge theme-warning" id="review-analysis-eta">Estimating time...</span>
             <span id="review-analysis-pct">${pct}%</span>
           </div>
         </div>
@@ -669,17 +669,17 @@ export class ReviewDashboard {
     if (!this.game) {
       // Zero State (No game active)
       this.container.innerHTML = `
-        <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-2xl mx-auto my-4">
-          <span class="badge bg-warning text-dark border border-dark rounded-4 p-3 fs-1 mb-3 shadow-sm">
+        <div class="d-flex flex-column align-items-center justify-content-center p-4 sm:p-5 text-center comic-card max-w-2xl mx-auto my-4">
+          <span class="badge theme-warning border border-dark rounded-4 p-3 fs-1 mb-3 shadow-sm">
             ♟
           </span>
           <h3 class="fw-black mb-2">No Game Currently in Review</h3>
-          <p class="text-secondary small max-w-md mx-auto mb-4 font-medium leading-relaxed">
+          <p class="fg-secondary small max-w-md mx-auto mb-4 font-medium leading-relaxed">
             Import a game from Chess.com, Lichess, or paste any PGN to run deep Stockfish engine diagnostics
             with move quality classifications, phase ratings, and key moment analysis, or challenge our 33-bot arena!
           </p>
           <div class="d-flex align-items-center gap-3">
-            <button type="button" class="btn btn-warning comic-btn px-4 py-2.5" id="zero-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal">
+            <button type="button" class="btn-solid theme-warning comic-btn px-4 py-2.5" id="zero-btn-import" data-bs-toggle="dialog" data-bs-target="#import-modal">
               <i class="bi bi-cloud-arrow-up-fill me-1.5"></i> Import Game
             </button>
             <button type="button" class="btn btn-light comic-btn px-4 py-2.5" id="zero-btn-bots">
@@ -716,9 +716,9 @@ export class ReviewDashboard {
 
     // Active Review Dashboard
     this.container.innerHTML = `
-      <div class="row g-3 g-lg-4">
+      <div class="row g-3 lg:g-4">
         <!-- Left: Sticky Board Column -->
-        <div class="col-12 col-lg-7 mobile-sticky-top">
+        <div class="col-12 lg:col-7 mobile-sticky-top">
           <!-- PV Banner (Tactical line playback) -->
           <div id="pv-banner-area" class="d-none"></div>
 
@@ -765,7 +765,7 @@ export class ReviewDashboard {
         </div>
 
         <!-- Right: Move List & Performance Stats -->
-        <div class="col-12 col-lg-5 d-flex flex-column gap-3">
+        <div class="col-12 lg:col-5 d-flex flex-column gap-3">
           <!-- Match Overview Header Card -->
           <div class="comic-card p-3">
             <div class="d-flex align-items-center justify-content-between">

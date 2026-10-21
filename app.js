@@ -4433,18 +4433,18 @@ class ReviewDashboard {
         ? Math.round((this.analysisProgress.current / this.analysisProgress.total) * 100)
         : 10;
       this.container.innerHTML = `
-        <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-xl mx-auto my-5 shadow-lg" id="review-analysis-card">
+        <div class="d-flex flex-column align-items-center justify-content-center p-4 sm:p-5 text-center comic-card max-w-xl mx-auto my-5 shadow-lg" id="review-analysis-card">
           <div class="spinner-border text-warning mb-3" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
           <h4 class="fw-black mb-1">Analyzing Game with Stockfish...</h4>
-          <p class="text-secondary small mb-3 fw-bold" id="review-analysis-subtitle">
+          <p class="fg-secondary small mb-3 fw-bold" id="review-analysis-subtitle">
             ${this.analysisProgress.total > 0 ? `Evaluating ply ${this.analysisProgress.current} of ${this.analysisProgress.total}...` : 'Starting rapid engine analysis...'}
           </p>
           <div class="progress w-100 max-w-md mx-auto mb-2" style="height: 14px; border: 2px solid #000000; border-radius: 999px; background: rgba(0,0,0,0.08);">
             <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" id="review-analysis-bar" style="width: ${pct}%; transition: width 0.15s ease;"></div>
           </div>
-          <div class="d-flex align-items-center justify-content-between w-100 max-w-md text-secondary small font-monospace fw-bold px-1">
+          <div class="d-flex align-items-center justify-content-between w-100 max-w-md fg-secondary small font-monospace fw-bold px-1">
             <span id="review-analysis-step">${this.analysisProgress.total > 0 ? `${this.analysisProgress.current} / ${this.analysisProgress.total} plies` : 'Initializing...'}</span>
-            <span class="badge bg-warning-subtle text-warning border border-warning-subtle" id="review-analysis-eta">Estimating time...</span>
+            <span class="badge theme-warning" id="review-analysis-eta">Estimating time...</span>
             <span id="review-analysis-pct">${pct}%</span>
           </div>
         </div>
@@ -4455,17 +4455,17 @@ class ReviewDashboard {
     if (!this.game) {
       // Zero State (No game active)
       this.container.innerHTML = `
-        <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-2xl mx-auto my-4">
-          <span class="badge bg-warning text-dark border border-dark rounded-4 p-3 fs-1 mb-3 shadow-sm">
+        <div class="d-flex flex-column align-items-center justify-content-center p-4 sm:p-5 text-center comic-card max-w-2xl mx-auto my-4">
+          <span class="badge theme-warning border border-dark rounded-4 p-3 fs-1 mb-3 shadow-sm">
             ♟
           </span>
           <h3 class="fw-black mb-2">No Game Currently in Review</h3>
-          <p class="text-secondary small max-w-md mx-auto mb-4 font-medium leading-relaxed">
+          <p class="fg-secondary small max-w-md mx-auto mb-4 font-medium leading-relaxed">
             Import a game from Chess.com, Lichess, or paste any PGN to run deep Stockfish engine diagnostics
             with move quality classifications, phase ratings, and key moment analysis, or challenge our 33-bot arena!
           </p>
           <div class="d-flex align-items-center gap-3">
-            <button type="button" class="btn btn-warning comic-btn px-4 py-2.5" id="zero-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal">
+            <button type="button" class="btn-solid theme-warning comic-btn px-4 py-2.5" id="zero-btn-import" data-bs-toggle="dialog" data-bs-target="#import-modal">
               <i class="bi bi-cloud-arrow-up-fill me-1.5"></i> Import Game
             </button>
             <button type="button" class="btn btn-light comic-btn px-4 py-2.5" id="zero-btn-bots">
@@ -4502,9 +4502,9 @@ class ReviewDashboard {
 
     // Active Review Dashboard
     this.container.innerHTML = `
-      <div class="row g-3 g-lg-4">
+      <div class="row g-3 lg:g-4">
         <!-- Left: Sticky Board Column -->
-        <div class="col-12 col-lg-7 mobile-sticky-top">
+        <div class="col-12 lg:col-7 mobile-sticky-top">
           <!-- PV Banner (Tactical line playback) -->
           <div id="pv-banner-area" class="d-none"></div>
 
@@ -4551,7 +4551,7 @@ class ReviewDashboard {
         </div>
 
         <!-- Right: Move List & Performance Stats -->
-        <div class="col-12 col-lg-5 d-flex flex-column gap-3">
+        <div class="col-12 lg:col-5 d-flex flex-column gap-3">
           <!-- Match Overview Header Card -->
           <div class="comic-card p-3">
             <div class="d-flex align-items-center justify-content-between">
@@ -4828,11 +4828,10 @@ class ReviewDashboard {
 
 /* --- src/components/importModal.js --- */
 /**
- * Vanilla JS Import Modal Component
- * Bootstrap 5 modal supporting Chess.com, Lichess, and custom PGN imports.
+ * Vanilla JS Import Dialog Component
+ * Bootstrap 6 Dialog supporting Chess.com, Lichess, and custom PGN imports.
  * Only analyzes user-imported games with live Stockfish progress.
  */
-
 
 
 class ImportModal {
@@ -4850,14 +4849,14 @@ class ImportModal {
 
     this.isAnalyzing = false;
     this.analysisProgress = { current: 0, total: 0 };
-    this.bsModal = null;
+    this.bsDialog = null;
 
     this.render();
   }
 
   formatOpeningBadge(eco) {
     if (!eco) {
-      return `<span class="badge bg-body-tertiary text-secondary font-monospace" style="font-size: 10px;">PGN</span>`;
+      return `<span class="badge theme-secondary font-monospace" style="font-size: 10px;">PGN</span>`;
     }
     if (typeof eco === 'string' && eco.startsWith('http')) {
       let label = 'Opening';
@@ -4869,69 +4868,90 @@ class ImportModal {
         }
       } catch {}
       return `<a href="${eco}" target="_blank" rel="noopener noreferrer"
-        class="badge bg-body-tertiary text-warning text-decoration-none border border-warning-subtle text-truncate"
+        class="badge theme-warning text-decoration-none border border-warning-subtle text-truncate"
         style="max-width: 140px; font-size: 10px; vertical-align: middle;"
         title="${label} (${eco})"
         onclick="event.stopPropagation();">
         <i class="bi bi-book me-1"></i>${label} <i class="bi bi-box-arrow-up-right ms-0.5" style="font-size: 8px;"></i>
       </a>`;
     }
-    return `<span class="badge bg-body-tertiary text-secondary font-monospace" style="font-size: 10px;">${eco}</span>`;
+    return `<span class="badge theme-secondary font-monospace" style="font-size: 10px;">${eco}</span>`;
   }
 
-  getBsModal() {
-    if (this.bsModal) return this.bsModal;
+  getBsDialog() {
+    if (this.bsDialog) return this.bsDialog;
     try {
-      if (window.bootstrap?.Modal) {
-        this.bsModal = window.bootstrap.Modal.getOrCreateInstance(this.modalEl);
-      } else {
-        this.bsModal = Modal.getOrCreateInstance(this.modalEl);
+      const Dialog = window.bootstrap?.Dialog || window.bootstrap?.Modal;
+      if (Dialog) {
+        this.bsDialog = Dialog.getOrCreateInstance(this.modalEl);
       }
-      return this.bsModal;
+      return this.bsDialog;
     } catch {
       return null;
     }
   }
 
-  show() {
-    const modal = this.getBsModal();
-    if (modal) {
-      modal.show();
-    } else {
-      // Direct DOM fallback
-      this.modalEl.classList.add('show');
-      this.modalEl.style.display = 'block';
-      this.modalEl.removeAttribute('aria-hidden');
-      this.modalEl.setAttribute('aria-modal', 'true');
-      document.body.classList.add('modal-open');
-      let backdrop = document.querySelector('.modal-backdrop');
-      if (!backdrop) {
-        backdrop = document.createElement('div');
-        backdrop.className = 'modal-backdrop fade show';
-        document.body.appendChild(backdrop);
-        backdrop.addEventListener('click', () => this.hide());
+  resetCardStates() {
+    this.isAnalyzing = false;
+    const container = this.modalEl.querySelector('#import-tab-body');
+    if (!container) return;
+    container.querySelectorAll('[data-game-id]').forEach((card) => {
+      card.style.pointerEvents = 'auto';
+      card.style.opacity = '1';
+      card.classList.remove('border-warning');
+      const btn = card.querySelector('.btn-analyze-card');
+      if (btn) {
+        btn.innerHTML = `Analyze <i class="bi bi-chevron-right ms-0.5"></i>`;
+        btn.classList.remove('disabled');
       }
+    });
+    const customBtn = container.querySelector('#btn-analyze-custom-pgn');
+    if (customBtn) {
+      customBtn.innerHTML = `Analyze PGN with Stockfish ⚡`;
+      customBtn.disabled = !this.customPgn.trim();
+    }
+  }
+
+  show() {
+    this.resetCardStates();
+    const dialog = this.getBsDialog();
+    if (dialog && typeof dialog.show === 'function') {
+      dialog.show();
+    } else if (typeof this.modalEl.showModal === 'function') {
+      try {
+        if (!this.modalEl.open) this.modalEl.showModal();
+      } catch {
+        this.modalEl.setAttribute('open', '');
+      }
+    } else {
+      this.modalEl.setAttribute('open', '');
     }
   }
 
   hide() {
-    const modal = this.getBsModal();
-    if (modal) {
-      try { modal.hide(); } catch {}
+    this.resetCardStates();
+    const dialog = this.getBsDialog();
+    if (dialog && typeof dialog.hide === 'function') {
+      try { dialog.hide(); } catch {}
     }
-    this.modalEl.classList.remove('show');
-    this.modalEl.style.display = 'none';
-    this.modalEl.setAttribute('aria-hidden', 'true');
-    this.modalEl.removeAttribute('aria-modal');
-    document.body.classList.remove('modal-open');
-    document.body.style.removeProperty('overflow');
-    document.body.style.removeProperty('padding-right');
+    if (typeof this.modalEl.close === 'function') {
+      try {
+        if (this.modalEl.open) this.modalEl.close();
+      } catch {
+        this.modalEl.removeAttribute('open');
+      }
+    } else {
+      this.modalEl.removeAttribute('open');
+    }
     document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
   }
 
   setAnalyzing(isAnalyzing, current = 0, total = 0) {
     this.isAnalyzing = isAnalyzing;
     this.analysisProgress = { current, total };
+    if (!isAnalyzing) {
+      this.resetCardStates();
+    }
     this.updateProgress();
   }
 
@@ -5008,8 +5028,33 @@ class ImportModal {
             </button>
           </div>
 
+          ${this.isFetching ? `
+            <div class="placeholder-wave d-flex flex-column gap-2 mt-2 w-100">
+              <div class="comic-card-sm p-3 w-100 border border-secondary border-opacity-25">
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="placeholder col-4 bg-warning rounded py-1"></span>
+                  <span class="placeholder col-2 bg-secondary rounded py-1"></span>
+                </div>
+                <div class="d-flex flex-column gap-1.5">
+                  <span class="placeholder col-7 bg-body-secondary rounded"></span>
+                  <span class="placeholder col-5 bg-body-secondary rounded"></span>
+                </div>
+              </div>
+              <div class="comic-card-sm p-3 w-100 border border-secondary border-opacity-25">
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="placeholder col-3 bg-warning rounded py-1"></span>
+                  <span class="placeholder col-2 bg-secondary rounded py-1"></span>
+                </div>
+                <div class="d-flex flex-column gap-1.5">
+                  <span class="placeholder col-6 bg-body-secondary rounded"></span>
+                  <span class="placeholder col-4 bg-body-secondary rounded"></span>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+
           ${this.fetchError ? `
-            <div class="alert alert-danger py-2 px-3 small font-medium mb-0">${this.fetchError}</div>
+            <div class="alert theme-danger py-2 px-3 small font-medium mb-0">${this.fetchError}</div>
           ` : ''}
 
           ${this.fetchedGames.length > 0 ? `
@@ -5105,6 +5150,7 @@ class ImportModal {
           const gameId = e.currentTarget.getAttribute('data-game-id');
           const game = this.fetchedGames.find((g) => g.id === gameId);
           if (game && this.onSelectPgn) {
+            this.isAnalyzing = true;
             const isWhite = game.white.toLowerCase() === this.username.trim().toLowerCase();
             const btn = card.querySelector('.btn-analyze-card');
             if (btn) {
@@ -5179,44 +5225,46 @@ class ImportModal {
 
   render() {
     this.modalEl.innerHTML = `
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content comic-card overflow-hidden">
-          <div class="modal-header border-bottom bg-body-tertiary px-4 py-3">
-            <h5 class="modal-title fw-black"><i class="bi bi-cloud-arrow-up-fill me-2 text-warning"></i>Import Game for Review ⚡</h5>
-            <button type="button" class="btn-close" id="btn-modal-close" aria-label="Close"></button>
-          </div>
+      <div class="dialog-header border-bottom bg-body-tertiary px-4 py-3">
+        <h5 class="dialog-title fw-black"><i class="bi bi-cloud-arrow-up-fill me-2 fg-warning"></i>Import Game for Review ⚡</h5>
+        <button type="button" class="btn-close" id="btn-modal-close" data-bs-dismiss="dialog" aria-label="Close"></button>
+      </div>
 
-          <!-- Progress overlay when analyzing -->
-          <div id="import-analysis-progress" class="d-none px-4"></div>
+      <!-- Progress overlay when analyzing -->
+      <div id="import-analysis-progress" class="d-none px-4"></div>
 
-          <!-- Tab Selector -->
-          <div id="import-tabs-content">
-            <ul class="nav nav-tabs nav-fill border-bottom bg-body-tertiary px-3 pt-2">
-              <li class="nav-item">
-                <button class="nav-link ${this.activeTab === 'chesscom' ? 'active fw-black text-warning' : 'fw-bold'}" data-import-tab="chesscom">
-                  <span class="badge bg-success rounded-circle p-1 me-1"> </span> Chess.com
-                </button>
-              </li>
-              <li class="nav-item">
-                <button class="nav-link ${this.activeTab === 'lichess' ? 'active fw-black text-warning' : 'fw-bold'}" data-import-tab="lichess">
-                  <i class="bi bi-globe me-1 text-info"></i> Lichess
-                </button>
-              </li>
-              <li class="nav-item">
-                <button class="nav-link ${this.activeTab === 'pgn' ? 'active fw-black text-warning' : 'fw-bold'}" data-import-tab="pgn">
-                  <i class="bi bi-file-text-fill me-1 text-primary"></i> Paste PGN
-                </button>
-              </li>
-            </ul>
+      <!-- Tab Selector -->
+      <div id="import-tabs-content">
+        <ul class="nav nav-tabs nav-fill border-bottom bg-body-tertiary px-3 pt-2">
+          <li class="nav-item">
+            <button class="nav-link ${this.activeTab === 'chesscom' ? 'active fw-black fg-warning' : 'fw-bold'}" data-import-tab="chesscom">
+              <span class="badge theme-success rounded-circle p-1 me-1"> </span> Chess.com
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link ${this.activeTab === 'lichess' ? 'active fw-black fg-warning' : 'fw-bold'}" data-import-tab="lichess">
+              <i class="bi bi-globe me-1 fg-info"></i> Lichess
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link ${this.activeTab === 'pgn' ? 'active fw-black fg-warning' : 'fw-bold'}" data-import-tab="pgn">
+              <i class="bi bi-file-text-fill me-1 fg-primary"></i> Paste PGN
+            </button>
+          </li>
+        </ul>
 
-            <div class="modal-body p-3 p-sm-4 overflow-x-hidden" id="import-tab-body"></div>
-          </div>
-        </div>
+        <div class="dialog-body p-3 sm:p-4 overflow-x-hidden" id="import-tab-body"></div>
       </div>
     `;
 
     // Explicit close button click
     this.modalEl.querySelector('#btn-modal-close')?.addEventListener('click', () => this.hide());
+
+    // Native dialog cancel event (pressing Escape)
+    this.modalEl.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      this.hide();
+    });
 
     // Backdrop click
     this.modalEl.addEventListener('click', (e) => {
@@ -5381,12 +5429,27 @@ class App {
     document.getElementById('nav-btn-import')?.addEventListener('click', () => this.importModal?.show());
     document.getElementById('nav-btn-theme')?.addEventListener('click', () => this.toggleTheme());
 
-    // Theme selector dropdown
+    // Theme selector dropdown/menu
+    const menuToggle = document.querySelector('[data-bs-toggle="menu"], [data-bs-toggle="dropdown"]');
+    const menuEl = document.querySelector('.menu, .dropdown-menu');
+    if (menuToggle && menuEl) {
+      menuToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menuEl.classList.toggle('show');
+      });
+      document.addEventListener('click', (e) => {
+        if (!menuEl.contains(e.target) && e.target !== menuToggle) {
+          menuEl.classList.remove('show');
+        }
+      });
+    }
+
     document.querySelectorAll('[data-board-theme]').forEach((item) => {
       item.addEventListener('click', (e) => {
         this.boardTheme = e.currentTarget.getAttribute('data-board-theme');
         this.reviewDashboard?.setTheme(this.boardTheme);
         this.botArena?.setTheme(this.boardTheme);
+        menuEl?.classList.remove('show');
       });
     });
   }

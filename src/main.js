@@ -141,12 +141,27 @@ class App {
     document.getElementById('nav-btn-import')?.addEventListener('click', () => this.importModal?.show());
     document.getElementById('nav-btn-theme')?.addEventListener('click', () => this.toggleTheme());
 
-    // Theme selector dropdown
+    // Theme selector dropdown/menu
+    const menuToggle = document.querySelector('[data-bs-toggle="menu"], [data-bs-toggle="dropdown"]');
+    const menuEl = document.querySelector('.menu, .dropdown-menu');
+    if (menuToggle && menuEl) {
+      menuToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menuEl.classList.toggle('show');
+      });
+      document.addEventListener('click', (e) => {
+        if (!menuEl.contains(e.target) && e.target !== menuToggle) {
+          menuEl.classList.remove('show');
+        }
+      });
+    }
+
     document.querySelectorAll('[data-board-theme]').forEach((item) => {
       item.addEventListener('click', (e) => {
         this.boardTheme = e.currentTarget.getAttribute('data-board-theme');
         this.reviewDashboard?.setTheme(this.boardTheme);
         this.botArena?.setTheme(this.boardTheme);
+        menuEl?.classList.remove('show');
       });
     });
   }
