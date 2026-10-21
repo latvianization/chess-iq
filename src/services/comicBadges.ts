@@ -25,8 +25,8 @@ export const COMIC_DICTIONARY: Record<
   }
 > = {
   brilliant: {
-    words: ['KABOOM!', 'BOOM!', 'EPIC!', 'GENIUS!'],
-    symbol: '💥',
+    words: ['Brilliant'],
+    symbol: '💎',
     standardLabel: '!!',
     bg: '#06b6d4', // Vibrant Cyan
     border: '#083344',
@@ -35,7 +35,7 @@ export const COMIC_DICTIONARY: Record<
     starColor: '#22d3ee',
   },
   great: {
-    words: ['POW!', 'WHAM!', 'SUPER!', 'SMASH!'],
+    words: ['Great Move'],
     symbol: '⚡',
     standardLabel: '!',
     bg: '#3b82f6', // Comic Blue
@@ -45,8 +45,8 @@ export const COMIC_DICTIONARY: Record<
     starColor: '#60a5fa',
   },
   best: {
-    words: ['ZAP!', 'SWOOSH!', 'BULLSEYE!', 'BAM!'],
-    symbol: '🎯',
+    words: ['Best Move'],
+    symbol: '⭐',
     standardLabel: '★',
     bg: '#10b981', // Emerald Hero
     border: '#064e3b',
@@ -55,8 +55,8 @@ export const COMIC_DICTIONARY: Record<
     starColor: '#34d399',
   },
   excellent: {
-    words: ['NICE!', 'SHARP!', 'CLEAN!', 'SWEET!'],
-    symbol: '✨',
+    words: ['Excellent'],
+    symbol: '✓',
     standardLabel: '✓',
     bg: '#22c55e', // Fresh Green
     border: '#14532d',
@@ -65,7 +65,7 @@ export const COMIC_DICTIONARY: Record<
     starColor: '#4ade80',
   },
   good: {
-    words: ['SOLID!', 'COOL!', 'OKAY!', 'SMOOTH!'],
+    words: ['Good'],
     symbol: '👍',
     standardLabel: '·',
     bg: '#84cc16', // Lime Pop
@@ -75,7 +75,7 @@ export const COMIC_DICTIONARY: Record<
     starColor: '#a3e635',
   },
   book: {
-    words: ['THEORY!', 'CLASSIC!', 'BOOK!', 'PRO!'],
+    words: ['Book Move'],
     symbol: '📖',
     standardLabel: '📖',
     bg: '#8b5cf6', // Comic Purple
@@ -85,8 +85,8 @@ export const COMIC_DICTIONARY: Record<
     starColor: '#a78bfa',
   },
   inaccuracy: {
-    words: ['HMM?', 'MEH!', 'WHOOPS!', 'UH-OH!'],
-    symbol: '🤔',
+    words: ['Inaccuracy'],
+    symbol: '⁈',
     standardLabel: '?!',
     bg: '#eab308', // Comic Yellow
     border: '#713f12',
@@ -95,8 +95,8 @@ export const COMIC_DICTIONARY: Record<
     starColor: '#facc15',
   },
   mistake: {
-    words: ['OUCH!', 'YIKES!', 'CLUNK!', 'DOH!'],
-    symbol: '🩹',
+    words: ['Mistake'],
+    symbol: '⁇',
     standardLabel: '?',
     bg: '#f97316', // Comic Orange
     border: '#7c2d12',
@@ -105,7 +105,7 @@ export const COMIC_DICTIONARY: Record<
     starColor: '#fb923c',
   },
   blunder: {
-    words: ['SPLAT!', 'CRASH!', 'KABLOOEY!', 'FACEPALM!'],
+    words: ['Blunder'],
     symbol: '💥',
     standardLabel: '??',
     bg: '#ef4444', // Comic Crimson
@@ -115,8 +115,8 @@ export const COMIC_DICTIONARY: Record<
     starColor: '#f87171',
   },
   missed_win: {
-    words: ['NOOO!', 'MISSED!', 'WIPEOUT!', 'LOST IT!'],
-    symbol: '💨',
+    words: ['Missed Win'],
+    symbol: '✖',
     standardLabel: '✖',
     bg: '#be123c', // Deep Crimson
     border: '#4c0519',

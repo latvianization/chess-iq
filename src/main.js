@@ -16,6 +16,34 @@ import { ImportModal } from './components/importModal.js';
 import { analyzeFullPgn } from './services/importApi.js';
 import { soundService } from './services/sound.js';
 
+function ensureChessCompat() {
+  if (typeof window === 'undefined' || !window.Chess) return;
+  const proto = window.Chess.prototype;
+  if (!proto) return;
+  if (!proto.isGameOver && typeof proto.game_over === 'function') {
+    proto.isGameOver = function() { return this.game_over(); };
+  }
+  if (!proto.isCheckmate && typeof proto.in_checkmate === 'function') {
+    proto.isCheckmate = function() { return this.in_checkmate(); };
+  }
+  if (!proto.isDraw && typeof proto.in_draw === 'function') {
+    proto.isDraw = function() { return this.in_draw(); };
+  }
+  if (!proto.inCheck && typeof proto.in_check === 'function') {
+    proto.inCheck = function() { return this.in_check(); };
+  }
+  if (!proto.isStalemate && typeof proto.in_stalemate === 'function') {
+    proto.isStalemate = function() { return this.in_stalemate(); };
+  }
+  if (!proto.isThreefoldRepetition && typeof proto.in_threefold_repetition === 'function') {
+    proto.isThreefoldRepetition = function() { return this.in_threefold_repetition(); };
+  }
+  if (!proto.isInsufficientMaterial && typeof proto.insufficient_material === 'function') {
+    proto.isInsufficientMaterial = function() { return this.insufficient_material(); };
+  }
+}
+ensureChessCompat();
+
 class App {
   constructor() {
     this.appMode = 'review'; // 'review' | 'bot'
@@ -125,11 +153,16 @@ class App {
 
   async runAnalysis(pgn, userColor) {
     this.switchMode('review');
+    window.scrollTo({ top: 0, behavior: 'instant' });
     this.reviewDashboard?.showLoading(0, 0);
     this.importModal?.hide();
 
-    // Allow modal hide animation and review loading view to paint before computation begins
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    // Clean up any lingering backdrops
+    document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+    document.body.classList.remove('modal-open');
+
+    // Allow modal hide and review loading view to paint before computation begins
+    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 50)));
 
     try {
       const analyzedGame = await analyzeFullPgn(

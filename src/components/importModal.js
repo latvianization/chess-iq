@@ -89,13 +89,15 @@ export class ImportModal {
   hide() {
     const modal = this.getBsModal();
     if (modal) {
-      modal.hide();
+      try { modal.hide(); } catch {}
     }
     this.modalEl.classList.remove('show');
     this.modalEl.style.display = 'none';
     this.modalEl.setAttribute('aria-hidden', 'true');
     this.modalEl.removeAttribute('aria-modal');
     document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
     document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
   }
 
@@ -339,6 +341,8 @@ export class ImportModal {
 
       submitBtn?.addEventListener('click', () => {
         if (this.customPgn.trim() && this.onSelectPgn) {
+          submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Starting Review...`;
+          submitBtn.disabled = true;
           this.onSelectPgn(this.customPgn.trim(), this.customColor);
         }
       });

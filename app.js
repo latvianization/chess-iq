@@ -1,40 +1,29 @@
 (function() {
   "use strict";
-
-  // Chess adapter ensuring 100% compatibility across all CDN chess.js versions
-  const OriginalChess = window.Chess || (typeof Chess !== "undefined" ? Chess : null);
-  function Chess(fen) {
-    if (!OriginalChess) {
-      throw new Error("Chess library not loaded. Please ensure CDN script is loaded.");
+  const Chess = window.Chess;
+  if (Chess && Chess.prototype) {
+    if (!Chess.prototype.isGameOver && typeof Chess.prototype.game_over === "function") {
+      Chess.prototype.isGameOver = function() { return this.game_over(); };
     }
-    const instance = new OriginalChess(fen);
-    if (!instance.isGameOver && instance.game_over) instance.isGameOver = instance.game_over;
-    if (!instance.inCheck && instance.in_check) instance.inCheck = instance.in_check;
-    if (!instance.isCheckmate && instance.in_checkmate) instance.isCheckmate = instance.in_checkmate;
-    if (!instance.isDraw && instance.in_draw) instance.isDraw = instance.in_draw;
-    if (!instance.loadPgn && instance.load_pgn) instance.loadPgn = instance.load_pgn;
-    if (!instance.board) {
-      instance.board = function() {
-        const rows = instance.fen().split(" ")[0].split("/");
-        return rows.map(r => {
-          const row = [];
-          for (const ch of r) {
-            if (/\d/.test(ch)) {
-              for (let i = 0; i < parseInt(ch, 10); i++) row.push(null);
-            } else {
-              row.push({ type: ch.toLowerCase(), color: ch === ch.toUpperCase() ? "w" : "b" });
-            }
-          }
-          return row;
-        });
-      };
+    if (!Chess.prototype.isCheckmate && typeof Chess.prototype.in_checkmate === "function") {
+      Chess.prototype.isCheckmate = function() { return this.in_checkmate(); };
     }
-    return instance;
+    if (!Chess.prototype.isDraw && typeof Chess.prototype.in_draw === "function") {
+      Chess.prototype.isDraw = function() { return this.in_draw(); };
+    }
+    if (!Chess.prototype.inCheck && typeof Chess.prototype.in_check === "function") {
+      Chess.prototype.inCheck = function() { return this.in_check(); };
+    }
+    if (!Chess.prototype.isStalemate && typeof Chess.prototype.in_stalemate === "function") {
+      Chess.prototype.isStalemate = function() { return this.in_stalemate(); };
+    }
+    if (!Chess.prototype.isThreefoldRepetition && typeof Chess.prototype.in_threefold_repetition === "function") {
+      Chess.prototype.isThreefoldRepetition = function() { return this.in_threefold_repetition(); };
+    }
+    if (!Chess.prototype.isInsufficientMaterial && typeof Chess.prototype.insufficient_material === "function") {
+      Chess.prototype.isInsufficientMaterial = function() { return this.insufficient_material(); };
+    }
   }
-  if (OriginalChess) {
-    Object.assign(Chess, OriginalChess);
-  }
-
   const confetti = window.confetti || function() {};
   const bootstrap = window.bootstrap;
 
@@ -69,8 +58,8 @@ const INLINE_PIECE_DATA_URLS = {
 
 const COMIC_DICTIONARY = {
   brilliant: {
-    words: ['KABOOM!', 'BOOM!', 'EPIC!', 'GENIUS!'],
-    symbol: '💥',
+    words: ['Brilliant'],
+    symbol: '💎',
     standardLabel: '!!',
     bg: '#06b6d4',
     border: '#083344',
@@ -79,7 +68,7 @@ const COMIC_DICTIONARY = {
     starColor: '#22d3ee',
   },
   great: {
-    words: ['POW!', 'WHAM!', 'SUPER!', 'SMASH!'],
+    words: ['Great Move'],
     symbol: '⚡',
     standardLabel: '!',
     bg: '#3b82f6',
@@ -89,8 +78,8 @@ const COMIC_DICTIONARY = {
     starColor: '#60a5fa',
   },
   best: {
-    words: ['ZAP!', 'SWOOSH!', 'BULLSEYE!', 'BAM!'],
-    symbol: '🎯',
+    words: ['Best Move'],
+    symbol: '⭐',
     standardLabel: '★',
     bg: '#10b981',
     border: '#064e3b',
@@ -99,8 +88,8 @@ const COMIC_DICTIONARY = {
     starColor: '#34d399',
   },
   excellent: {
-    words: ['NICE!', 'SHARP!', 'CLEAN!', 'SWEET!'],
-    symbol: '✨',
+    words: ['Excellent'],
+    symbol: '✓',
     standardLabel: '✓',
     bg: '#22c55e',
     border: '#14532d',
@@ -109,7 +98,7 @@ const COMIC_DICTIONARY = {
     starColor: '#4ade80',
   },
   good: {
-    words: ['SOLID!', 'COOL!', 'OKAY!', 'SMOOTH!'],
+    words: ['Good'],
     symbol: '👍',
     standardLabel: '·',
     bg: '#84cc16',
@@ -119,7 +108,7 @@ const COMIC_DICTIONARY = {
     starColor: '#a3e635',
   },
   book: {
-    words: ['THEORY!', 'CLASSIC!', 'BOOK!', 'PRO!'],
+    words: ['Book Move'],
     symbol: '📖',
     standardLabel: '📖',
     bg: '#8b5cf6',
@@ -129,8 +118,8 @@ const COMIC_DICTIONARY = {
     starColor: '#a78bfa',
   },
   inaccuracy: {
-    words: ['HMM?', 'MEH!', 'WHOOPS!', 'UH-OH!'],
-    symbol: '🤔',
+    words: ['Inaccuracy'],
+    symbol: '⁈',
     standardLabel: '?!',
     bg: '#eab308',
     border: '#713f12',
@@ -139,8 +128,8 @@ const COMIC_DICTIONARY = {
     starColor: '#facc15',
   },
   mistake: {
-    words: ['OUCH!', 'YIKES!', 'CLUNK!', 'DOH!'],
-    symbol: '🩹',
+    words: ['Mistake'],
+    symbol: '⁇',
     standardLabel: '?',
     bg: '#f97316',
     border: '#7c2d12',
@@ -149,7 +138,7 @@ const COMIC_DICTIONARY = {
     starColor: '#fb923c',
   },
   blunder: {
-    words: ['SPLAT!', 'CRASH!', 'KABLOOEY!', 'FACEPALM!'],
+    words: ['Blunder'],
     symbol: '💥',
     standardLabel: '??',
     bg: '#ef4444',
@@ -159,8 +148,8 @@ const COMIC_DICTIONARY = {
     starColor: '#f87171',
   },
   missed_win: {
-    words: ['NOOO!', 'MISSED!', 'WIPEOUT!', 'LOST IT!'],
-    symbol: '💨',
+    words: ['Missed Win'],
+    symbol: '✖',
     standardLabel: '✖',
     bg: '#be123c',
     border: '#4c0519',
@@ -1885,10 +1874,20 @@ function detectPhase(ply, chess, moveSans, middlegameStartPly, endgameStartPly) 
   }
   return { phase: "opening", newMiddlegameStart: null, newEndgameStart: null };
 }
+function isChessGameOver(c) {
+  return typeof c.isGameOver === 'function' ? c.isGameOver() : (typeof c.game_over === 'function' ? c.game_over() : false);
+}
+function isChessCheckmate(c) {
+  return typeof c.isCheckmate === 'function' ? c.isCheckmate() : (typeof c.in_checkmate === 'function' ? c.in_checkmate() : false);
+}
+function isChessInCheck(c) {
+  return typeof c.inCheck === 'function' ? c.inCheck() : (typeof c.in_check === 'function' ? c.in_check() : false);
+}
+
 function evaluatePositionLocally(fen) {
   const chess = new Chess(fen);
-  if (chess.isGameOver()) {
-    if (chess.isCheckmate()) {
+  if (isChessGameOver(chess)) {
+    if (isChessCheckmate(chess)) {
       return { cp: 0, mate: chess.turn() === "w" ? -1 : 1 };
     }
     return { cp: 0, mate: null };
@@ -1979,12 +1978,12 @@ function quiescence(chess, alpha, beta, qDepth = 0) {
   return isWhite ? alpha : beta;
 }
 function alphaBeta(chess, depth, alpha, beta, pvArray) {
-  if (depth === 0 || chess.isGameOver()) {
+  if (depth === 0 || isChessGameOver(chess)) {
     return quiescence(chess, alpha, beta);
   }
   const moves = chess.moves({ verbose: true });
   if (moves.length === 0) {
-    if (chess.isCheckmate()) {
+    if (isChessCheckmate(chess)) {
       return chess.turn() === "w" ? -3e4 : 3e4;
     }
     return 0;
@@ -2225,7 +2224,7 @@ async function evaluateFenHybrid(fen, isDeep = false) {
 async function detectThreat(fen) {
   try {
     const chess = new Chess(fen);
-    if (chess.isGameOver()) return null;
+    if (isChessGameOver(chess)) return null;
     const parts = fen.split(" ");
     const opponentColor = parts[1] === "w" ? "b" : "w";
     parts[1] = opponentColor;
@@ -2248,7 +2247,7 @@ async function detectThreat(fen) {
         q: "Queen",
         k: "King"
       };
-      if (opponentChess.isCheckmate()) {
+      if (isChessCheckmate(opponentChess)) {
         return {
           uci: threatUci,
           san: move.san,
@@ -2263,7 +2262,7 @@ async function detectThreat(fen) {
           description: `Threatens to capture ${victimName} on ${move.to}`
         };
       }
-      if (opponentChess.inCheck()) {
+      if (isChessInCheck(opponentChess)) {
         const attackerName = pieceNameMap[move.piece.toLowerCase()] || "Piece";
         return {
           uci: threatUci,
@@ -2475,7 +2474,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
 
   if (onProgress) {
     onProgress(0, totalPlies);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await new Promise((resolve) => setTimeout(resolve, 35));
   }
 
   let prevEngine = precomputed.length > 0
@@ -2511,6 +2510,8 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         classification: "book",
         bestMoveUci: playedUci2,
         bestMoveSan: item.moveObj.san,
+        secondBestMoveUci: "",
+        secondBestMoveSan: "",
         pv: [playedUci2],
         threat: null,
         phase: item.phase
@@ -2541,6 +2542,20 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
           if (m) bestMoveSan = m.san;
         } catch {
           bestMoveSan = bestMoveUci;
+        }
+      }
+      const secondBestMoveUci = engineBefore.secondBestMoveUci || "";
+      let secondBestMoveSan = "";
+      if (secondBestMoveUci && secondBestMoveUci !== bestMoveUci) {
+        try {
+          const testChess2 = new Chess(item.fenBefore);
+          const from = secondBestMoveUci.slice(0, 2);
+          const to = secondBestMoveUci.slice(2, 4);
+          const promotion = secondBestMoveUci.length > 4 ? secondBestMoveUci[4] : void 0;
+          const m2 = testChess2.move({ from, to, promotion });
+          if (m2) secondBestMoveSan = m2.san;
+        } catch {
+          secondBestMoveSan = secondBestMoveUci;
         }
       }
       const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
@@ -2587,6 +2602,8 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         classification,
         bestMoveUci,
         bestMoveSan: bestMoveSan || item.moveObj.san,
+        secondBestMoveUci,
+        secondBestMoveSan,
         pv: engineBefore.pv,
         threat,
         phase: item.phase
@@ -2594,10 +2611,10 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     }
     if (onProgress && (i % 2 === 0 || i === totalPlies - 1)) {
       onProgress(i + 1, totalPlies);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 20));
     }
   }
-  const counts = {
+  const createEmptyCounts = () => ({
     brilliant: 0,
     great: 0,
     best: 0,
@@ -2608,14 +2625,22 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     mistake: 0,
     blunder: 0,
     missed_win: 0
-  };
+  });
+  const userCounts = createEmptyCounts();
+  const opponentCounts = createEmptyCounts();
   let userAccuracySum = 0;
   let userMovesCount = 0;
   let oppAccuracySum = 0;
   let oppMovesCount = 0;
   let impulsiveBlunders = 0;
   let timeTroubleBlunders = 0;
-  const phaseLosses = {
+  const userPhaseLosses = {
+    opening: [],
+    middlegame: [],
+    endgame: [],
+    overall: []
+  };
+  const oppPhaseLosses = {
     opening: [],
     middlegame: [],
     endgame: [],
@@ -2623,36 +2648,55 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
   };
   plies.forEach((p) => {
     if (!p) return;
+    const cpLoss = Math.min(300, Math.max(0, p.scoreCp < 0 ? -p.scoreCp : 0));
     if (p.color === userColor) {
-      counts[p.classification]++;
+      userCounts[p.classification] = (userCounts[p.classification] || 0) + 1;
       userAccuracySum += p.accuracy;
       userMovesCount++;
       if (p.isImpulsive) impulsiveBlunders++;
       if (p.isTimeTrouble && (p.classification === "blunder" || p.classification === "mistake")) {
         timeTroubleBlunders++;
       }
-      const cpLoss = Math.min(300, Math.max(0, p.scoreCp < 0 ? -p.scoreCp : 0));
-      phaseLosses[p.phase].push(cpLoss);
-      phaseLosses.overall.push(cpLoss);
+      userPhaseLosses[p.phase].push(cpLoss);
+      userPhaseLosses.overall.push(cpLoss);
     } else {
+      opponentCounts[p.classification] = (opponentCounts[p.classification] || 0) + 1;
       oppAccuracySum += p.accuracy;
       oppMovesCount++;
+      oppPhaseLosses[p.phase].push(cpLoss);
+      oppPhaseLosses.overall.push(cpLoss);
     }
   });
   const userAccuracy = userMovesCount > 0 ? Math.round(userAccuracySum / userMovesCount * 10) / 10 : 85;
   const opponentAccuracy = oppMovesCount > 0 ? Math.round(oppAccuracySum / oppMovesCount * 10) / 10 : 85;
   const overallAccuracy = Math.round((userAccuracy + opponentAccuracy) / 2 * 10) / 10;
   const calcAcpl = (arr) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 25;
-  const phaseAcpl = {
-    opening: calcAcpl(phaseLosses.opening),
-    middlegame: calcAcpl(phaseLosses.middlegame),
-    endgame: calcAcpl(phaseLosses.endgame),
-    overall: calcAcpl(phaseLosses.overall)
+
+  const oppColor = userColor === "w" ? "b" : "w";
+  const oppBaseElo = userColor === "w" ? blackElo : whiteElo;
+
+  const userPhaseAcpl = {
+    opening: calcAcpl(userPhaseLosses.opening),
+    middlegame: calcAcpl(userPhaseLosses.middlegame),
+    endgame: calcAcpl(userPhaseLosses.endgame),
+    overall: calcAcpl(userPhaseLosses.overall)
   };
-  const overallGameElo = calculatePhaseElo(userBaseElo, phaseAcpl.overall, userMovesCount, true, result, userColor) ?? userBaseElo;
-  const openingElo = calculatePhaseElo(userBaseElo, phaseAcpl.opening, phaseLosses.opening.length);
-  const middlegameElo = calculatePhaseElo(userBaseElo, phaseAcpl.middlegame, phaseLosses.middlegame.length);
-  const endgameElo = calculatePhaseElo(userBaseElo, phaseAcpl.endgame, phaseLosses.endgame.length);
+  const oppPhaseAcpl = {
+    opening: calcAcpl(oppPhaseLosses.opening),
+    middlegame: calcAcpl(oppPhaseLosses.middlegame),
+    endgame: calcAcpl(oppPhaseLosses.endgame),
+    overall: calcAcpl(oppPhaseLosses.overall)
+  };
+
+  const overallGameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.overall, userMovesCount, true, result, userColor) ?? userBaseElo;
+  const openingElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.opening, userPhaseLosses.opening.length) ?? userBaseElo;
+  const middlegameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.middlegame, userPhaseLosses.middlegame.length) ?? userBaseElo;
+  const endgameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.endgame, userPhaseLosses.endgame.length) ?? userBaseElo;
+
+  const oppOpeningElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.opening, oppPhaseLosses.opening.length) ?? oppBaseElo;
+  const oppMiddlegameElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.middlegame, oppPhaseLosses.middlegame.length) ?? oppBaseElo;
+  const oppEndgameElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.endgame, oppPhaseLosses.endgame.length) ?? oppBaseElo;
+
   return {
     id: `game_${Date.now()}`,
     platform: "pgn",
@@ -2681,12 +2725,24 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
       middlegame: middlegameElo,
       endgame: endgameElo
     },
+    userPhaseElos: {
+      opening: openingElo,
+      middlegame: middlegameElo,
+      endgame: endgameElo
+    },
+    opponentPhaseElos: {
+      opening: oppOpeningElo,
+      middlegame: oppMiddlegameElo,
+      endgame: oppEndgameElo
+    },
     middlegameStartPly: middlegameStartPly ?? 20,
     endgameStartPly: endgameStartPly ?? 50,
-    counts,
+    counts: userCounts,
+    userCounts,
+    opponentCounts,
     impulsiveBlunders,
     timeTroubleBlunders,
-    phaseAcpl
+    phaseAcpl: userPhaseAcpl
   };
 }
 async function fetchChessComGames(username) {
@@ -3229,7 +3285,7 @@ class BotArena {
         if (shouldSpeak) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
         }
-      } else if (this.chess.inCheck()) {
+      } else if (typeof this.chess.inCheck === 'function' ? this.chess.inCheck() : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false)) {
         soundService.playCheck();
         if (shouldSpeak) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
@@ -3254,7 +3310,10 @@ class BotArena {
     const thinkTime = Math.min(1200, Math.max(350, 200 + (this.selectedBot.elo - 400) * 0.5));
 
     setTimeout(() => {
-      if (this.chess.isGameOver()) return;
+      const isOver = typeof this.chess.isGameOver === 'function'
+        ? this.chess.isGameOver()
+        : (typeof this.chess.game_over === 'function' ? this.chess.game_over() : false);
+      if (isOver) return;
 
       const legalMoves = this.chess.moves({ verbose: true });
       if (legalMoves.length === 0) return;
@@ -3290,7 +3349,11 @@ class BotArena {
         if (move.captured) soundService.playCapture();
         else soundService.playMove();
 
-        if (this.chess.inCheck()) {
+        const isInCheck = typeof this.chess.inCheck === 'function'
+          ? this.chess.inCheck()
+          : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false);
+
+        if (isInCheck) {
           soundService.playCheck();
           if (Math.random() < 0.20) {
             this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotCheck));
@@ -3419,7 +3482,12 @@ class BotArena {
 
     document.body.appendChild(modal);
 
-    modal.querySelector('#modal-btn-review')?.addEventListener('click', () => {
+    modal.querySelector('#modal-btn-review')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      if (btn) {
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Preparing Review...`;
+        btn.classList.add('disabled');
+      }
       this.closeGameOverModal();
       if (this.onAnalyzeGame) {
         this.onAnalyzeGame(this.getEnrichedPgn(), this.userColor);
@@ -3438,7 +3506,15 @@ class BotArena {
 
   checkGameOver() {
     let reason = '';
-    if (this.chess.isCheckmate()) {
+    const isMate = typeof this.chess.isCheckmate === 'function'
+      ? this.chess.isCheckmate()
+      : (typeof this.chess.in_checkmate === 'function' ? this.chess.in_checkmate() : false);
+
+    const isDraw = typeof this.chess.isDraw === 'function'
+      ? this.chess.isDraw()
+      : (typeof this.chess.in_draw === 'function' ? this.chess.in_draw() : false);
+
+    if (isMate) {
       const winner = this.chess.turn() === 'w' ? 'b' : 'w';
       if (winner === this.userColor) {
         this.gameResult = 'win';
@@ -3452,7 +3528,7 @@ class BotArena {
         this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotWin));
         soundService.playBlunder();
       }
-    } else if (this.chess.isDraw()) {
+    } else if (isDraw) {
       this.gameResult = 'draw';
       reason = 'Draw / Stalemate';
       this.setBotSpeech('A noble draw! Well fought!');
@@ -3726,18 +3802,67 @@ class ReviewDashboard {
     this.isPlayingPv = false;
     this.pvTimer = null;
     this.board = null;
+    this.analysisStartTime = null;
 
     this.render();
   }
 
   showLoading(current = 0, total = 0) {
+    if (!this.isAnalyzing || current === 0) {
+      this.analysisStartTime = Date.now();
+    }
     this.isAnalyzing = true;
     this.analysisProgress = { current, total };
-    this.render();
+
+    const card = this.container.querySelector('#review-analysis-card');
+    if (card) {
+      this.updateLoadingCard(current, total);
+    } else {
+      this.render();
+    }
+  }
+
+  updateLoadingCard(current, total) {
+    const subtitleEl = this.container.querySelector('#review-analysis-subtitle');
+    const barEl = this.container.querySelector('#review-analysis-bar');
+    const stepEl = this.container.querySelector('#review-analysis-step');
+    const pctEl = this.container.querySelector('#review-analysis-pct');
+    const etaEl = this.container.querySelector('#review-analysis-eta');
+
+    const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 10;
+
+    let etaText = 'Estimating time...';
+    if (this.analysisStartTime && current > 2 && total > current) {
+      const elapsedSec = (Date.now() - this.analysisStartTime) / 1000;
+      const secPerPly = elapsedSec / current;
+      const remainingSec = Math.max(1, Math.round(secPerPly * (total - current)));
+      etaText = `~${remainingSec}s remaining`;
+    } else if (current >= total && total > 0) {
+      etaText = 'Finalizing report...';
+    }
+
+    if (subtitleEl) {
+      subtitleEl.textContent = total > 0
+        ? `Evaluating ply ${current} of ${total}...`
+        : 'Starting rapid engine analysis...';
+    }
+    if (barEl) {
+      barEl.style.width = `${pct}%`;
+    }
+    if (stepEl) {
+      stepEl.textContent = total > 0 ? `${current} / ${total} plies` : 'Initializing...';
+    }
+    if (pctEl) {
+      pctEl.textContent = `${pct}%`;
+    }
+    if (etaEl) {
+      etaEl.textContent = etaText;
+    }
   }
 
   hideLoading() {
     this.isAnalyzing = false;
+    this.analysisStartTime = null;
   }
 
   setTheme(newTheme) {
@@ -3923,7 +4048,33 @@ class ReviewDashboard {
     const fen = cur ? cur.fen : (this.game ? this.game.initialFen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
     const lastMove = cur ? { from: cur.from, to: cur.to } : null;
 
-    const { best: bestMove, second: secondBestMove } = this.getTopMovesForFen(fen);
+    let bestMove = null;
+    let secondBestMove = null;
+
+    if (cur) {
+      // Show available top moves for the player who made the move (from position before the move)
+      let bestUci = cur.bestMoveUci;
+      let secondUci = cur.secondBestMoveUci;
+
+      if (!bestUci || !secondUci) {
+        const top = this.getTopMovesForFen(cur.fenBefore);
+        if (!bestUci && top.best) bestUci = `${top.best.from}${top.best.to}`;
+        if (!secondUci && top.second) secondUci = `${top.second.from}${top.second.to}`;
+      }
+
+      bestMove = bestUci && bestUci.length >= 4
+        ? { from: bestUci.slice(0, 2), to: bestUci.slice(2, 4) }
+        : null;
+
+      secondBestMove = secondUci && secondUci.length >= 4 && (secondUci.slice(0, 2) !== bestMove?.from || secondUci.slice(2, 4) !== bestMove?.to)
+        ? { from: secondUci.slice(0, 2), to: secondUci.slice(2, 4) }
+        : null;
+    } else {
+      // Starting position (ply 0): show White's options
+      const top = this.getTopMovesForFen(fen);
+      bestMove = top.best;
+      secondBestMove = top.second;
+    }
 
     const threatMove = this.isThreatActive && cur?.threat?.uci && cur.threat.uci.length >= 4
       ? { from: cur.threat.uci.slice(0, 2), to: cur.threat.uci.slice(2, 4) }
@@ -3953,13 +4104,29 @@ class ReviewDashboard {
           ? `M${Math.abs(cur.mate)}`
           : (cur.scoreCp > 0 ? `+${(cur.scoreCp / 100).toFixed(1)}` : (cur.scoreCp / 100).toFixed(1));
 
+        const isSuboptimal = cur.classification !== 'best' && cur.classification !== 'book';
+        const bestSan = cur.bestMoveSan || (bestMove ? `${bestMove.from}-${bestMove.to}` : '');
+        const secondSan = cur.secondBestMoveSan;
+
         stripEl.innerHTML = `
-          <div class="d-flex align-items-center gap-2">
+          <div class="d-flex align-items-center flex-wrap gap-2">
             <span class="badge border border-dark rounded-pill px-2.5 py-1" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 11px;">
               ${comic.symbol} ${comic.term}
             </span>
             <span class="font-monospace fw-black fs-5">${cur.san}</span>
             <span class="badge bg-body-tertiary text-secondary font-monospace fw-bold">${evalStr}</span>
+
+            ${isSuboptimal && bestSan && bestSan !== cur.san ? `
+              <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace fw-bold px-2 py-1" title="Top Engine Move (Thick Arrow)">
+                ★ Best: ${bestSan}
+              </span>
+            ` : ''}
+
+            ${isSuboptimal && secondSan && secondSan !== cur.san && secondSan !== bestSan ? `
+              <span class="badge bg-body-secondary text-secondary font-monospace fw-semibold px-2 py-1" title="2nd Best Option (Thin Arrow)">
+                2nd: ${secondSan}
+              </span>
+            ` : ''}
           </div>
           <div class="d-flex align-items-center gap-2">
             ${cur.tacticalContinuation && cur.tacticalContinuation.length > 0 ? `
@@ -4045,16 +4212,20 @@ class ReviewDashboard {
         ? Math.round((this.analysisProgress.current / this.analysisProgress.total) * 100)
         : 10;
       this.container.innerHTML = `
-        <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-xl mx-auto my-5">
+        <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-xl mx-auto my-5 shadow-lg" id="review-analysis-card">
           <div class="spinner-border text-warning mb-3" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
-          <h4 class="fw-black mb-1">Analyzing Game with Engine...</h4>
-          <p class="text-secondary small mb-3 fw-bold">
-            ${this.analysisProgress.total > 0 ? `Evaluating position ${this.analysisProgress.current} of ${this.analysisProgress.total}...` : 'Starting rapid engine analysis...'}
+          <h4 class="fw-black mb-1">Analyzing Game with Stockfish...</h4>
+          <p class="text-secondary small mb-3 fw-bold" id="review-analysis-subtitle">
+            ${this.analysisProgress.total > 0 ? `Evaluating ply ${this.analysisProgress.current} of ${this.analysisProgress.total}...` : 'Starting rapid engine analysis...'}
           </p>
-          <div class="progress w-100 max-w-md mx-auto" style="height: 12px; border: 2px solid #000000; border-radius: 999px;">
-            <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" style="width: ${pct}%;"></div>
+          <div class="progress w-100 max-w-md mx-auto mb-2" style="height: 14px; border: 2px solid #000000; border-radius: 999px; background: rgba(0,0,0,0.08);">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" id="review-analysis-bar" style="width: ${pct}%; transition: width 0.15s ease;"></div>
           </div>
-          <span class="text-secondary small mt-2 font-monospace fw-bold">${pct}%</span>
+          <div class="d-flex align-items-center justify-content-between w-100 max-w-md text-secondary small font-monospace fw-bold px-1">
+            <span id="review-analysis-step">${this.analysisProgress.total > 0 ? `${this.analysisProgress.current} / ${this.analysisProgress.total} plies` : 'Initializing...'}</span>
+            <span class="badge bg-warning-subtle text-warning border border-warning-subtle" id="review-analysis-eta">Estimating time...</span>
+            <span id="review-analysis-pct">${pct}%</span>
+          </div>
         </div>
       `;
       return;
@@ -4070,7 +4241,7 @@ class ReviewDashboard {
           <h3 class="fw-black mb-2">No Game Currently in Review</h3>
           <p class="text-secondary small max-w-md mx-auto mb-4 font-medium leading-relaxed">
             Import a game from Chess.com, Lichess, or paste any PGN to run deep Stockfish engine diagnostics
-            with comic sound effect badges (KABOOM!, POW!, ZAP!, SPLAT!), or challenge our 33-bot arena!
+            with move quality classifications, phase ratings, and key moment analysis, or challenge our 33-bot arena!
           </p>
           <div class="d-flex align-items-center gap-3">
             <button type="button" class="btn btn-warning comic-btn px-4 py-2.5" id="zero-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal">
@@ -4092,10 +4263,21 @@ class ReviewDashboard {
       return;
     }
 
-    const accuracyVal = Number(this.game.accuracy ?? this.game.userAccuracy ?? this.game.overallAccuracy ?? 85).toFixed(1);
-    const openingElo = this.game.phaseElos?.opening ?? this.game.openingElo ?? 1500;
-    const middlegameElo = this.game.phaseElos?.middlegame ?? this.game.middlegameElo ?? 1500;
-    const endgameElo = this.game.phaseElos?.endgame ?? this.game.endgameElo ?? 1500;
+    const userColor = this.game.userColor || 'w';
+    const isWhiteUser = userColor === 'w';
+    const userAcc = Number(this.game.userAccuracy ?? this.game.accuracy ?? this.game.overallAccuracy ?? 85).toFixed(1);
+    const oppAcc = Number(this.game.opponentAccuracy ?? 85).toFixed(1);
+
+    const userPhases = this.game.userPhaseElos || this.game.phaseElos || {};
+    const oppPhases = this.game.opponentPhaseElos || {};
+
+    const userOpeningElo = userPhases.opening ?? 1500;
+    const userMiddlegameElo = userPhases.middlegame ?? 1500;
+    const userEndgameElo = userPhases.endgame ?? 1500;
+
+    const oppOpeningElo = oppPhases.opening ?? 1500;
+    const oppMiddlegameElo = oppPhases.middlegame ?? 1500;
+    const oppEndgameElo = oppPhases.endgame ?? 1500;
 
     // Active Review Dashboard
     this.container.innerHTML = `
@@ -4182,35 +4364,101 @@ class ReviewDashboard {
 
           <!-- Phase Accuracy & Elo Card -->
           <div class="comic-card p-3">
-            <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
+            <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
               <h6 class="mb-0 fw-black"><i class="bi bi-trophy-fill me-1.5 text-warning"></i>Game Performance</h6>
-              <span class="badge bg-success fw-bold font-monospace">${accuracyVal}% Accuracy</span>
+              <span class="badge bg-body-secondary text-secondary font-monospace fw-bold" style="font-size: 11px;">You vs Opponent</span>
             </div>
 
+            <!-- Dual Accuracy Comparison -->
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <div class="arcade-stat-chip p-2 text-start">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="small fw-bold text-truncate">${isWhiteUser ? '⚪ White' : '⚫ Black'} (You)</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 10px;">YOU</span>
+                  </div>
+                  <div class="d-flex align-items-baseline gap-1">
+                    <span class="fw-black fs-4 text-success font-monospace">${userAcc}%</span>
+                    <span class="text-secondary small">accuracy</span>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="arcade-stat-chip p-2 text-start">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="small fw-bold text-truncate">${isWhiteUser ? '⚫ Black' : '⚪ White'}</span>
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill font-monospace" style="font-size: 10px;">OPP</span>
+                  </div>
+                  <div class="d-flex align-items-baseline gap-1">
+                    <span class="fw-black fs-4 text-secondary font-monospace">${oppAcc}%</span>
+                    <span class="text-secondary small">accuracy</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Phase Rating Comparison (Opening, Middle, Endgame) -->
             <div class="row g-2 text-center mb-3">
               <div class="col-4">
-                <div class="arcade-stat-chip">
-                  <span class="text-secondary small d-block fw-bold"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
-                  <span class="fw-black fs-5 text-primary font-monospace">${openingElo}</span>
+                <div class="arcade-stat-chip p-2">
+                  <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
+                  <div class="d-flex justify-content-around align-items-baseline">
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
+                      <span class="fw-black fs-6 text-primary font-monospace">${userOpeningElo}</span>
+                    </div>
+                    <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
+                      <span class="fw-black fs-6 text-secondary font-monospace">${oppOpeningElo}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="col-4">
-                <div class="arcade-stat-chip">
-                  <span class="text-secondary small d-block fw-bold"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
-                  <span class="fw-black fs-5 text-warning font-monospace">${middlegameElo}</span>
+                <div class="arcade-stat-chip p-2">
+                  <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
+                  <div class="d-flex justify-content-around align-items-baseline">
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
+                      <span class="fw-black fs-6 text-warning font-monospace">${userMiddlegameElo}</span>
+                    </div>
+                    <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
+                      <span class="fw-black fs-6 text-secondary font-monospace">${oppMiddlegameElo}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="col-4">
-                <div class="arcade-stat-chip">
-                  <span class="text-secondary small d-block fw-bold"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
-                  <span class="fw-black fs-5 text-success font-monospace">${endgameElo}</span>
+                <div class="arcade-stat-chip p-2">
+                  <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
+                  <div class="d-flex justify-content-around align-items-baseline">
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
+                      <span class="fw-black fs-6 text-success font-monospace">${userEndgameElo}</span>
+                    </div>
+                    <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
+                      <span class="fw-black fs-6 text-secondary font-monospace">${oppEndgameElo}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- Comic Badges Count Summary -->
-            <div class="d-flex flex-wrap gap-1.5 justify-content-center">
-              ${this.buildBadgesSummary()}
+            <!-- Move Classification Breakdown (Player vs Opponent) -->
+            <div class="border-top pt-2">
+              <div class="d-flex align-items-center justify-content-between px-2 pb-1.5 text-secondary" style="font-size: 11px; font-weight: 800; letter-spacing: 0.5px;">
+                <span style="width: 38px;" class="text-end">YOU</span>
+                <span>MOVE QUALITY</span>
+                <span style="width: 38px;" class="text-start">OPP</span>
+              </div>
+              <div class="d-flex flex-column gap-1">
+                ${this.buildBadgesSummary()}
+              </div>
             </div>
           </div>
         </div>
@@ -4289,7 +4537,7 @@ class ReviewDashboard {
     if (!dict) return '';
     return `
       <span class="badge border border-dark rounded-circle d-inline-flex align-items-center justify-content-center"
-        title="${dict.standardLabel}"
+        title="${dict.words[0]} (${dict.standardLabel})"
         style="width: 20px; height: 20px; font-size: 10px; background-color: ${dict.bg}; color: ${dict.text};">
         ${dict.symbol}
       </span>
@@ -4298,20 +4546,56 @@ class ReviewDashboard {
 
   buildBadgesSummary() {
     if (!this.game) return '';
-    const counts = {};
-    this.game.plies.forEach((p) => {
-      counts[p.classification] = (counts[p.classification] || 0) + 1;
-    });
+    const userColor = this.game.userColor || 'w';
+    let userCounts = this.game.userCounts;
+    let oppCounts = this.game.opponentCounts;
 
-    return Object.entries(counts)
-      .map(([cls, cnt]) => {
+    if (!userCounts || !oppCounts) {
+      userCounts = {};
+      oppCounts = {};
+      (this.game.plies || []).forEach((p) => {
+        if (!p) return;
+        const isUser = p.color ? (p.color === userColor) : (p.ply % 2 === (userColor === 'w' ? 1 : 0));
+        const target = isUser ? userCounts : oppCounts;
+        target[p.classification] = (target[p.classification] || 0) + 1;
+      });
+    }
+
+    const classifications = [
+      'brilliant',
+      'great',
+      'best',
+      'excellent',
+      'good',
+      'book',
+      'inaccuracy',
+      'mistake',
+      'blunder',
+      'missed_win'
+    ];
+
+    return classifications
+      .map((cls) => {
         const dict = COMIC_DICTIONARY[cls];
         if (!dict) return '';
+        const userCnt = userCounts[cls] || 0;
+        const oppCnt = oppCounts[cls] || 0;
+        const hasAny = userCnt > 0 || oppCnt > 0;
+
         return `
-          <span class="arcade-comic-pill"
-            style="background-color: ${dict.bg}; color: ${dict.text};">
-            ${dict.symbol} ${dict.words[0]} : <strong class="ms-0.5">${cnt}</strong>
-          </span>
+          <div class="d-flex align-items-center justify-content-between py-1 px-2 rounded ${hasAny ? 'bg-body-tertiary bg-opacity-25' : 'opacity-60'}" style="font-size: 12px;">
+            <span class="font-monospace fw-black text-end ${userCnt > 0 ? 'text-primary' : 'text-body-tertiary'}" style="width: 38px;">
+              ${userCnt}
+            </span>
+            <span class="badge border border-dark rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
+              style="background-color: ${dict.bg}; color: ${dict.text}; font-size: 11px; font-weight: 800; min-width: 125px; justify-content: center;">
+              <span>${dict.symbol}</span>
+              <span>${dict.words[0]}</span>
+            </span>
+            <span class="font-monospace fw-black text-start ${oppCnt > 0 ? 'text-secondary' : 'text-body-tertiary'}" style="width: 38px;">
+              ${oppCnt}
+            </span>
+          </div>
         `;
       })
       .join('');
@@ -4410,13 +4694,15 @@ class ImportModal {
   hide() {
     const modal = this.getBsModal();
     if (modal) {
-      modal.hide();
+      try { modal.hide(); } catch {}
     }
     this.modalEl.classList.remove('show');
     this.modalEl.style.display = 'none';
     this.modalEl.setAttribute('aria-hidden', 'true');
     this.modalEl.removeAttribute('aria-modal');
     document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
     document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
   }
 
@@ -4660,6 +4946,8 @@ class ImportModal {
 
       submitBtn?.addEventListener('click', () => {
         if (this.customPgn.trim() && this.onSelectPgn) {
+          submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Starting Review...`;
+          submitBtn.disabled = true;
           this.onSelectPgn(this.customPgn.trim(), this.customColor);
         }
       });
@@ -4744,6 +5032,34 @@ window.bootstrap = bootstrap;
 
 
 
+
+function ensureChessCompat() {
+  if (typeof window === 'undefined' || !window.Chess) return;
+  const proto = window.Chess.prototype;
+  if (!proto) return;
+  if (!proto.isGameOver && typeof proto.game_over === 'function') {
+    proto.isGameOver = function() { return this.game_over(); };
+  }
+  if (!proto.isCheckmate && typeof proto.in_checkmate === 'function') {
+    proto.isCheckmate = function() { return this.in_checkmate(); };
+  }
+  if (!proto.isDraw && typeof proto.in_draw === 'function') {
+    proto.isDraw = function() { return this.in_draw(); };
+  }
+  if (!proto.inCheck && typeof proto.in_check === 'function') {
+    proto.inCheck = function() { return this.in_check(); };
+  }
+  if (!proto.isStalemate && typeof proto.in_stalemate === 'function') {
+    proto.isStalemate = function() { return this.in_stalemate(); };
+  }
+  if (!proto.isThreefoldRepetition && typeof proto.in_threefold_repetition === 'function') {
+    proto.isThreefoldRepetition = function() { return this.in_threefold_repetition(); };
+  }
+  if (!proto.isInsufficientMaterial && typeof proto.insufficient_material === 'function') {
+    proto.isInsufficientMaterial = function() { return this.insufficient_material(); };
+  }
+}
+ensureChessCompat();
 
 class App {
   constructor() {
@@ -4854,11 +5170,16 @@ class App {
 
   async runAnalysis(pgn, userColor) {
     this.switchMode('review');
+    window.scrollTo({ top: 0, behavior: 'instant' });
     this.reviewDashboard?.showLoading(0, 0);
     this.importModal?.hide();
 
-    // Allow modal hide animation and review loading view to paint before computation begins
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    // Clean up any lingering backdrops
+    document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+    document.body.classList.remove('modal-open');
+
+    // Allow modal hide and review loading view to paint before computation begins
+    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 50)));
 
     try {
       const analyzedGame = await analyzeFullPgn(

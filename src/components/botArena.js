@@ -113,7 +113,7 @@ export class BotArena {
         if (shouldSpeak) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
         }
-      } else if (this.chess.inCheck()) {
+      } else if (typeof this.chess.inCheck === 'function' ? this.chess.inCheck() : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false)) {
         soundService.playCheck();
         if (shouldSpeak) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
@@ -138,7 +138,10 @@ export class BotArena {
     const thinkTime = Math.min(1200, Math.max(350, 200 + (this.selectedBot.elo - 400) * 0.5));
 
     setTimeout(() => {
-      if (this.chess.isGameOver()) return;
+      const isOver = typeof this.chess.isGameOver === 'function'
+        ? this.chess.isGameOver()
+        : (typeof this.chess.game_over === 'function' ? this.chess.game_over() : false);
+      if (isOver) return;
 
       const legalMoves = this.chess.moves({ verbose: true });
       if (legalMoves.length === 0) return;
@@ -174,7 +177,11 @@ export class BotArena {
         if (move.captured) soundService.playCapture();
         else soundService.playMove();
 
-        if (this.chess.inCheck()) {
+        const isInCheck = typeof this.chess.inCheck === 'function'
+          ? this.chess.inCheck()
+          : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false);
+
+        if (isInCheck) {
           soundService.playCheck();
           if (Math.random() < 0.20) {
             this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotCheck));
@@ -303,7 +310,12 @@ export class BotArena {
 
     document.body.appendChild(modal);
 
-    modal.querySelector('#modal-btn-review')?.addEventListener('click', () => {
+    modal.querySelector('#modal-btn-review')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      if (btn) {
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Preparing Review...`;
+        btn.classList.add('disabled');
+      }
       this.closeGameOverModal();
       if (this.onAnalyzeGame) {
         this.onAnalyzeGame(this.getEnrichedPgn(), this.userColor);
@@ -322,7 +334,15 @@ export class BotArena {
 
   checkGameOver() {
     let reason = '';
-    if (this.chess.isCheckmate()) {
+    const isMate = typeof this.chess.isCheckmate === 'function'
+      ? this.chess.isCheckmate()
+      : (typeof this.chess.in_checkmate === 'function' ? this.chess.in_checkmate() : false);
+
+    const isDraw = typeof this.chess.isDraw === 'function'
+      ? this.chess.isDraw()
+      : (typeof this.chess.in_draw === 'function' ? this.chess.in_draw() : false);
+
+    if (isMate) {
       const winner = this.chess.turn() === 'w' ? 'b' : 'w';
       if (winner === this.userColor) {
         this.gameResult = 'win';
@@ -336,7 +356,7 @@ export class BotArena {
         this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotWin));
         soundService.playBlunder();
       }
-    } else if (this.chess.isDraw()) {
+    } else if (isDraw) {
       this.gameResult = 'draw';
       reason = 'Draw / Stalemate';
       this.setBotSpeech('A noble draw! Well fought!');

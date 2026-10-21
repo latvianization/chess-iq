@@ -135,7 +135,7 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
 
   if (onProgress) {
     onProgress(0, totalPlies);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await new Promise((resolve) => setTimeout(resolve, 35));
   }
 
   let prevEngine = precomputed.length > 0
@@ -171,6 +171,8 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
         classification: "book",
         bestMoveUci: playedUci2,
         bestMoveSan: item.moveObj.san,
+        secondBestMoveUci: "",
+        secondBestMoveSan: "",
         pv: [playedUci2],
         threat: null,
         phase: item.phase
@@ -201,6 +203,20 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
           if (m) bestMoveSan = m.san;
         } catch {
           bestMoveSan = bestMoveUci;
+        }
+      }
+      const secondBestMoveUci = engineBefore.secondBestMoveUci || "";
+      let secondBestMoveSan = "";
+      if (secondBestMoveUci && secondBestMoveUci !== bestMoveUci) {
+        try {
+          const testChess2 = new Chess(item.fenBefore);
+          const from = secondBestMoveUci.slice(0, 2);
+          const to = secondBestMoveUci.slice(2, 4);
+          const promotion = secondBestMoveUci.length > 4 ? secondBestMoveUci[4] : void 0;
+          const m2 = testChess2.move({ from, to, promotion });
+          if (m2) secondBestMoveSan = m2.san;
+        } catch {
+          secondBestMoveSan = secondBestMoveUci;
         }
       }
       const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
@@ -247,6 +263,8 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
         classification,
         bestMoveUci,
         bestMoveSan: bestMoveSan || item.moveObj.san,
+        secondBestMoveUci,
+        secondBestMoveSan,
         pv: engineBefore.pv,
         threat,
         phase: item.phase
@@ -254,10 +272,10 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     }
     if (onProgress && (i % 2 === 0 || i === totalPlies - 1)) {
       onProgress(i + 1, totalPlies);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 20));
     }
   }
-  const counts = {
+  const createEmptyCounts = () => ({
     brilliant: 0,
     great: 0,
     best: 0,
@@ -268,14 +286,22 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     mistake: 0,
     blunder: 0,
     missed_win: 0
-  };
+  });
+  const userCounts = createEmptyCounts();
+  const opponentCounts = createEmptyCounts();
   let userAccuracySum = 0;
   let userMovesCount = 0;
   let oppAccuracySum = 0;
   let oppMovesCount = 0;
   let impulsiveBlunders = 0;
   let timeTroubleBlunders = 0;
-  const phaseLosses = {
+  const userPhaseLosses = {
+    opening: [],
+    middlegame: [],
+    endgame: [],
+    overall: []
+  };
+  const oppPhaseLosses = {
     opening: [],
     middlegame: [],
     endgame: [],
@@ -283,36 +309,55 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
   };
   plies.forEach((p) => {
     if (!p) return;
+    const cpLoss = Math.min(300, Math.max(0, p.scoreCp < 0 ? -p.scoreCp : 0));
     if (p.color === userColor) {
-      counts[p.classification]++;
+      userCounts[p.classification] = (userCounts[p.classification] || 0) + 1;
       userAccuracySum += p.accuracy;
       userMovesCount++;
       if (p.isImpulsive) impulsiveBlunders++;
       if (p.isTimeTrouble && (p.classification === "blunder" || p.classification === "mistake")) {
         timeTroubleBlunders++;
       }
-      const cpLoss = Math.min(300, Math.max(0, p.scoreCp < 0 ? -p.scoreCp : 0));
-      phaseLosses[p.phase].push(cpLoss);
-      phaseLosses.overall.push(cpLoss);
+      userPhaseLosses[p.phase].push(cpLoss);
+      userPhaseLosses.overall.push(cpLoss);
     } else {
+      opponentCounts[p.classification] = (opponentCounts[p.classification] || 0) + 1;
       oppAccuracySum += p.accuracy;
       oppMovesCount++;
+      oppPhaseLosses[p.phase].push(cpLoss);
+      oppPhaseLosses.overall.push(cpLoss);
     }
   });
   const userAccuracy = userMovesCount > 0 ? Math.round(userAccuracySum / userMovesCount * 10) / 10 : 85;
   const opponentAccuracy = oppMovesCount > 0 ? Math.round(oppAccuracySum / oppMovesCount * 10) / 10 : 85;
   const overallAccuracy = Math.round((userAccuracy + opponentAccuracy) / 2 * 10) / 10;
   const calcAcpl = (arr) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 25;
-  const phaseAcpl = {
-    opening: calcAcpl(phaseLosses.opening),
-    middlegame: calcAcpl(phaseLosses.middlegame),
-    endgame: calcAcpl(phaseLosses.endgame),
-    overall: calcAcpl(phaseLosses.overall)
+
+  const oppColor = userColor === "w" ? "b" : "w";
+  const oppBaseElo = userColor === "w" ? blackElo : whiteElo;
+
+  const userPhaseAcpl = {
+    opening: calcAcpl(userPhaseLosses.opening),
+    middlegame: calcAcpl(userPhaseLosses.middlegame),
+    endgame: calcAcpl(userPhaseLosses.endgame),
+    overall: calcAcpl(userPhaseLosses.overall)
   };
-  const overallGameElo = calculatePhaseElo(userBaseElo, phaseAcpl.overall, userMovesCount, true, result, userColor) ?? userBaseElo;
-  const openingElo = calculatePhaseElo(userBaseElo, phaseAcpl.opening, phaseLosses.opening.length);
-  const middlegameElo = calculatePhaseElo(userBaseElo, phaseAcpl.middlegame, phaseLosses.middlegame.length);
-  const endgameElo = calculatePhaseElo(userBaseElo, phaseAcpl.endgame, phaseLosses.endgame.length);
+  const oppPhaseAcpl = {
+    opening: calcAcpl(oppPhaseLosses.opening),
+    middlegame: calcAcpl(oppPhaseLosses.middlegame),
+    endgame: calcAcpl(oppPhaseLosses.endgame),
+    overall: calcAcpl(oppPhaseLosses.overall)
+  };
+
+  const overallGameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.overall, userMovesCount, true, result, userColor) ?? userBaseElo;
+  const openingElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.opening, userPhaseLosses.opening.length) ?? userBaseElo;
+  const middlegameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.middlegame, userPhaseLosses.middlegame.length) ?? userBaseElo;
+  const endgameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.endgame, userPhaseLosses.endgame.length) ?? userBaseElo;
+
+  const oppOpeningElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.opening, oppPhaseLosses.opening.length) ?? oppBaseElo;
+  const oppMiddlegameElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.middlegame, oppPhaseLosses.middlegame.length) ?? oppBaseElo;
+  const oppEndgameElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.endgame, oppPhaseLosses.endgame.length) ?? oppBaseElo;
+
   return {
     id: `game_${Date.now()}`,
     platform: "pgn",
@@ -341,12 +386,24 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
       middlegame: middlegameElo,
       endgame: endgameElo
     },
+    userPhaseElos: {
+      opening: openingElo,
+      middlegame: middlegameElo,
+      endgame: endgameElo
+    },
+    opponentPhaseElos: {
+      opening: oppOpeningElo,
+      middlegame: oppMiddlegameElo,
+      endgame: oppEndgameElo
+    },
     middlegameStartPly: middlegameStartPly ?? 20,
     endgameStartPly: endgameStartPly ?? 50,
-    counts,
+    counts: userCounts,
+    userCounts,
+    opponentCounts,
     impulsiveBlunders,
     timeTroubleBlunders,
-    phaseAcpl
+    phaseAcpl: userPhaseAcpl
   };
 }
 export async function fetchChessComGames(username) {

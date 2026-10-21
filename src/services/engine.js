@@ -485,10 +485,20 @@ export function detectPhase(ply, chess, moveSans, middlegameStartPly, endgameSta
   }
   return { phase: "opening", newMiddlegameStart: null, newEndgameStart: null };
 }
+function isChessGameOver(c) {
+  return typeof c.isGameOver === 'function' ? c.isGameOver() : (typeof c.game_over === 'function' ? c.game_over() : false);
+}
+function isChessCheckmate(c) {
+  return typeof c.isCheckmate === 'function' ? c.isCheckmate() : (typeof c.in_checkmate === 'function' ? c.in_checkmate() : false);
+}
+function isChessInCheck(c) {
+  return typeof c.inCheck === 'function' ? c.inCheck() : (typeof c.in_check === 'function' ? c.in_check() : false);
+}
+
 export function evaluatePositionLocally(fen) {
   const chess = new Chess(fen);
-  if (chess.isGameOver()) {
-    if (chess.isCheckmate()) {
+  if (isChessGameOver(chess)) {
+    if (isChessCheckmate(chess)) {
       return { cp: 0, mate: chess.turn() === "w" ? -1 : 1 };
     }
     return { cp: 0, mate: null };
@@ -579,12 +589,12 @@ function quiescence(chess, alpha, beta, qDepth = 0) {
   return isWhite ? alpha : beta;
 }
 function alphaBeta(chess, depth, alpha, beta, pvArray) {
-  if (depth === 0 || chess.isGameOver()) {
+  if (depth === 0 || isChessGameOver(chess)) {
     return quiescence(chess, alpha, beta);
   }
   const moves = chess.moves({ verbose: true });
   if (moves.length === 0) {
-    if (chess.isCheckmate()) {
+    if (isChessCheckmate(chess)) {
       return chess.turn() === "w" ? -3e4 : 3e4;
     }
     return 0;
@@ -825,7 +835,7 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
 export async function detectThreat(fen) {
   try {
     const chess = new Chess(fen);
-    if (chess.isGameOver()) return null;
+    if (isChessGameOver(chess)) return null;
     const parts = fen.split(" ");
     const opponentColor = parts[1] === "w" ? "b" : "w";
     parts[1] = opponentColor;
@@ -848,7 +858,7 @@ export async function detectThreat(fen) {
         q: "Queen",
         k: "King"
       };
-      if (opponentChess.isCheckmate()) {
+      if (isChessCheckmate(opponentChess)) {
         return {
           uci: threatUci,
           san: move.san,
@@ -863,7 +873,7 @@ export async function detectThreat(fen) {
           description: `Threatens to capture ${victimName} on ${move.to}`
         };
       }
-      if (opponentChess.inCheck()) {
+      if (isChessInCheck(opponentChess)) {
         const attackerName = pieceNameMap[move.piece.toLowerCase()] || "Piece";
         return {
           uci: threatUci,

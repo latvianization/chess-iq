@@ -26,18 +26,67 @@ export class ReviewDashboard {
     this.isPlayingPv = false;
     this.pvTimer = null;
     this.board = null;
+    this.analysisStartTime = null;
 
     this.render();
   }
 
   showLoading(current = 0, total = 0) {
+    if (!this.isAnalyzing || current === 0) {
+      this.analysisStartTime = Date.now();
+    }
     this.isAnalyzing = true;
     this.analysisProgress = { current, total };
-    this.render();
+
+    const card = this.container.querySelector('#review-analysis-card');
+    if (card) {
+      this.updateLoadingCard(current, total);
+    } else {
+      this.render();
+    }
+  }
+
+  updateLoadingCard(current, total) {
+    const subtitleEl = this.container.querySelector('#review-analysis-subtitle');
+    const barEl = this.container.querySelector('#review-analysis-bar');
+    const stepEl = this.container.querySelector('#review-analysis-step');
+    const pctEl = this.container.querySelector('#review-analysis-pct');
+    const etaEl = this.container.querySelector('#review-analysis-eta');
+
+    const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 10;
+
+    let etaText = 'Estimating time...';
+    if (this.analysisStartTime && current > 2 && total > current) {
+      const elapsedSec = (Date.now() - this.analysisStartTime) / 1000;
+      const secPerPly = elapsedSec / current;
+      const remainingSec = Math.max(1, Math.round(secPerPly * (total - current)));
+      etaText = `~${remainingSec}s remaining`;
+    } else if (current >= total && total > 0) {
+      etaText = 'Finalizing report...';
+    }
+
+    if (subtitleEl) {
+      subtitleEl.textContent = total > 0
+        ? `Evaluating ply ${current} of ${total}...`
+        : 'Starting rapid engine analysis...';
+    }
+    if (barEl) {
+      barEl.style.width = `${pct}%`;
+    }
+    if (stepEl) {
+      stepEl.textContent = total > 0 ? `${current} / ${total} plies` : 'Initializing...';
+    }
+    if (pctEl) {
+      pctEl.textContent = `${pct}%`;
+    }
+    if (etaEl) {
+      etaEl.textContent = etaText;
+    }
   }
 
   hideLoading() {
     this.isAnalyzing = false;
+    this.analysisStartTime = null;
   }
 
   setTheme(newTheme) {
@@ -223,7 +272,33 @@ export class ReviewDashboard {
     const fen = cur ? cur.fen : (this.game ? this.game.initialFen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
     const lastMove = cur ? { from: cur.from, to: cur.to } : null;
 
-    const { best: bestMove, second: secondBestMove } = this.getTopMovesForFen(fen);
+    let bestMove = null;
+    let secondBestMove = null;
+
+    if (cur) {
+      // Show available top moves for the player who made the move (from position before the move)
+      let bestUci = cur.bestMoveUci;
+      let secondUci = cur.secondBestMoveUci;
+
+      if (!bestUci || !secondUci) {
+        const top = this.getTopMovesForFen(cur.fenBefore);
+        if (!bestUci && top.best) bestUci = `${top.best.from}${top.best.to}`;
+        if (!secondUci && top.second) secondUci = `${top.second.from}${top.second.to}`;
+      }
+
+      bestMove = bestUci && bestUci.length >= 4
+        ? { from: bestUci.slice(0, 2), to: bestUci.slice(2, 4) }
+        : null;
+
+      secondBestMove = secondUci && secondUci.length >= 4 && (secondUci.slice(0, 2) !== bestMove?.from || secondUci.slice(2, 4) !== bestMove?.to)
+        ? { from: secondUci.slice(0, 2), to: secondUci.slice(2, 4) }
+        : null;
+    } else {
+      // Starting position (ply 0): show White's options
+      const top = this.getTopMovesForFen(fen);
+      bestMove = top.best;
+      secondBestMove = top.second;
+    }
 
     const threatMove = this.isThreatActive && cur?.threat?.uci && cur.threat.uci.length >= 4
       ? { from: cur.threat.uci.slice(0, 2), to: cur.threat.uci.slice(2, 4) }
@@ -253,13 +328,29 @@ export class ReviewDashboard {
           ? `M${Math.abs(cur.mate)}`
           : (cur.scoreCp > 0 ? `+${(cur.scoreCp / 100).toFixed(1)}` : (cur.scoreCp / 100).toFixed(1));
 
+        const isSuboptimal = cur.classification !== 'best' && cur.classification !== 'book';
+        const bestSan = cur.bestMoveSan || (bestMove ? `${bestMove.from}-${bestMove.to}` : '');
+        const secondSan = cur.secondBestMoveSan;
+
         stripEl.innerHTML = `
-          <div class="d-flex align-items-center gap-2">
+          <div class="d-flex align-items-center flex-wrap gap-2">
             <span class="badge border border-dark rounded-pill px-2.5 py-1" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 11px;">
               ${comic.symbol} ${comic.term}
             </span>
             <span class="font-monospace fw-black fs-5">${cur.san}</span>
             <span class="badge bg-body-tertiary text-secondary font-monospace fw-bold">${evalStr}</span>
+
+            ${isSuboptimal && bestSan && bestSan !== cur.san ? `
+              <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace fw-bold px-2 py-1" title="Top Engine Move (Thick Arrow)">
+                ★ Best: ${bestSan}
+              </span>
+            ` : ''}
+
+            ${isSuboptimal && secondSan && secondSan !== cur.san && secondSan !== bestSan ? `
+              <span class="badge bg-body-secondary text-secondary font-monospace fw-semibold px-2 py-1" title="2nd Best Option (Thin Arrow)">
+                2nd: ${secondSan}
+              </span>
+            ` : ''}
           </div>
           <div class="d-flex align-items-center gap-2">
             ${cur.tacticalContinuation && cur.tacticalContinuation.length > 0 ? `
@@ -345,16 +436,20 @@ export class ReviewDashboard {
         ? Math.round((this.analysisProgress.current / this.analysisProgress.total) * 100)
         : 10;
       this.container.innerHTML = `
-        <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-xl mx-auto my-5">
+        <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-xl mx-auto my-5 shadow-lg" id="review-analysis-card">
           <div class="spinner-border text-warning mb-3" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
-          <h4 class="fw-black mb-1">Analyzing Game with Engine...</h4>
-          <p class="text-secondary small mb-3 fw-bold">
-            ${this.analysisProgress.total > 0 ? `Evaluating position ${this.analysisProgress.current} of ${this.analysisProgress.total}...` : 'Starting rapid engine analysis...'}
+          <h4 class="fw-black mb-1">Analyzing Game with Stockfish...</h4>
+          <p class="text-secondary small mb-3 fw-bold" id="review-analysis-subtitle">
+            ${this.analysisProgress.total > 0 ? `Evaluating ply ${this.analysisProgress.current} of ${this.analysisProgress.total}...` : 'Starting rapid engine analysis...'}
           </p>
-          <div class="progress w-100 max-w-md mx-auto" style="height: 12px; border: 2px solid #000000; border-radius: 999px;">
-            <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" style="width: ${pct}%;"></div>
+          <div class="progress w-100 max-w-md mx-auto mb-2" style="height: 14px; border: 2px solid #000000; border-radius: 999px; background: rgba(0,0,0,0.08);">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" id="review-analysis-bar" style="width: ${pct}%; transition: width 0.15s ease;"></div>
           </div>
-          <span class="text-secondary small mt-2 font-monospace fw-bold">${pct}%</span>
+          <div class="d-flex align-items-center justify-content-between w-100 max-w-md text-secondary small font-monospace fw-bold px-1">
+            <span id="review-analysis-step">${this.analysisProgress.total > 0 ? `${this.analysisProgress.current} / ${this.analysisProgress.total} plies` : 'Initializing...'}</span>
+            <span class="badge bg-warning-subtle text-warning border border-warning-subtle" id="review-analysis-eta">Estimating time...</span>
+            <span id="review-analysis-pct">${pct}%</span>
+          </div>
         </div>
       `;
       return;
@@ -370,7 +465,7 @@ export class ReviewDashboard {
           <h3 class="fw-black mb-2">No Game Currently in Review</h3>
           <p class="text-secondary small max-w-md mx-auto mb-4 font-medium leading-relaxed">
             Import a game from Chess.com, Lichess, or paste any PGN to run deep Stockfish engine diagnostics
-            with comic sound effect badges (KABOOM!, POW!, ZAP!, SPLAT!), or challenge our 33-bot arena!
+            with move quality classifications, phase ratings, and key moment analysis, or challenge our 33-bot arena!
           </p>
           <div class="d-flex align-items-center gap-3">
             <button type="button" class="btn btn-warning comic-btn px-4 py-2.5" id="zero-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal">
@@ -392,10 +487,21 @@ export class ReviewDashboard {
       return;
     }
 
-    const accuracyVal = Number(this.game.accuracy ?? this.game.userAccuracy ?? this.game.overallAccuracy ?? 85).toFixed(1);
-    const openingElo = this.game.phaseElos?.opening ?? this.game.openingElo ?? 1500;
-    const middlegameElo = this.game.phaseElos?.middlegame ?? this.game.middlegameElo ?? 1500;
-    const endgameElo = this.game.phaseElos?.endgame ?? this.game.endgameElo ?? 1500;
+    const userColor = this.game.userColor || 'w';
+    const isWhiteUser = userColor === 'w';
+    const userAcc = Number(this.game.userAccuracy ?? this.game.accuracy ?? this.game.overallAccuracy ?? 85).toFixed(1);
+    const oppAcc = Number(this.game.opponentAccuracy ?? 85).toFixed(1);
+
+    const userPhases = this.game.userPhaseElos || this.game.phaseElos || {};
+    const oppPhases = this.game.opponentPhaseElos || {};
+
+    const userOpeningElo = userPhases.opening ?? 1500;
+    const userMiddlegameElo = userPhases.middlegame ?? 1500;
+    const userEndgameElo = userPhases.endgame ?? 1500;
+
+    const oppOpeningElo = oppPhases.opening ?? 1500;
+    const oppMiddlegameElo = oppPhases.middlegame ?? 1500;
+    const oppEndgameElo = oppPhases.endgame ?? 1500;
 
     // Active Review Dashboard
     this.container.innerHTML = `
@@ -482,35 +588,101 @@ export class ReviewDashboard {
 
           <!-- Phase Accuracy & Elo Card -->
           <div class="comic-card p-3">
-            <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
+            <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
               <h6 class="mb-0 fw-black"><i class="bi bi-trophy-fill me-1.5 text-warning"></i>Game Performance</h6>
-              <span class="badge bg-success fw-bold font-monospace">${accuracyVal}% Accuracy</span>
+              <span class="badge bg-body-secondary text-secondary font-monospace fw-bold" style="font-size: 11px;">You vs Opponent</span>
             </div>
 
+            <!-- Dual Accuracy Comparison -->
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <div class="arcade-stat-chip p-2 text-start">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="small fw-bold text-truncate">${isWhiteUser ? '⚪ White' : '⚫ Black'} (You)</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 10px;">YOU</span>
+                  </div>
+                  <div class="d-flex align-items-baseline gap-1">
+                    <span class="fw-black fs-4 text-success font-monospace">${userAcc}%</span>
+                    <span class="text-secondary small">accuracy</span>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="arcade-stat-chip p-2 text-start">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="small fw-bold text-truncate">${isWhiteUser ? '⚫ Black' : '⚪ White'}</span>
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill font-monospace" style="font-size: 10px;">OPP</span>
+                  </div>
+                  <div class="d-flex align-items-baseline gap-1">
+                    <span class="fw-black fs-4 text-secondary font-monospace">${oppAcc}%</span>
+                    <span class="text-secondary small">accuracy</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Phase Rating Comparison (Opening, Middle, Endgame) -->
             <div class="row g-2 text-center mb-3">
               <div class="col-4">
-                <div class="arcade-stat-chip">
-                  <span class="text-secondary small d-block fw-bold"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
-                  <span class="fw-black fs-5 text-primary font-monospace">${openingElo}</span>
+                <div class="arcade-stat-chip p-2">
+                  <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
+                  <div class="d-flex justify-content-around align-items-baseline">
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
+                      <span class="fw-black fs-6 text-primary font-monospace">${userOpeningElo}</span>
+                    </div>
+                    <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
+                      <span class="fw-black fs-6 text-secondary font-monospace">${oppOpeningElo}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="col-4">
-                <div class="arcade-stat-chip">
-                  <span class="text-secondary small d-block fw-bold"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
-                  <span class="fw-black fs-5 text-warning font-monospace">${middlegameElo}</span>
+                <div class="arcade-stat-chip p-2">
+                  <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
+                  <div class="d-flex justify-content-around align-items-baseline">
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
+                      <span class="fw-black fs-6 text-warning font-monospace">${userMiddlegameElo}</span>
+                    </div>
+                    <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
+                      <span class="fw-black fs-6 text-secondary font-monospace">${oppMiddlegameElo}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="col-4">
-                <div class="arcade-stat-chip">
-                  <span class="text-secondary small d-block fw-bold"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
-                  <span class="fw-black fs-5 text-success font-monospace">${endgameElo}</span>
+                <div class="arcade-stat-chip p-2">
+                  <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
+                  <div class="d-flex justify-content-around align-items-baseline">
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
+                      <span class="fw-black fs-6 text-success font-monospace">${userEndgameElo}</span>
+                    </div>
+                    <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                    <div class="text-center">
+                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
+                      <span class="fw-black fs-6 text-secondary font-monospace">${oppEndgameElo}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- Comic Badges Count Summary -->
-            <div class="d-flex flex-wrap gap-1.5 justify-content-center">
-              ${this.buildBadgesSummary()}
+            <!-- Move Classification Breakdown (Player vs Opponent) -->
+            <div class="border-top pt-2">
+              <div class="d-flex align-items-center justify-content-between px-2 pb-1.5 text-secondary" style="font-size: 11px; font-weight: 800; letter-spacing: 0.5px;">
+                <span style="width: 38px;" class="text-end">YOU</span>
+                <span>MOVE QUALITY</span>
+                <span style="width: 38px;" class="text-start">OPP</span>
+              </div>
+              <div class="d-flex flex-column gap-1">
+                ${this.buildBadgesSummary()}
+              </div>
             </div>
           </div>
         </div>
@@ -589,7 +761,7 @@ export class ReviewDashboard {
     if (!dict) return '';
     return `
       <span class="badge border border-dark rounded-circle d-inline-flex align-items-center justify-content-center"
-        title="${dict.standardLabel}"
+        title="${dict.words[0]} (${dict.standardLabel})"
         style="width: 20px; height: 20px; font-size: 10px; background-color: ${dict.bg}; color: ${dict.text};">
         ${dict.symbol}
       </span>
@@ -598,20 +770,56 @@ export class ReviewDashboard {
 
   buildBadgesSummary() {
     if (!this.game) return '';
-    const counts = {};
-    this.game.plies.forEach((p) => {
-      counts[p.classification] = (counts[p.classification] || 0) + 1;
-    });
+    const userColor = this.game.userColor || 'w';
+    let userCounts = this.game.userCounts;
+    let oppCounts = this.game.opponentCounts;
 
-    return Object.entries(counts)
-      .map(([cls, cnt]) => {
+    if (!userCounts || !oppCounts) {
+      userCounts = {};
+      oppCounts = {};
+      (this.game.plies || []).forEach((p) => {
+        if (!p) return;
+        const isUser = p.color ? (p.color === userColor) : (p.ply % 2 === (userColor === 'w' ? 1 : 0));
+        const target = isUser ? userCounts : oppCounts;
+        target[p.classification] = (target[p.classification] || 0) + 1;
+      });
+    }
+
+    const classifications = [
+      'brilliant',
+      'great',
+      'best',
+      'excellent',
+      'good',
+      'book',
+      'inaccuracy',
+      'mistake',
+      'blunder',
+      'missed_win'
+    ];
+
+    return classifications
+      .map((cls) => {
         const dict = COMIC_DICTIONARY[cls];
         if (!dict) return '';
+        const userCnt = userCounts[cls] || 0;
+        const oppCnt = oppCounts[cls] || 0;
+        const hasAny = userCnt > 0 || oppCnt > 0;
+
         return `
-          <span class="arcade-comic-pill"
-            style="background-color: ${dict.bg}; color: ${dict.text};">
-            ${dict.symbol} ${dict.words[0]} : <strong class="ms-0.5">${cnt}</strong>
-          </span>
+          <div class="d-flex align-items-center justify-content-between py-1 px-2 rounded ${hasAny ? 'bg-body-tertiary bg-opacity-25' : 'opacity-60'}" style="font-size: 12px;">
+            <span class="font-monospace fw-black text-end ${userCnt > 0 ? 'text-primary' : 'text-body-tertiary'}" style="width: 38px;">
+              ${userCnt}
+            </span>
+            <span class="badge border border-dark rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
+              style="background-color: ${dict.bg}; color: ${dict.text}; font-size: 11px; font-weight: 800; min-width: 125px; justify-content: center;">
+              <span>${dict.symbol}</span>
+              <span>${dict.words[0]}</span>
+            </span>
+            <span class="font-monospace fw-black text-start ${oppCnt > 0 ? 'text-secondary' : 'text-body-tertiary'}" style="width: 38px;">
+              ${oppCnt}
+            </span>
+          </div>
         `;
       })
       .join('');
