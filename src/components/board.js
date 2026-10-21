@@ -32,6 +32,7 @@ export class Chessboard {
 
     this.selectedSquare = null;
     this.possibleDests = [];
+    this.lastAnimatedMoveKey = null;
 
     this.render();
   }
@@ -179,15 +180,42 @@ export class Chessboard {
           img.className = 'piece-img';
           img.alt = `${colorCode === 'w' ? 'White' : 'Black'} ${typeCode}`;
           img.draggable = false;
+
+          // Animate piece movement from previous square
+          if (this.lastMove && this.lastMove.to === square && this.lastMove.from) {
+            const currentMoveKey = `${this.lastMove.from}-${this.lastMove.to}-${this.fen}`;
+            if (this.lastAnimatedMoveKey !== currentMoveKey) {
+              const fromF = this.lastMove.from[0];
+              const fromR = this.lastMove.from[1];
+              const fromX = files.indexOf(fromF);
+              const fromY = ranks.indexOf(fromR);
+              const toX = fIdx;
+              const toY = rIdx;
+              if (fromX !== -1 && fromY !== -1) {
+                const deltaX = (fromX - toX) * 100;
+                const deltaY = (fromY - toY) * 100;
+                img.style.transform = `translate(${deltaX}%, ${deltaY}%)`;
+                img.style.transition = 'none';
+                img.style.zIndex = '10';
+                this.lastAnimatedMoveKey = currentMoveKey;
+                const raf = typeof window !== 'undefined' && window.requestAnimationFrame ? window.requestAnimationFrame : (cb) => setTimeout(cb, 16);
+                raf(() => {
+                  raf(() => {
+                    img.style.transition = 'transform 180ms cubic-bezier(0.2, 0, 0.2, 1)';
+                    img.style.transform = 'translate(0, 0)';
+                  });
+                });
+              }
+            }
+          }
+
           sqDiv.appendChild(img);
         }
 
-        // Possible destination dot or capture ring
+        // Possible destination dot or capture target border
         if (this.possibleDests.includes(square)) {
           if (pieceChar) {
-            const ring = document.createElement('div');
-            ring.className = 'capture-ring';
-            sqDiv.appendChild(ring);
+            sqDiv.classList.add('capture-target');
           } else {
             const dot = document.createElement('div');
             dot.className = 'move-dot';

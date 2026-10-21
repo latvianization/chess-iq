@@ -3,8 +3,9 @@ class StockfishWorkerService {
     this.worker = null;
     this.isInitialized = false;
     this.isAvailable = true;
+    this.queue = [];
+    this.isProcessing = false;
     this.pendingResolve = null;
-    this.pendingReject = null;
     this.currentBestMove = "";
     this.currentScoreCp = 0;
     this.currentMate = null;
@@ -20,7 +21,7 @@ class StockfishWorkerService {
       return;
     }
     try {
-      const base = import.meta.env.BASE_URL || "./";
+      const base = (typeof window !== "undefined" && window.__BASE_URL__) || "./";
       const workerUrl = `${base.endsWith("/") ? base : `${base}/`}stockfish.js`;
       this.worker = new Worker(workerUrl);
       this.worker.onmessage = (event) => {
@@ -28,11 +29,19 @@ class StockfishWorkerService {
       };
       this.worker.onerror = () => {
         this.isAvailable = false;
+        this.drainQueue();
       };
       this.worker.postMessage("uci");
     } catch {
       this.isAvailable = false;
     }
+  }
+  drainQueue() {
+    while (this.queue.length > 0) {
+      const item = this.queue.shift();
+      if (item && item.resolve) item.resolve(null);
+    }
+    this.isProcessing = false;
   }
   handleMessage(line) {
     if (typeof line !== "string") return;
@@ -83,54 +92,64 @@ class StockfishWorkerService {
       }
       const parts = line.split(/\s+/);
       const bestMove = parts[1] && parts[1] !== "(none)" ? parts[1] : this.currentBestMove;
-      if (this.pendingResolve) {
-        const resolve = this.pendingResolve;
-        this.pendingResolve = null;
-        this.pendingReject = null;
-        resolve({
-          bestMoveUci: bestMove,
-          scoreCp: this.currentScoreCp,
-          mate: this.currentMate,
-          pv: this.currentPv.length > 0 ? this.currentPv : [bestMove],
-          depth: this.currentDepth,
-          multiPv2ScoreCp: this.secondBestCp
-        });
-      }
+      const result = {
+        bestMoveUci: bestMove,
+        scoreCp: this.currentScoreCp,
+        mate: this.currentMate,
+        pv: this.currentPv.length > 0 ? this.currentPv : [bestMove],
+        depth: this.currentDepth,
+        multiPv2ScoreCp: this.secondBestCp
+      };
+      const resolve = this.pendingResolve;
+      this.pendingResolve = null;
+      this.isProcessing = false;
+      if (resolve) resolve(result);
+      this.processQueue();
     }
   }
-  /**
-   * Evaluate a FEN position to target depth using Stockfish
-   */
-  evaluate(fen, depth = 16, maxWaitMs = 1200) {
+  processQueue() {
+    if (this.isProcessing || this.queue.length === 0 || !this.worker || !this.isAvailable) {
+      return;
+    }
+    const item = this.queue.shift();
+    if (!item) return;
+
+    this.isProcessing = true;
+    this.currentBestMove = "";
+    this.currentScoreCp = 0;
+    this.currentMate = null;
+    this.currentPv = [];
+    this.currentDepth = 0;
+    this.secondBestCp = void 0;
+    this.pendingResolve = item.resolve;
+
+    this.evaluationTimeoutId = setTimeout(() => {
+      if (this.pendingResolve) {
+        try {
+          this.worker.postMessage("stop");
+        } catch {}
+      }
+    }, item.maxWaitMs || 1200);
+
+    try {
+      this.worker.postMessage(`position fen ${item.fen}`);
+      this.worker.postMessage(`go depth ${item.depth}`);
+    } catch {
+      if (this.evaluationTimeoutId) clearTimeout(this.evaluationTimeoutId);
+      this.isProcessing = false;
+      const resolve = this.pendingResolve;
+      this.pendingResolve = null;
+      if (resolve) resolve(null);
+      this.processQueue();
+    }
+  }
+  evaluate(fen, depth = 14, maxWaitMs = 1000) {
     if (!this.isAvailable || !this.worker) {
       return Promise.resolve(null);
     }
-    const worker = this.worker;
     return new Promise((resolve) => {
-      this.currentBestMove = "";
-      this.currentScoreCp = 0;
-      this.currentMate = null;
-      this.currentPv = [];
-      this.currentDepth = 0;
-      this.secondBestCp = void 0;
-      this.pendingResolve = resolve;
-      this.pendingReject = () => resolve(null);
-      this.evaluationTimeoutId = setTimeout(() => {
-        if (this.pendingResolve) {
-          try {
-            worker.postMessage("stop");
-          } catch {
-          }
-        }
-      }, maxWaitMs);
-      try {
-        worker.postMessage("ucinewgame");
-        worker.postMessage(`position fen ${fen}`);
-        worker.postMessage(`go depth ${depth}`);
-      } catch {
-        if (this.evaluationTimeoutId) clearTimeout(this.evaluationTimeoutId);
-        resolve(null);
-      }
+      this.queue.push({ fen, depth, maxWaitMs, resolve });
+      this.processQueue();
     });
   }
   isEngineReady() {

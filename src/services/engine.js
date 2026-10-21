@@ -737,13 +737,22 @@ async function fetchSyzygyTablebase(fen) {
 export async function evaluateFenHybrid(fen, isDeep = false) {
   const cached = FEN_EVAL_CACHE.get(fen);
   if (cached) return cached;
+
+  if (!isDeep) {
+    const localSearch = findBestMoveLocal(fen, 2);
+    const localResult = {
+      scoreCp: localSearch.evalCp,
+      mate: null,
+      pv: localSearch.pv,
+      multiPv2ScoreCp: localSearch.multiPv2Cp,
+      source: "local"
+    };
+    FEN_EVAL_CACHE.set(fen, localResult);
+    return localResult;
+  }
+
   const chess = new Chess(fen);
   const totalPieces = countTotalPieces(chess);
-  const cloud = await fetchLichessCloudEval(fen);
-  if (cloud) {
-    FEN_EVAL_CACHE.set(fen, cloud);
-    return cloud;
-  }
   if (totalPieces <= 7) {
     const tablebase = await fetchSyzygyTablebase(fen);
     if (tablebase) {
@@ -751,8 +760,9 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
       return tablebase;
     }
   }
-  const targetDepth = isDeep ? 18 : 16;
-  const sfEval = await stockfishService.evaluate(fen, targetDepth, 1500);
+
+  const targetDepth = 14;
+  const sfEval = await stockfishService.evaluate(fen, targetDepth, 800);
   if (sfEval && sfEval.bestMoveUci) {
     const sfResult = {
       scoreCp: sfEval.scoreCp,
@@ -764,7 +774,8 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
     FEN_EVAL_CACHE.set(fen, sfResult);
     return sfResult;
   }
-  const localSearch = findBestMoveLocal(fen, isDeep ? 4 : 3);
+
+  const localSearch = findBestMoveLocal(fen, 3);
   const localResult = {
     scoreCp: localSearch.evalCp,
     mate: null,

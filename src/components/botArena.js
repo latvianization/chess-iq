@@ -22,6 +22,9 @@ export class BotArena {
     this.selectedBot = BOTS_33[0]; // 400 Elo Pawn Piper
     this.activeTier = 'rookie';
     this.speechText = this.selectedBot.speech.onStart[0];
+    this.isSpeechVisible = false;
+    this.speechTimeout = null;
+    this.gameStartTime = Date.now();
     this.isBotThinking = false;
     this.gameResult = null; // 'win' | 'loss' | 'draw' | null
     this.board = null;
@@ -40,11 +43,12 @@ export class BotArena {
     this.userColor = color;
     this.chess.reset();
     this.gameResult = null;
-    this.speechText = this.getRandomQuote(this.selectedBot.speech.onStart);
+    this.gameStartTime = Date.now();
+    this.closeGameOverModal();
+    this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onStart));
 
     this.updateBoard();
     this.updateControls();
-    this.updateSpeechBubble();
 
     soundService.playSuccess();
 
@@ -56,7 +60,6 @@ export class BotArena {
   selectBot(bot) {
     this.selectedBot = bot;
     this.activeTier = bot.tier;
-    this.speechText = this.getRandomQuote(bot.speech.onStart);
     this.startNewGame();
     this.render();
   }
@@ -64,6 +67,18 @@ export class BotArena {
   getRandomQuote(arr) {
     if (!arr || arr.length === 0) return 'Let us play chess!';
     return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  setBotSpeech(text) {
+    this.speechText = text;
+    this.isSpeechVisible = true;
+    this.updateSpeechBubble();
+
+    if (this.speechTimeout) clearTimeout(this.speechTimeout);
+    this.speechTimeout = setTimeout(() => {
+      this.isSpeechVisible = false;
+      this.updateSpeechBubble();
+    }, 4500);
   }
 
   handleUserMove(from, to) {
@@ -87,17 +102,25 @@ export class BotArena {
       const postEval = evaluatePositionLocally(this.chess.fen(), 3);
       const evalDiff = this.userColor === 'w' ? postEval.score - prevEval.score : prevEval.score - postEval.score;
 
+      const shouldSpeak = Math.random() < 0.18;
       if (evalDiff <= -250) {
         soundService.playBlunder();
-        this.speechText = this.getRandomQuote(this.selectedBot.speech.onUserBlunder);
-      } else if (evalDiff >= 200 || this.chess.inCheck()) {
-        if (this.chess.inCheck()) soundService.playCheck();
-        else soundService.playBrilliant();
-        this.speechText = this.getRandomQuote(this.selectedBot.speech.onUserGreat);
+        if (shouldSpeak) {
+          this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserBlunder));
+        }
+      } else if (evalDiff >= 200) {
+        soundService.playBrilliant();
+        if (shouldSpeak) {
+          this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
+        }
+      } else if (this.chess.inCheck()) {
+        soundService.playCheck();
+        if (shouldSpeak) {
+          this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
+        }
       }
 
       this.updateBoard();
-      this.updateSpeechBubble();
       this.checkGameOver();
 
       if (!this.gameResult) {
@@ -153,38 +176,176 @@ export class BotArena {
 
         if (this.chess.inCheck()) {
           soundService.playCheck();
-          this.speechText = this.getRandomQuote(this.selectedBot.speech.onBotCheck);
+          if (Math.random() < 0.20) {
+            this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotCheck));
+          }
+        } else if (Math.random() < 0.08) {
+          const generalQuotes = this.selectedBot.speech.onStart || [];
+          if (generalQuotes.length > 0) {
+            this.setBotSpeech(this.getRandomQuote(generalQuotes));
+          }
         }
       }
 
       this.updateBoard();
-      this.updateSpeechBubble();
       this.updateStatusText();
       this.checkGameOver();
     }, thinkTime);
   }
 
+  getEnrichedPgn() {
+    const isUserWhite = this.userColor === 'w';
+    const userName = 'You';
+    const botName = `${this.selectedBot.name} (${this.selectedBot.elo})`;
+    this.chess.header('White', isUserWhite ? userName : botName);
+    this.chess.header('Black', isUserWhite ? botName : userName);
+    this.chess.header('WhiteElo', isUserWhite ? '1500' : String(this.selectedBot.elo));
+    this.chess.header('BlackElo', isUserWhite ? String(this.selectedBot.elo) : '1500');
+    if (this.gameResult === 'win') {
+      this.chess.header('Result', isUserWhite ? '1-0' : '0-1');
+    } else if (this.gameResult === 'loss') {
+      this.chess.header('Result', isUserWhite ? '0-1' : '1-0');
+    } else if (this.gameResult === 'draw') {
+      this.chess.header('Result', '1/2-1/2');
+    }
+    return this.chess.pgn();
+  }
+
+  closeGameOverModal() {
+    const existing = document.getElementById('bot-game-over-modal');
+    if (existing) existing.remove();
+  }
+
+  showGameOverModal(reason = 'Game Completed') {
+    this.closeGameOverModal();
+
+    const isWin = this.gameResult === 'win';
+    const isLoss = this.gameResult === 'loss';
+
+    let resultBadgeClass = 'bg-secondary text-white';
+    let resultTitle = 'DRAW';
+    let resultIcon = '🤝';
+    if (isWin) {
+      resultBadgeClass = 'bg-success text-white border border-light';
+      resultTitle = 'VICTORY!';
+      resultIcon = '🏆';
+    } else if (isLoss) {
+      resultBadgeClass = 'bg-danger text-white border border-light';
+      resultTitle = 'DEFEAT';
+      resultIcon = '💀';
+    }
+
+    const durationSec = Math.max(1, Math.floor((Date.now() - this.gameStartTime) / 1000));
+    const mins = Math.floor(durationSec / 60);
+    const secs = durationSec % 60;
+    const durationStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    const moveCount = Math.ceil(this.chess.history().length / 2);
+
+    const modal = document.createElement('div');
+    modal.className = 'game-over-modal-backdrop';
+    modal.id = 'bot-game-over-modal';
+    modal.innerHTML = `
+      <div class="game-over-dialog comic-card p-4 text-center">
+        <div class="mb-3">
+          <span class="badge ${resultBadgeClass} fs-5 px-3.5 py-2 rounded-pill shadow-sm">
+            ${resultIcon} ${resultTitle}
+          </span>
+          <div class="text-secondary small mt-1 fw-bold">By ${reason}</div>
+        </div>
+
+        <div class="d-flex align-items-center justify-content-center gap-3 p-3 bg-body-tertiary rounded-3 border mb-3">
+          <span class="fs-1">${this.selectedBot.avatar}</span>
+          <div class="text-start">
+            <div class="fw-black fs-5">${this.selectedBot.name}</div>
+            <div class="d-flex align-items-center gap-1.5">
+              <span class="badge bg-warning text-dark fw-bold border border-dark">${this.selectedBot.elo} Elo</span>
+              <span class="badge bg-secondary">${this.selectedBot.title}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-2 mb-4 text-center">
+          <div class="col-4">
+            <div class="p-2.5 bg-body rounded-3 border">
+              <div class="text-secondary small fw-bold">Moves</div>
+              <div class="fw-black fs-5">${moveCount}</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2.5 bg-body rounded-3 border">
+              <div class="text-secondary small fw-bold">Time</div>
+              <div class="fw-black fs-5">${durationStr}</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2.5 bg-body rounded-3 border">
+              <div class="text-secondary small fw-bold">Your Side</div>
+              <div class="fw-black fs-5">${this.userColor === 'w' ? '⚪ White' : '⚫ Black'}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex flex-column gap-2">
+          <button type="button" class="arcade-btn-primary py-2.5 fw-black fs-6" id="modal-btn-review">
+            <i class="bi bi-lightning-charge-fill me-1.5"></i> Review Game with Stockfish ⚡
+          </button>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-light comic-btn flex-grow-1 py-2" id="modal-btn-rematch">
+              <i class="bi bi-arrow-repeat me-1"></i> Rematch
+            </button>
+            <button type="button" class="btn btn-outline-secondary comic-btn flex-grow-1 py-2" id="modal-btn-close">
+              <i class="bi bi-x-lg me-1"></i> Close
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector('#modal-btn-review')?.addEventListener('click', () => {
+      this.closeGameOverModal();
+      if (this.onAnalyzeGame) {
+        this.onAnalyzeGame(this.getEnrichedPgn(), this.userColor);
+      }
+    });
+
+    modal.querySelector('#modal-btn-rematch')?.addEventListener('click', () => {
+      this.closeGameOverModal();
+      this.startNewGame();
+    });
+
+    modal.querySelector('#modal-btn-close')?.addEventListener('click', () => {
+      this.closeGameOverModal();
+    });
+  }
+
   checkGameOver() {
+    let reason = '';
     if (this.chess.isCheckmate()) {
       const winner = this.chess.turn() === 'w' ? 'b' : 'w';
       if (winner === this.userColor) {
         this.gameResult = 'win';
-        this.speechText = this.getRandomQuote(this.selectedBot.speech.onBotLoss);
+        reason = 'Checkmate';
+        this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotLoss));
         soundService.playSuccess();
-        confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
       } else {
         this.gameResult = 'loss';
-        this.speechText = this.getRandomQuote(this.selectedBot.speech.onBotWin);
+        reason = 'Checkmate';
+        this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotWin));
         soundService.playBlunder();
       }
     } else if (this.chess.isDraw()) {
       this.gameResult = 'draw';
-      this.speechText = 'A noble comic draw! Well fought!';
+      reason = 'Draw / Stalemate';
+      this.setBotSpeech('A noble draw! Well fought!');
     }
 
     if (this.gameResult) {
-      this.updateSpeechBubble();
       this.updateControls();
+      this.updateStatusText();
+      setTimeout(() => this.showGameOverModal(reason), 350);
     }
   }
 
@@ -208,13 +369,21 @@ export class BotArena {
 
   updateSpeechBubble() {
     const bubbleEl = this.container.querySelector('.bot-speech-bubble-text');
+    const bubbleContainer = this.container.querySelector('.comic-bubble');
     if (bubbleEl) {
       bubbleEl.textContent = this.speechText;
-      const bubbleContainer = this.container.querySelector('.comic-bubble');
-      if (bubbleContainer) {
-        bubbleContainer.style.animation = 'none';
-        void bubbleContainer.offsetWidth; // trigger reflow
-        bubbleContainer.style.animation = 'popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+    }
+    if (bubbleContainer) {
+      if (this.isSpeechVisible) {
+        bubbleContainer.style.opacity = '1';
+        bubbleContainer.style.visibility = 'visible';
+        bubbleContainer.style.transform = 'scale(1)';
+        bubbleContainer.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+      } else {
+        bubbleContainer.style.opacity = '0';
+        bubbleContainer.style.visibility = 'hidden';
+        bubbleContainer.style.transform = 'scale(0.92)';
+        bubbleContainer.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
       }
     }
   }
@@ -223,16 +392,20 @@ export class BotArena {
     const statusEl = this.container.querySelector('.bot-status-text');
     if (statusEl) {
       if (this.isBotThinking) {
-        statusEl.innerHTML = `<span class="spinner-border spinner-border-sm text-warning me-1"></span>Thinking...`;
+        statusEl.innerHTML = `<span class="spinner-border spinner-border-sm text-warning me-1.5"></span><span class="fw-bold">Thinking...</span>`;
       } else if (this.gameResult === 'win') {
-        statusEl.innerHTML = `<span class="badge bg-success">Victory! You won!</span>`;
+        statusEl.innerHTML = `<span class="badge bg-success px-2.5 py-1.5"><i class="bi bi-trophy-fill me-1"></i>Victory!</span>`;
       } else if (this.gameResult === 'loss') {
-        statusEl.innerHTML = `<span class="badge bg-danger">Defeat! Bot wins!</span>`;
+        statusEl.innerHTML = `<span class="badge bg-danger px-2.5 py-1.5"><i class="bi bi-x-circle-fill me-1"></i>Defeat!</span>`;
       } else if (this.gameResult === 'draw') {
-        statusEl.innerHTML = `<span class="badge bg-secondary">Draw Game!</span>`;
+        statusEl.innerHTML = `<span class="badge bg-secondary px-2.5 py-1.5">Draw</span>`;
       } else {
-        const turnColor = this.chess.turn() === this.userColor ? 'Your turn' : `${this.selectedBot.name}'s turn`;
-        statusEl.textContent = turnColor;
+        const isUserTurn = this.chess.turn() === this.userColor;
+        if (isUserTurn) {
+          statusEl.innerHTML = `<span class="pulse-dot me-1.5"></span><span class="text-body fw-black">Your Turn</span>`;
+        } else {
+          statusEl.innerHTML = `<span class="badge bg-body-secondary text-secondary fw-bold">${this.selectedBot.name}'s turn</span>`;
+        }
       }
     }
   }
@@ -243,16 +416,18 @@ export class BotArena {
 
     if (this.gameResult && this.onAnalyzeGame) {
       actionArea.innerHTML = `
-        <button type="button" class="btn btn-warning comic-btn px-4 py-2 me-2" id="bot-btn-review">
-          <i class="bi bi-graph-up-arrow me-1"></i> Review This Game with Stockfish ⚡
-        </button>
-        <button type="button" class="btn btn-outline-dark comic-btn px-3 py-2" id="bot-btn-rematch">
-          <i class="bi bi-arrow-repeat me-1"></i> Rematch
-        </button>
+        <div class="d-flex align-items-center gap-2">
+          <button type="button" class="arcade-btn-primary px-4 py-2" id="bot-btn-review">
+            <i class="bi bi-lightning-charge-fill me-1"></i> Review Game with Stockfish ⚡
+          </button>
+          <button type="button" class="btn btn-outline-secondary comic-btn px-3 py-2" id="bot-btn-rematch">
+            <i class="bi bi-arrow-repeat me-1"></i> Rematch
+          </button>
+        </div>
       `;
 
       actionArea.querySelector('#bot-btn-review')?.addEventListener('click', () => {
-        this.onAnalyzeGame(this.chess.pgn(), this.userColor);
+        this.onAnalyzeGame(this.getEnrichedPgn(), this.userColor);
       });
       actionArea.querySelector('#bot-btn-rematch')?.addEventListener('click', () => {
         this.startNewGame();
@@ -279,10 +454,10 @@ export class BotArena {
       actionArea.querySelector('#bot-btn-resign')?.addEventListener('click', () => {
         if (!this.gameResult && this.chess.history().length > 0) {
           this.gameResult = 'loss';
-          this.speechText = 'GG! You resigned. Ready for another round?';
-          this.updateSpeechBubble();
+          this.setBotSpeech('GG! You resigned. Ready for another round?');
           this.updateControls();
           this.updateStatusText();
+          setTimeout(() => this.showGameOverModal('Resignation'), 350);
         }
       });
     }
@@ -291,12 +466,12 @@ export class BotArena {
   render() {
     this.container.innerHTML = `
       <div class="d-flex flex-column gap-3 max-w-4xl mx-auto">
-        <!-- Bot Selection Card -->
+        <!-- Collectible Bot Selection Card -->
         <div class="comic-card p-3 p-sm-4">
           <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3 mb-3">
             <div>
               <div class="d-flex align-items-center gap-2">
-                <span class="fs-4">${this.selectedBot.avatar}</span>
+                <span class="fs-3">${this.selectedBot.avatar}</span>
                 <h4 class="mb-0 fw-black">${this.selectedBot.name}</h4>
                 <span class="badge bg-warning text-dark fw-bold border border-dark">${this.selectedBot.elo} Elo</span>
                 <span class="badge bg-secondary fw-semibold">${this.selectedBot.title}</span>
@@ -304,31 +479,31 @@ export class BotArena {
               <p class="text-secondary small mb-0 mt-1">${this.selectedBot.description}</p>
             </div>
 
-            <!-- 4 Tier Selector Pills -->
-            <div class="btn-group" role="group">
-              <button type="button" class="btn btn-sm ${this.activeTier === 'rookie' ? 'btn-primary' : 'btn-outline-primary'} fw-bold" data-tier="rookie">🌱 Rookies</button>
-              <button type="button" class="btn btn-sm ${this.activeTier === 'challenger' ? 'btn-success' : 'btn-outline-success'} fw-bold" data-tier="challenger">⚡ Challengers</button>
-              <button type="button" class="btn btn-sm ${this.activeTier === 'hero' ? 'btn-warning' : 'btn-outline-warning text-dark'} fw-bold" data-tier="hero">🦸 Heroes</button>
-              <button type="button" class="btn btn-sm ${this.activeTier === 'titan' ? 'btn-info' : 'btn-outline-info'} fw-bold" data-tier="titan">👑 Titans</button>
+            <!-- 4 Tier Selector Tabs -->
+            <div class="d-flex align-items-center gap-1.5 flex-wrap" role="group">
+              <button type="button" class="arcade-tier-tab ${this.activeTier === 'rookie' ? 'active' : ''}" data-tier="rookie">🌱 Rookies</button>
+              <button type="button" class="arcade-tier-tab ${this.activeTier === 'challenger' ? 'active' : ''}" data-tier="challenger">⚡ Challengers</button>
+              <button type="button" class="arcade-tier-tab ${this.activeTier === 'hero' ? 'active' : ''}" data-tier="hero">🦸 Heroes</button>
+              <button type="button" class="arcade-tier-tab ${this.activeTier === 'titan' ? 'active' : ''}" data-tier="titan">👑 Titans</button>
             </div>
           </div>
 
           <!-- Elo Step Slider (400 to 2000 in 50 increments) -->
-          <div class="d-flex align-items-center gap-3 bg-body-tertiary p-2.5 rounded-3 border">
-            <span class="small fw-bold text-nowrap"><i class="bi bi-speedometer2 me-1"></i>Elo Level:</span>
-            <input type="range" class="form-range" id="bot-elo-slider" min="400" max="2000" step="50" value="${this.selectedBot.elo}">
-            <span class="badge bg-dark fw-bold text-nowrap px-2.5 py-1.5 fs-6">${this.selectedBot.elo}</span>
+          <div class="d-flex align-items-center gap-3 bg-body-tertiary p-2.5 rounded-3 border mb-3">
+            <span class="small fw-bold text-nowrap"><i class="bi bi-speedometer2 me-1 text-warning"></i>Elo Level:</span>
+            <input type="range" class="form-range arcade-range" id="bot-elo-slider" min="400" max="2000" step="50" value="${this.selectedBot.elo}">
+            <span class="badge bg-dark fw-bold text-nowrap px-2.5 py-1.5 fs-6 font-monospace">${this.selectedBot.elo}</span>
           </div>
 
-          <!-- Tier Bots Carousel Row -->
-          <div class="d-flex gap-2 overflow-x-auto py-2.5 mt-2" id="tier-bots-row" style="scrollbar-width: thin;">
+          <!-- Tier Collectible Bots Carousel -->
+          <div class="d-flex gap-2.5 overflow-x-auto py-2" id="tier-bots-row" style="scrollbar-width: thin;">
             ${BOTS_33.filter((b) => b.tier === this.activeTier)
               .map(
                 (b) => `
-                <div class="card p-2 text-center comic-card-sm flex-shrink-0 cursor-pointer ${b.id === this.selectedBot.id ? 'border-warning border-3 shadow-sm' : ''}" style="width: 95px;" data-bot-id="${b.id}">
-                  <span class="fs-3">${b.avatar}</span>
-                  <span class="small fw-black text-truncate mt-1">${b.name}</span>
-                  <span class="badge bg-warning-subtle text-dark border border-dark-subtle fw-bold" style="font-size: 10px;">${b.elo}</span>
+                <div class="arcade-bot-card flex-shrink-0 ${b.id === this.selectedBot.id ? 'active' : ''}" data-bot-id="${b.id}">
+                  <span class="arcade-bot-avatar">${b.avatar}</span>
+                  <span class="arcade-bot-name">${b.name}</span>
+                  <span class="arcade-bot-elo">${b.elo}</span>
                 </div>
               `
               )
@@ -336,14 +511,16 @@ export class BotArena {
           </div>
         </div>
 
-        <!-- Bot Personality Speech Bubble & Status -->
-        <div class="d-flex align-items-center justify-content-between px-2">
-          <div class="comic-bubble">
-            <span class="me-1">${this.selectedBot.avatar}</span>
-            <span class="bot-speech-bubble-text">${this.speechText}</span>
+        <!-- Live Match Banner & Personality Speech Bubble -->
+        <div class="arcade-match-strip">
+          <div class="d-flex align-items-center gap-2">
+            <span class="fs-4">${this.selectedBot.avatar}</span>
+            <div class="comic-bubble">
+              <span class="bot-speech-bubble-text">${this.speechText}</span>
+            </div>
           </div>
           <div class="bot-status-text small fw-bold text-secondary">
-            Your turn (White)
+            <span class="pulse-dot me-1.5"></span>Your turn (White)
           </div>
         </div>
 

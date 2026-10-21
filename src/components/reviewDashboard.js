@@ -17,6 +17,8 @@ export class ReviewDashboard {
     this.theme = options.theme || 'green';
 
     this.game = null; // AnalyzedGame object
+    this.isAnalyzing = false;
+    this.analysisProgress = { current: 0, total: 0 };
     this.currentPly = 0;
     this.orientation = 'w';
     this.isThreatActive = false;
@@ -27,6 +29,16 @@ export class ReviewDashboard {
     this.render();
   }
 
+  showLoading(current = 0, total = 0) {
+    this.isAnalyzing = true;
+    this.analysisProgress = { current, total };
+    this.render();
+  }
+
+  hideLoading() {
+    this.isAnalyzing = false;
+  }
+
   setTheme(newTheme) {
     this.theme = newTheme;
     if (this.board) {
@@ -35,6 +47,7 @@ export class ReviewDashboard {
   }
 
   setGame(analyzedGame) {
+    this.isAnalyzing = false;
     this.game = analyzedGame;
     this.currentPly = analyzedGame && analyzedGame.plies.length > 0 ? 1 : 0;
     this.orientation = analyzedGame ? analyzedGame.userColor : 'w';
@@ -209,13 +222,17 @@ export class ReviewDashboard {
     if (stripEl) {
       if (cur) {
         const comic = getComicBadge(cur.classification, cur.san);
+        const evalStr = cur.mate !== null
+          ? `M${Math.abs(cur.mate)}`
+          : (cur.scoreCp > 0 ? `+${(cur.scoreCp / 100).toFixed(1)}` : (cur.scoreCp / 100).toFixed(1));
+
         stripEl.innerHTML = `
           <div class="d-flex align-items-center gap-2">
-            <span class="badge" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 11px;">
+            <span class="badge border border-dark rounded-pill px-2.5 py-1" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 11px;">
               ${comic.symbol} ${comic.term}
             </span>
-            <span class="font-monospace fw-black fs-6">${cur.san}</span>
-            <span class="small text-secondary fw-semibold">(${cur.classification.replace('_', ' ')})</span>
+            <span class="font-monospace fw-black fs-5">${cur.san}</span>
+            <span class="badge bg-body-tertiary text-secondary font-monospace fw-bold">${evalStr}</span>
           </div>
           <div class="d-flex align-items-center gap-2">
             ${cur.tacticalContinuation && cur.tacticalContinuation.length > 0 ? `
@@ -227,7 +244,12 @@ export class ReviewDashboard {
         `;
         stripEl.querySelector('#btn-show-why')?.addEventListener('click', () => this.startShowWhy());
       } else {
-        stripEl.innerHTML = `<span class="small fw-bold text-secondary">Starting Position</span>`;
+        stripEl.innerHTML = `
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-secondary rounded-pill px-2.5 py-1">🏁 Start</span>
+            <span class="small fw-bold text-secondary">Starting Position</span>
+          </div>
+        `;
       }
     }
 
@@ -291,6 +313,26 @@ export class ReviewDashboard {
   }
 
   render() {
+    if (this.isAnalyzing) {
+      const pct = this.analysisProgress.total > 0
+        ? Math.round((this.analysisProgress.current / this.analysisProgress.total) * 100)
+        : 10;
+      this.container.innerHTML = `
+        <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-xl mx-auto my-5">
+          <div class="spinner-border text-warning mb-3" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
+          <h4 class="fw-black mb-1">Analyzing Game with Engine...</h4>
+          <p class="text-secondary small mb-3 fw-bold">
+            ${this.analysisProgress.total > 0 ? `Evaluating position ${this.analysisProgress.current} of ${this.analysisProgress.total}...` : 'Starting rapid engine analysis...'}
+          </p>
+          <div class="progress w-100 max-w-md mx-auto" style="height: 12px; border: 2px solid #000000; border-radius: 999px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" style="width: ${pct}%;"></div>
+          </div>
+          <span class="text-secondary small mt-2 font-monospace fw-bold">${pct}%</span>
+        </div>
+      `;
+      return;
+    }
+
     if (!this.game) {
       // Zero State (No game active)
       this.container.innerHTML = `
@@ -322,6 +364,11 @@ export class ReviewDashboard {
       });
       return;
     }
+
+    const accuracyVal = Number(this.game.accuracy ?? this.game.userAccuracy ?? this.game.overallAccuracy ?? 85).toFixed(1);
+    const openingElo = this.game.phaseElos?.opening ?? this.game.openingElo ?? 1500;
+    const middlegameElo = this.game.phaseElos?.middlegame ?? this.game.middlegameElo ?? 1500;
+    const endgameElo = this.game.phaseElos?.endgame ?? this.game.endgameElo ?? 1500;
 
     // Active Review Dashboard
     this.container.innerHTML = `
@@ -374,6 +421,23 @@ export class ReviewDashboard {
 
         <!-- Right: Move List & Performance Stats -->
         <div class="col-12 col-lg-5 d-flex flex-column gap-3">
+          <!-- Match Overview Header Card -->
+          <div class="comic-card p-3">
+            <div class="d-flex align-items-center justify-content-between">
+              <div>
+                <div class="fw-black fs-6 text-truncate" style="max-width: 240px;">
+                  ${this.game.white} vs ${this.game.black}
+                </div>
+                <div class="text-secondary small" style="font-size: 11px;">
+                  ${this.game.ecoName || this.game.ecoCode || 'Chess Match'} · ${this.game.date || ''}
+                </div>
+              </div>
+              <span class="badge ${this.game.result === '1-0' ? 'bg-success' : this.game.result === '0-1' ? 'bg-danger' : 'bg-secondary'} font-monospace px-2.5 py-1.5 fs-6">
+                ${this.game.result}
+              </span>
+            </div>
+          </div>
+
           <!-- Move History List -->
           <div class="comic-card p-3">
             <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
@@ -393,26 +457,26 @@ export class ReviewDashboard {
           <div class="comic-card p-3">
             <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
               <h6 class="mb-0 fw-black"><i class="bi bi-trophy-fill me-1.5 text-warning"></i>Game Performance</h6>
-              <span class="badge bg-success fw-bold font-monospace">${this.game.accuracy.toFixed(1)}% Accuracy</span>
+              <span class="badge bg-success fw-bold font-monospace">${accuracyVal}% Accuracy</span>
             </div>
 
             <div class="row g-2 text-center mb-3">
               <div class="col-4">
-                <div class="p-2 rounded-3 bg-body-tertiary border">
-                  <span class="text-secondary small d-block">Opening</span>
-                  <span class="fw-black text-primary">${this.game.phaseElos.opening}</span>
+                <div class="arcade-stat-chip">
+                  <span class="text-secondary small d-block fw-bold"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
+                  <span class="fw-black fs-5 text-primary font-monospace">${openingElo}</span>
                 </div>
               </div>
               <div class="col-4">
-                <div class="p-2 rounded-3 bg-body-tertiary border">
-                  <span class="text-secondary small d-block">Middlegame</span>
-                  <span class="fw-black text-warning">${this.game.phaseElos.middlegame}</span>
+                <div class="arcade-stat-chip">
+                  <span class="text-secondary small d-block fw-bold"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
+                  <span class="fw-black fs-5 text-warning font-monospace">${middlegameElo}</span>
                 </div>
               </div>
               <div class="col-4">
-                <div class="p-2 rounded-3 bg-body-tertiary border">
-                  <span class="text-secondary small d-block">Endgame</span>
-                  <span class="fw-black text-success">${this.game.phaseElos.endgame}</span>
+                <div class="arcade-stat-chip">
+                  <span class="text-secondary small d-block fw-bold"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
+                  <span class="fw-black fs-5 text-success font-monospace">${endgameElo}</span>
                 </div>
               </div>
             </div>
@@ -498,8 +562,9 @@ export class ReviewDashboard {
     if (!dict) return '';
     return `
       <span class="badge border border-dark rounded-circle d-inline-flex align-items-center justify-content-center"
-        style="width: 18px; height: 18px; font-size: 9px; background-color: ${dict.bg}; color: ${dict.text};">
-        ${dict.standardLabel}
+        title="${dict.standardLabel}"
+        style="width: 20px; height: 20px; font-size: 10px; background-color: ${dict.bg}; color: ${dict.text};">
+        ${dict.symbol}
       </span>
     `;
   }
@@ -516,9 +581,9 @@ export class ReviewDashboard {
         const dict = COMIC_DICTIONARY[cls];
         if (!dict) return '';
         return `
-          <span class="badge border border-dark rounded-pill px-2.5 py-1.5"
-            style="background-color: ${dict.bg}; color: ${dict.text}; font-size: 11px;">
-            ${dict.symbol} ${dict.words[0]} : <strong>${cnt}</strong>
+          <span class="arcade-comic-pill"
+            style="background-color: ${dict.bg}; color: ${dict.text};">
+            ${dict.symbol} ${dict.words[0]} : <strong class="ms-0.5">${cnt}</strong>
           </span>
         `;
       })

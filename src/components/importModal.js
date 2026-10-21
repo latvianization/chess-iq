@@ -149,7 +149,7 @@ export class ImportModal {
             <span class="input-group-text"><i class="bi bi-person-fill"></i></span>
             <input type="text" class="form-control" id="platform-username-input"
               placeholder="Enter ${platformName} username..." value="${this.username}">
-            <button type="button" class="btn btn-warning fw-bold comic-btn" id="btn-fetch-platform" ${this.isFetching ? 'disabled' : ''}>
+            <button type="button" class="arcade-btn-primary px-3 py-1.5" id="btn-fetch-platform" ${this.isFetching ? 'disabled' : ''}>
               ${this.isFetching ? '<span class="spinner-border spinner-border-sm me-1"></span>Fetching...' : '<i class="bi bi-search me-1"></i>Fetch'}
             </button>
           </div>
@@ -159,21 +159,78 @@ export class ImportModal {
           ` : ''}
 
           ${this.fetchedGames.length > 0 ? `
-            <div class="d-flex flex-column gap-2 mt-2">
+            <div class="d-flex flex-column gap-2 mt-2 w-100">
               <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
-              <div class="d-flex flex-column gap-1.5 overflow-y-auto" style="max-height: 240px;">
+              <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden w-100" style="max-height: 280px; scrollbar-width: thin;">
                 ${this.fetchedGames.map((g) => {
-                  const isWhite = g.white.toLowerCase() === this.username.trim().toLowerCase();
+                  const isUserWhite = g.white.toLowerCase() === this.username.trim().toLowerCase();
+                  const isUserBlack = g.black.toLowerCase() === this.username.trim().toLowerCase();
+                  let userWon = false;
+                  let userLost = false;
+                  const isDraw = g.result === '1/2-1/2';
+
+                  if (g.result === '1-0') {
+                    if (isUserWhite) userWon = true;
+                    else if (isUserBlack) userLost = true;
+                  } else if (g.result === '0-1') {
+                    if (isUserBlack) userWon = true;
+                    else if (isUserWhite) userLost = true;
+                  }
+
+                  let resultBadge = '';
+                  if (userWon) {
+                    resultBadge = `<span class="badge bg-success text-white fw-bold px-2 py-1 flex-shrink-0"><i class="bi bi-trophy-fill me-1"></i>Win</span>`;
+                  } else if (userLost) {
+                    resultBadge = `<span class="badge bg-danger text-white fw-bold px-2 py-1 flex-shrink-0"><i class="bi bi-x-circle-fill me-1"></i>Loss</span>`;
+                  } else if (isDraw) {
+                    resultBadge = `<span class="badge bg-secondary text-white fw-bold px-2 py-1 flex-shrink-0">Draw</span>`;
+                  } else {
+                    resultBadge = `<span class="badge bg-body-secondary text-dark fw-bold px-2 py-1 flex-shrink-0">${g.result}</span>`;
+                  }
+
+                  let tcIcon = 'bi-stopwatch';
+                  if (g.timeControl && (g.timeControl.includes('+') || !isNaN(Number(g.timeControl)))) {
+                    tcIcon = 'bi-lightning-charge-fill';
+                  }
+
                   return `
-                    <div class="card p-2.5 comic-card-sm cursor-pointer hover-shadow" data-game-id="${g.id}">
-                      <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                          <div class="fw-black small text-truncate" style="max-width: 260px;">${g.white} vs ${g.black}</div>
-                          <div class="text-secondary small" style="font-size: 11px;">${g.date} · Result: ${g.result}</div>
+                    <div class="imported-game-card comic-card-sm p-2.5 p-sm-3 cursor-pointer w-100" data-game-id="${g.id}">
+                      <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-1">
+                        <div class="d-flex align-items-center gap-1.5 flex-wrap" style="min-width: 0;">
+                          <span class="badge bg-warning-subtle text-dark border border-warning-subtle fw-bold" style="font-size: 11px;">
+                            <i class="bi ${tcIcon} me-1"></i>${g.timeControl}
+                          </span>
+                          <span class="badge bg-body-tertiary text-secondary font-monospace" style="font-size: 10px;">
+                            ${g.eco || 'PGN'}
+                          </span>
+                          <span class="text-secondary small" style="font-size: 11px;">
+                            ${g.date}
+                          </span>
                         </div>
-                        <div class="d-flex align-items-center gap-1.5">
-                          <span class="badge bg-body-secondary text-dark font-monospace">${g.timeControl}</span>
-                          <i class="bi bi-chevron-right text-secondary"></i>
+                        ${resultBadge}
+                      </div>
+
+                      <div class="d-flex align-items-center justify-content-between gap-2" style="min-width: 0;">
+                        <div class="d-flex flex-column gap-1 flex-grow-1" style="min-width: 0; overflow: hidden;">
+                          <div class="d-flex align-items-center gap-1.5 ${isUserWhite ? 'fw-black text-warning' : 'fw-semibold text-body'}" style="min-width: 0;">
+                            <span class="player-dot white-dot flex-shrink-0"></span>
+                            <span class="text-truncate" style="max-width: 140px;">${g.white}</span>
+                            <span class="badge bg-body-secondary text-secondary font-monospace flex-shrink-0" style="font-size: 10px;">${g.whiteElo}</span>
+                            ${isUserWhite ? '<span class="badge bg-warning text-dark fw-bold flex-shrink-0" style="font-size: 9px;">YOU</span>' : ''}
+                          </div>
+
+                          <div class="d-flex align-items-center gap-1.5 ${isUserBlack ? 'fw-black text-warning' : 'fw-semibold text-body'}" style="min-width: 0;">
+                            <span class="player-dot black-dot flex-shrink-0"></span>
+                            <span class="text-truncate" style="max-width: 140px;">${g.black}</span>
+                            <span class="badge bg-body-secondary text-secondary font-monospace flex-shrink-0" style="font-size: 10px;">${g.blackElo}</span>
+                            ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold flex-shrink-0" style="font-size: 9px;">YOU</span>' : ''}
+                          </div>
+                        </div>
+
+                        <div class="d-flex align-items-center ms-2 flex-shrink-0">
+                          <button type="button" class="btn btn-sm btn-outline-warning comic-btn px-2.5 py-1 text-nowrap btn-analyze-card">
+                            Analyze <i class="bi bi-chevron-right ms-0.5"></i>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -192,11 +249,25 @@ export class ImportModal {
 
       container.querySelectorAll('[data-game-id]').forEach((card) => {
         card.addEventListener('click', (e) => {
+          if (this.isAnalyzing) return;
           const gameId = e.currentTarget.getAttribute('data-game-id');
           const game = this.fetchedGames.find((g) => g.id === gameId);
           if (game && this.onSelectPgn) {
             const isWhite = game.white.toLowerCase() === this.username.trim().toLowerCase();
-            this.onSelectPgn(game.pgn, isWhite ? 'w' : 'b');
+            const btn = card.querySelector('.btn-analyze-card');
+            if (btn) {
+              btn.innerHTML = `<span class="spinner-border spinner-border-sm text-warning me-1"></span>Analyzing...`;
+              btn.classList.add('disabled');
+            }
+            container.querySelectorAll('[data-game-id]').forEach((c) => {
+              c.style.pointerEvents = 'none';
+              c.style.opacity = '0.65';
+            });
+            card.style.opacity = '1';
+            card.classList.add('border-warning');
+            setTimeout(() => {
+              this.onSelectPgn(game.pgn, isWhite ? 'w' : 'b');
+            }, 40);
           }
         });
       });
@@ -218,8 +289,8 @@ export class ImportModal {
             </div>
           </div>
 
-          <button type="button" class="btn btn-warning comic-btn py-2.5 w-100 fw-black" id="btn-analyze-custom-pgn" ${!this.customPgn.trim() ? 'disabled' : ''}>
-            Analyze PGN with Comic Badges ⚡
+          <button type="button" class="arcade-btn-primary py-2.5 w-100 fw-black" id="btn-analyze-custom-pgn" ${!this.customPgn.trim() ? 'disabled' : ''}>
+            Analyze PGN with Stockfish ⚡
           </button>
         </div>
       `;
@@ -257,7 +328,7 @@ export class ImportModal {
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content comic-card overflow-hidden">
           <div class="modal-header border-bottom bg-body-tertiary px-4 py-3">
-            <h5 class="modal-title fw-black"><i class="bi bi-cloud-arrow-up-fill me-2 text-warning"></i>Import Game for Comic Review</h5>
+            <h5 class="modal-title fw-black"><i class="bi bi-cloud-arrow-up-fill me-2 text-warning"></i>Import Game for Review ⚡</h5>
             <button type="button" class="btn-close" id="btn-modal-close" aria-label="Close"></button>
           </div>
 
@@ -284,7 +355,7 @@ export class ImportModal {
               </li>
             </ul>
 
-            <div class="modal-body p-4" id="import-tab-body"></div>
+            <div class="modal-body p-3 p-sm-4 overflow-x-hidden" id="import-tab-body"></div>
           </div>
         </div>
       </div>

@@ -72,7 +72,16 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
   const date = header["Date"] || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
   const timeControl = header["TimeControl"] || "300+0";
   const { moves: parsedMoves, clocks } = extractMovesAndClocks(pgn);
-  const moveHistory = chess.history({ verbose: true });
+  let moveHistory = chess.history({ verbose: true });
+  if (moveHistory.length === 0 && parsedMoves.length > 0) {
+    const fallbackChess = new Chess();
+    for (const san of parsedMoves) {
+      try {
+        fallbackChess.move(san);
+      } catch {}
+    }
+    moveHistory = fallbackChess.history({ verbose: true });
+  }
   const moveSans = moveHistory.length > 0 ? moveHistory.map((m) => m.san) : parsedMoves;
   const userColor = userColorTarget || "w";
   const userBaseElo = userColor === "w" ? whiteElo : blackElo;
@@ -123,125 +132,129 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
   }
   const totalPlies = precomputed.length;
   const plies = new Array(totalPlies);
-  const BATCH_SIZE = 5;
-  for (let b = 0; b < totalPlies; b += BATCH_SIZE) {
-    const chunk = precomputed.slice(b, b + BATCH_SIZE);
-    const chunkResults = await Promise.all(
-      chunk.map(async (item) => {
-        if (item.isBook) {
-          const playedUci2 = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
-          const isImpulsive2 = item.timeSpent !== null && item.timeSpent < 2 && !item.isTimeTrouble;
-          return {
-            ply: item.plyNum,
-            san: item.moveObj.san,
-            uci: playedUci2,
-            from: item.moveObj.from,
-            to: item.moveObj.to,
-            piece: item.moveObj.piece,
-            captured: item.moveObj.captured,
-            color: item.side,
-            fen: item.fenAfter,
-            fenBefore: item.fenBefore,
-            clock: item.rawClock,
-            timeSpent: item.timeSpent,
-            isTimeTrouble: item.isTimeTrouble,
-            isImpulsive: isImpulsive2,
-            scoreCp: 20,
-            mate: null,
-            winProb: 0.52,
-            winProbBefore: 0.5,
-            winProbLoss: 0,
-            accuracy: 100,
-            classification: "book",
-            bestMoveUci: playedUci2,
-            bestMoveSan: item.moveObj.san,
-            pv: [playedUci2],
-            threat: null,
-            phase: item.phase
-          };
+
+  if (onProgress) {
+    onProgress(0, totalPlies);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+
+  let prevEngine = precomputed.length > 0
+    ? await evaluateFenHybrid(precomputed[0].fenBefore, isDeep)
+    : { scoreCp: 20, mate: null, pv: [] };
+
+  for (let i = 0; i < totalPlies; i++) {
+    const item = precomputed[i];
+    if (item.isBook) {
+      const playedUci2 = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
+      const isImpulsive2 = item.timeSpent !== null && item.timeSpent < 2 && !item.isTimeTrouble;
+      plies[i] = {
+        ply: item.plyNum,
+        san: item.moveObj.san,
+        uci: playedUci2,
+        from: item.moveObj.from,
+        to: item.moveObj.to,
+        piece: item.moveObj.piece,
+        captured: item.moveObj.captured,
+        color: item.side,
+        fen: item.fenAfter,
+        fenBefore: item.fenBefore,
+        clock: item.rawClock,
+        timeSpent: item.timeSpent,
+        isTimeTrouble: item.isTimeTrouble,
+        isImpulsive: isImpulsive2,
+        scoreCp: 20,
+        mate: null,
+        winProb: 0.52,
+        winProbBefore: 0.5,
+        winProbLoss: 0,
+        accuracy: 100,
+        classification: "book",
+        bestMoveUci: playedUci2,
+        bestMoveSan: item.moveObj.san,
+        pv: [playedUci2],
+        threat: null,
+        phase: item.phase
+      };
+      prevEngine = { scoreCp: 20, mate: null, pv: [playedUci2] };
+    } else {
+      const engineBefore = prevEngine;
+      const engineAfter = await evaluateFenHybrid(item.fenAfter, isDeep);
+      prevEngine = engineAfter;
+
+      const whiteScoreBefore = engineBefore.scoreCp;
+      const whiteWinProbBefore = cpToWinProb(whiteScoreBefore, engineBefore.mate);
+      const whiteScoreAfter = engineAfter.scoreCp;
+      const whiteWinProbAfter = cpToWinProb(whiteScoreAfter, engineAfter.mate);
+      const moverWinProbBefore = item.side === "w" ? whiteWinProbBefore : 1 - whiteWinProbBefore;
+      const moverWinProbAfter = item.side === "w" ? whiteWinProbAfter : 1 - whiteWinProbAfter;
+      const winProbLoss = Math.max(0, moverWinProbBefore - moverWinProbAfter);
+      const accuracy = calculateMoveAccuracy(winProbLoss);
+      const bestMoveUci = engineBefore.pv && engineBefore.pv[0] ? engineBefore.pv[0] : "";
+      let bestMoveSan = "";
+      if (bestMoveUci) {
+        try {
+          const testChess = new Chess(item.fenBefore);
+          const from = bestMoveUci.slice(0, 2);
+          const to = bestMoveUci.slice(2, 4);
+          const promotion = bestMoveUci.length > 4 ? bestMoveUci[4] : void 0;
+          const m = testChess.move({ from, to, promotion });
+          if (m) bestMoveSan = m.san;
+        } catch {
+          bestMoveSan = bestMoveUci;
         }
-        const [engineBefore, engineAfter] = await Promise.all([
-          evaluateFenHybrid(item.fenBefore, isDeep),
-          evaluateFenHybrid(item.fenAfter, isDeep)
-        ]);
-        const whiteScoreBefore = engineBefore.scoreCp;
-        const whiteWinProbBefore = cpToWinProb(whiteScoreBefore, engineBefore.mate);
-        const whiteScoreAfter = engineAfter.scoreCp;
-        const whiteWinProbAfter = cpToWinProb(whiteScoreAfter, engineAfter.mate);
-        const moverWinProbBefore = item.side === "w" ? whiteWinProbBefore : 1 - whiteWinProbBefore;
-        const moverWinProbAfter = item.side === "w" ? whiteWinProbAfter : 1 - whiteWinProbAfter;
-        const winProbLoss = Math.max(0, moverWinProbBefore - moverWinProbAfter);
-        const accuracy = calculateMoveAccuracy(winProbLoss);
-        const bestMoveUci = engineBefore.pv && engineBefore.pv[0] ? engineBefore.pv[0] : "";
-        let bestMoveSan = "";
-        if (bestMoveUci) {
-          try {
-            const testChess = new Chess(item.fenBefore);
-            const from = bestMoveUci.slice(0, 2);
-            const to = bestMoveUci.slice(2, 4);
-            const promotion = bestMoveUci.length > 4 ? bestMoveUci[4] : void 0;
-            const m = testChess.move({ from, to, promotion });
-            if (m) bestMoveSan = m.san;
-          } catch {
-            bestMoveSan = bestMoveUci;
-          }
-        }
-        const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
-        const multiPv2WinProb = engineBefore.multiPv2ScoreCp !== void 0 ? cpToWinProb(engineBefore.multiPv2ScoreCp) : void 0;
-        const classification = classifyMove(
-          playedUci,
-          bestMoveUci,
-          moverWinProbBefore,
-          moverWinProbAfter,
-          winProbLoss,
-          false,
-          moverWinProbBefore,
-          multiPv2WinProb,
-          item.fenBefore,
-          item.fenAfter,
-          item.side
-        );
-        const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
-        let threat = null;
-        if (classification === "blunder" || classification === "mistake" || classification === "inaccuracy" || winProbLoss > 0.03) {
-          threat = await detectThreat(item.fenAfter);
-        }
-        return {
-          ply: item.plyNum,
-          san: item.moveObj.san,
-          uci: playedUci,
-          from: item.moveObj.from,
-          to: item.moveObj.to,
-          piece: item.moveObj.piece,
-          captured: item.moveObj.captured,
-          color: item.side,
-          fen: item.fenAfter,
-          fenBefore: item.fenBefore,
-          clock: item.rawClock,
-          timeSpent: item.timeSpent,
-          isTimeTrouble: item.isTimeTrouble,
-          isImpulsive,
-          scoreCp: whiteScoreAfter,
-          mate: engineAfter.mate,
-          winProb: whiteWinProbAfter,
-          // Absolute White perspective (smooth timeline!)
-          winProbBefore: whiteWinProbBefore,
-          winProbLoss,
-          accuracy,
-          classification,
-          bestMoveUci,
-          bestMoveSan: bestMoveSan || item.moveObj.san,
-          pv: engineBefore.pv,
-          threat,
-          phase: item.phase
-        };
-      })
-    );
-    chunkResults.forEach((res, idx) => {
-      plies[b + idx] = res;
-    });
-    if (onProgress) {
-      onProgress(Math.min(b + BATCH_SIZE, totalPlies), totalPlies);
+      }
+      const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
+      const multiPv2WinProb = engineBefore.multiPv2ScoreCp !== void 0 ? cpToWinProb(engineBefore.multiPv2ScoreCp) : void 0;
+      const classification = classifyMove(
+        playedUci,
+        bestMoveUci,
+        moverWinProbBefore,
+        moverWinProbAfter,
+        winProbLoss,
+        false,
+        moverWinProbBefore,
+        multiPv2WinProb,
+        item.fenBefore,
+        item.fenAfter,
+        item.side
+      );
+      const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
+      let threat = null;
+      if (classification === "blunder" || classification === "mistake" || classification === "inaccuracy" || winProbLoss > 0.03) {
+        threat = await detectThreat(item.fenAfter);
+      }
+      plies[i] = {
+        ply: item.plyNum,
+        san: item.moveObj.san,
+        uci: playedUci,
+        from: item.moveObj.from,
+        to: item.moveObj.to,
+        piece: item.moveObj.piece,
+        captured: item.moveObj.captured,
+        color: item.side,
+        fen: item.fenAfter,
+        fenBefore: item.fenBefore,
+        clock: item.rawClock,
+        timeSpent: item.timeSpent,
+        isTimeTrouble: item.isTimeTrouble,
+        isImpulsive,
+        scoreCp: whiteScoreAfter,
+        mate: engineAfter.mate,
+        winProb: whiteWinProbAfter,
+        winProbBefore: whiteWinProbBefore,
+        winProbLoss,
+        accuracy,
+        classification,
+        bestMoveUci,
+        bestMoveSan: bestMoveSan || item.moveObj.san,
+        pv: engineBefore.pv,
+        threat,
+        phase: item.phase
+      };
+    }
+    if (onProgress && (i % 2 === 0 || i === totalPlies - 1)) {
+      onProgress(i + 1, totalPlies);
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
   }
   const counts = {
@@ -315,6 +328,7 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     ecoName,
     initialFen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
     plies,
+    accuracy: userAccuracy,
     overallAccuracy,
     userAccuracy,
     opponentAccuracy,
@@ -322,6 +336,11 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     openingElo,
     middlegameElo,
     endgameElo,
+    phaseElos: {
+      opening: openingElo,
+      middlegame: middlegameElo,
+      endgame: endgameElo
+    },
     middlegameStartPly: middlegameStartPly ?? 20,
     endgameStartPly: endgameStartPly ?? 50,
     counts,

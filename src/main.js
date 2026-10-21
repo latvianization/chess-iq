@@ -97,17 +97,13 @@ class App {
     if (mode === 'review') {
       reviewView?.classList.remove('d-none');
       botView?.classList.add('d-none');
-      btnReview?.classList.add('active', 'btn-warning');
-      btnReview?.classList.remove('btn-light');
-      btnBot?.classList.remove('active', 'btn-warning');
-      btnBot?.classList.add('btn-light');
+      btnReview?.classList.add('active');
+      btnBot?.classList.remove('active');
     } else {
       reviewView?.classList.add('d-none');
       botView?.classList.remove('d-none');
-      btnBot?.classList.add('active', 'btn-warning');
-      btnBot?.classList.remove('btn-light');
-      btnReview?.classList.remove('active', 'btn-warning');
-      btnReview?.classList.add('btn-light');
+      btnBot?.classList.add('active');
+      btnReview?.classList.remove('active');
     }
   }
 
@@ -129,7 +125,11 @@ class App {
 
   async runAnalysis(pgn, userColor) {
     this.switchMode('review');
-    this.importModal?.setAnalyzing(true, 0, 0);
+    this.reviewDashboard?.showLoading(0, 0);
+    this.importModal?.hide();
+
+    // Allow modal hide animation and review loading view to paint before computation begins
+    await new Promise((resolve) => setTimeout(resolve, 60));
 
     try {
       const analyzedGame = await analyzeFullPgn(
@@ -137,24 +137,29 @@ class App {
         userColor,
         this.isDeepReview,
         (current, total) => {
-          this.importModal?.setAnalyzing(true, current, total);
+          this.reviewDashboard?.showLoading(current, total);
         }
       );
 
       this.reviewDashboard?.setGame(analyzedGame);
-      this.importModal?.hide();
       soundService.playSuccess();
     } catch (err) {
       console.error('Analysis failed:', err);
+      this.reviewDashboard?.hideLoading();
+      this.reviewDashboard?.render();
     } finally {
       this.importModal?.setAnalyzing(false, 0, 0);
     }
   }
 }
 
+window.App = App;
+
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => new App());
+  document.addEventListener('DOMContentLoaded', () => {
+    window.chessApp = new App();
+  });
 } else {
-  new App();
+  window.chessApp = new App();
 }
