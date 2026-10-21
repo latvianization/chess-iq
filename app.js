@@ -4465,7 +4465,7 @@ class ReviewDashboard {
             with move quality classifications, phase ratings, and key moment analysis, or challenge our 33-bot arena!
           </p>
           <div class="d-flex align-items-center gap-3">
-            <button type="button" class="btn-solid theme-warning comic-btn px-4 py-2.5" id="zero-btn-import" data-bs-toggle="dialog" data-bs-target="#import-modal">
+            <button type="button" class="btn-solid theme-warning comic-btn px-4 py-2.5" id="zero-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal">
               <i class="bi bi-cloud-arrow-up-fill me-1.5"></i> Import Game
             </button>
             <button type="button" class="btn btn-light comic-btn px-4 py-2.5" id="zero-btn-bots">
@@ -4523,25 +4523,36 @@ class ReviewDashboard {
           <div class="comic-card-sm p-2.5 mb-2 d-flex align-items-center justify-content-between" id="review-move-strip"></div>
 
           <!-- Step Navigation Bar -->
-          <div class="comic-card-sm p-2 d-flex align-items-center justify-content-between gap-1 mb-2">
-            <div class="btn-group" role="group">
-              <button type="button" class="btn btn-light btn-sm comic-btn" id="btn-first" title="First Move"><i class="bi bi-chevron-bar-left"></i></button>
-              <button type="button" class="btn btn-light btn-sm comic-btn" id="btn-prev" title="Previous Move"><i class="bi bi-chevron-left"></i></button>
-              <button type="button" class="btn btn-light btn-sm comic-btn" id="btn-next" title="Next Move"><i class="bi bi-chevron-right"></i></button>
-              <button type="button" class="btn btn-light btn-sm comic-btn" id="btn-last" title="Last Move"><i class="bi bi-chevron-bar-right"></i></button>
+          <div class="comic-card-sm p-2 d-flex flex-column gap-2 mb-2">
+            <!-- Row 1: Big Thumb-Friendly Step Controls -->
+            <div class="d-flex align-items-center justify-content-between gap-1.5">
+              <button type="button" class="btn btn-light arcade-step-btn-sm" id="btn-first" title="First Move">
+                <i class="bi bi-chevron-bar-left fs-6"></i>
+              </button>
+              <button type="button" class="btn btn-light arcade-step-btn-lg flex-grow-1" id="btn-prev" title="Previous Move">
+                <i class="bi bi-chevron-left fs-5 fw-black me-1"></i><span class="small fw-black d-none sm:inline">Prev</span>
+              </button>
+
+              <span class="badge bg-secondary font-monospace px-2.5 sm:px-3 py-2 fs-6 fw-bold flex-shrink-0" id="ply-counter">0 / 0</span>
+
+              <button type="button" class="btn btn-light arcade-step-btn-lg flex-grow-1" id="btn-next" title="Next Move">
+                <span class="small fw-black d-none sm:inline me-1">Next</span><i class="bi bi-chevron-right fs-5 fw-black"></i>
+              </button>
+              <button type="button" class="btn btn-light arcade-step-btn-sm" id="btn-last" title="Last Move">
+                <i class="bi bi-chevron-bar-right fs-6"></i>
+              </button>
             </div>
 
-            <span class="badge bg-secondary font-monospace px-2.5 py-1.5" id="ply-counter">0 / 0</span>
-
-            <div class="d-flex align-items-center gap-1.5">
-              <button type="button" class="btn btn-sm btn-outline-danger comic-btn" id="btn-toggle-threat" title="Toggle Threat Arrow">
-                <i class="bi bi-shield-slash"></i>
-              </button>
-              <button type="button" class="btn btn-sm btn-warning comic-btn" id="btn-key-moment" title="Next Key Moment">
+            <!-- Row 2: Actions (Key Moment, Threat, Flip) -->
+            <div class="d-flex align-items-center justify-content-between gap-2">
+              <button type="button" class="btn btn-warning comic-btn flex-grow-1 py-1.5 fw-black" id="btn-key-moment" title="Next Key Moment">
                 <i class="bi bi-lightning-charge-fill me-1"></i>Key Moment
               </button>
-              <button type="button" class="btn btn-sm btn-light comic-btn" id="btn-flip" title="Flip Board">
-                <i class="bi bi-arrow-left-right"></i>
+              <button type="button" class="btn btn-outline-danger comic-btn px-2.5 py-1.5" id="btn-toggle-threat" title="Toggle Threat Arrow">
+                <i class="bi bi-shield-slash me-1"></i>Threat
+              </button>
+              <button type="button" class="btn btn-light comic-btn px-2.5 py-1.5" id="btn-flip" title="Flip Board">
+                <i class="bi bi-arrow-left-right me-1"></i>Flip
               </button>
             </div>
           </div>
@@ -4849,14 +4860,14 @@ class ImportModal {
 
     this.isAnalyzing = false;
     this.analysisProgress = { current: 0, total: 0 };
-    this.bsDialog = null;
+    this.bsModal = null;
 
     this.render();
   }
 
   formatOpeningBadge(eco) {
     if (!eco) {
-      return `<span class="badge theme-secondary font-monospace" style="font-size: 10px;">PGN</span>`;
+      return `<span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">PGN</span>`;
     }
     if (typeof eco === 'string' && eco.startsWith('http')) {
       let label = 'Opening';
@@ -4868,24 +4879,23 @@ class ImportModal {
         }
       } catch {}
       return `<a href="${eco}" target="_blank" rel="noopener noreferrer"
-        class="badge theme-warning text-decoration-none border border-warning-subtle text-truncate"
-        style="max-width: 140px; font-size: 10px; vertical-align: middle;"
+        class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle d-inline-block text-truncate text-decoration-none"
+        style="max-width: 130px; font-size: 11px; vertical-align: middle;"
         title="${label} (${eco})"
         onclick="event.stopPropagation();">
-        <i class="bi bi-book me-1"></i>${label} <i class="bi bi-box-arrow-up-right ms-0.5" style="font-size: 8px;"></i>
+        <i class="bi bi-book me-1"></i>${label} <i class="bi bi-box-arrow-up-right ms-0.5" style="font-size: 9px;"></i>
       </a>`;
     }
-    return `<span class="badge theme-secondary font-monospace" style="font-size: 10px;">${eco}</span>`;
+    return `<span class="badge bg-body-secondary text-secondary font-monospace d-inline-block text-truncate" style="max-width: 110px; font-size: 10px; vertical-align: middle;">${eco}</span>`;
   }
 
-  getBsDialog() {
-    if (this.bsDialog) return this.bsDialog;
+  getBsModal() {
+    if (this.bsModal) return this.bsModal;
     try {
-      const Dialog = window.bootstrap?.Dialog || window.bootstrap?.Modal;
-      if (Dialog) {
-        this.bsDialog = Dialog.getOrCreateInstance(this.modalEl);
+      if (window.bootstrap?.Modal) {
+        this.bsModal = window.bootstrap.Modal.getOrCreateInstance(this.modalEl);
       }
-      return this.bsDialog;
+      return this.bsModal;
     } catch {
       return null;
     }
@@ -4914,35 +4924,38 @@ class ImportModal {
 
   show() {
     this.resetCardStates();
-    const dialog = this.getBsDialog();
-    if (dialog && typeof dialog.show === 'function') {
-      dialog.show();
-    } else if (typeof this.modalEl.showModal === 'function') {
-      try {
-        if (!this.modalEl.open) this.modalEl.showModal();
-      } catch {
-        this.modalEl.setAttribute('open', '');
-      }
+    const modal = this.getBsModal();
+    if (modal) {
+      modal.show();
     } else {
-      this.modalEl.setAttribute('open', '');
+      this.modalEl.classList.add('show');
+      this.modalEl.style.display = 'block';
+      this.modalEl.removeAttribute('aria-hidden');
+      this.modalEl.setAttribute('aria-modal', 'true');
+      document.body.classList.add('modal-open');
+      let backdrop = document.querySelector('.modal-backdrop');
+      if (!backdrop) {
+        backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        document.body.appendChild(backdrop);
+        backdrop.addEventListener('click', () => this.hide());
+      }
     }
   }
 
   hide() {
     this.resetCardStates();
-    const dialog = this.getBsDialog();
-    if (dialog && typeof dialog.hide === 'function') {
-      try { dialog.hide(); } catch {}
+    const modal = this.getBsModal();
+    if (modal) {
+      try { modal.hide(); } catch {}
     }
-    if (typeof this.modalEl.close === 'function') {
-      try {
-        if (this.modalEl.open) this.modalEl.close();
-      } catch {
-        this.modalEl.removeAttribute('open');
-      }
-    } else {
-      this.modalEl.removeAttribute('open');
-    }
+    this.modalEl.classList.remove('show');
+    this.modalEl.style.display = 'none';
+    this.modalEl.setAttribute('aria-hidden', 'true');
+    this.modalEl.removeAttribute('aria-modal');
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
     document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
   }
 
@@ -5020,11 +5033,11 @@ class ImportModal {
       container.innerHTML = `
         <div class="d-flex flex-column gap-3">
           <div class="input-group">
-            <span class="input-group-text"><i class="bi bi-person-fill"></i></span>
-            <input type="text" class="form-control" id="platform-username-input"
+            <span class="input-group-text bg-body-secondary border-end-0 text-secondary"><i class="bi bi-person-fill"></i></span>
+            <input type="text" class="form-control border-start-0 ps-1" id="platform-username-input"
               placeholder="Enter ${platformName} username..." value="${this.username}">
-            <button type="button" class="arcade-btn-primary px-3 py-1.5" id="btn-fetch-platform" ${this.isFetching ? 'disabled' : ''}>
-              ${this.isFetching ? '<span class="spinner-border spinner-border-sm me-1"></span>Fetching...' : '<i class="bi bi-search me-1"></i>Fetch'}
+            <button type="button" class="btn btn-warning fw-black px-3 d-flex align-items-center" id="btn-fetch-platform" ${this.isFetching ? 'disabled' : ''}>
+              ${this.isFetching ? '<span class="spinner-border spinner-border-sm me-1.5"></span>Fetching...' : '<i class="bi bi-search me-1.5"></i>Fetch'}
             </button>
           </div>
 
@@ -5054,13 +5067,13 @@ class ImportModal {
           ` : ''}
 
           ${this.fetchError ? `
-            <div class="alert theme-danger py-2 px-3 small font-medium mb-0">${this.fetchError}</div>
+            <div class="alert alert-danger py-2 px-3 small font-medium mb-0">${this.fetchError}</div>
           ` : ''}
 
           ${this.fetchedGames.length > 0 ? `
-            <div class="d-flex flex-column gap-2 mt-2 w-100">
+            <div class="d-flex flex-column gap-2 mt-1 w-100">
               <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
-              <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden w-100" style="max-height: 280px; scrollbar-width: thin;">
+              <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden pe-1 w-100" style="max-height: 280px; scrollbar-width: thin;">
                 ${this.fetchedGames.map((g) => {
                   const isUserWhite = g.white.toLowerCase() === this.username.trim().toLowerCase();
                   const isUserBlack = g.black.toLowerCase() === this.username.trim().toLowerCase();
@@ -5094,17 +5107,17 @@ class ImportModal {
 
                   return `
                     <div class="imported-game-card comic-card-sm p-2.5 p-sm-3 cursor-pointer w-100" data-game-id="${g.id}">
-                      <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-1">
-                        <div class="d-flex align-items-center gap-1.5 flex-wrap" style="min-width: 0;">
-                          <span class="badge bg-warning-subtle text-dark border border-warning-subtle fw-bold" style="font-size: 11px;">
+                      <div class="d-flex align-items-center justify-content-between mb-2 gap-2 flex-nowrap">
+                        <div class="d-flex align-items-center gap-1.5 overflow-hidden me-auto" style="min-width: 0;">
+                          <span class="badge bg-warning-subtle text-dark border border-warning-subtle fw-bold flex-shrink-0" style="font-size: 11px;">
                             <i class="bi ${tcIcon} me-1"></i>${g.timeControl}
                           </span>
                           ${this.formatOpeningBadge(g.eco)}
-                          <span class="text-secondary small" style="font-size: 11px;">
-                            ${g.date}
-                          </span>
                         </div>
-                        ${resultBadge}
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0 ms-1">
+                          <span class="text-secondary small font-monospace text-nowrap" style="font-size: 11px;">${g.date}</span>
+                          ${resultBadge}
+                        </div>
                       </div>
 
                       <div class="d-flex align-items-center justify-content-between gap-2" style="min-width: 0;">
@@ -5225,46 +5238,48 @@ class ImportModal {
 
   render() {
     this.modalEl.innerHTML = `
-      <div class="dialog-header border-bottom bg-body-tertiary px-4 py-3">
-        <h5 class="dialog-title fw-black"><i class="bi bi-cloud-arrow-up-fill me-2 fg-warning"></i>Import Game for Review ⚡</h5>
-        <button type="button" class="btn-close" id="btn-modal-close" data-bs-dismiss="dialog" aria-label="Close"></button>
-      </div>
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content comic-card overflow-hidden">
+          <div class="modal-header border-bottom bg-body-tertiary px-3 px-sm-4 py-3 d-flex align-items-center justify-content-between">
+            <h5 class="modal-title fw-black fs-5 mb-0 d-flex align-items-center">
+              <i class="bi bi-cloud-arrow-up-fill me-2 fg-warning"></i>Import Game for Review
+            </h5>
+            <button type="button" class="btn-close" id="btn-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
 
-      <!-- Progress overlay when analyzing -->
-      <div id="import-analysis-progress" class="d-none px-4"></div>
+          <!-- Progress overlay when analyzing -->
+          <div id="import-analysis-progress" class="d-none px-4"></div>
 
-      <!-- Tab Selector -->
-      <div id="import-tabs-content">
-        <ul class="nav nav-tabs nav-fill border-bottom bg-body-tertiary px-3 pt-2">
-          <li class="nav-item">
-            <button class="nav-link ${this.activeTab === 'chesscom' ? 'active fw-black fg-warning' : 'fw-bold'}" data-import-tab="chesscom">
-              <span class="badge theme-success rounded-circle p-1 me-1"> </span> Chess.com
-            </button>
-          </li>
-          <li class="nav-item">
-            <button class="nav-link ${this.activeTab === 'lichess' ? 'active fw-black fg-warning' : 'fw-bold'}" data-import-tab="lichess">
-              <i class="bi bi-globe me-1 fg-info"></i> Lichess
-            </button>
-          </li>
-          <li class="nav-item">
-            <button class="nav-link ${this.activeTab === 'pgn' ? 'active fw-black fg-warning' : 'fw-bold'}" data-import-tab="pgn">
-              <i class="bi bi-file-text-fill me-1 fg-primary"></i> Paste PGN
-            </button>
-          </li>
-        </ul>
+          <!-- Tab Selector -->
+          <div id="import-tabs-content">
+            <div class="px-3 pt-3 pb-0 bg-body-tertiary border-bottom">
+              <ul class="nav nav-pills nav-fill bg-body-secondary p-1 rounded-3 gap-1 mb-2.5" role="tablist">
+                <li class="nav-item">
+                  <button class="nav-link py-1.5 px-2 rounded-2 ${this.activeTab === 'chesscom' ? 'active fw-black bg-warning text-dark shadow-sm' : 'fw-bold text-secondary'}" data-import-tab="chesscom" style="font-size: 13px;">
+                    <i class="bi bi-check-circle-fill me-1 text-success"></i>Chess.com
+                  </button>
+                </li>
+                <li class="nav-item">
+                  <button class="nav-link py-1.5 px-2 rounded-2 ${this.activeTab === 'lichess' ? 'active fw-black bg-warning text-dark shadow-sm' : 'fw-bold text-secondary'}" data-import-tab="lichess" style="font-size: 13px;">
+                    <i class="bi bi-globe me-1 text-info"></i>Lichess
+                  </button>
+                </li>
+                <li class="nav-item">
+                  <button class="nav-link py-1.5 px-2 rounded-2 ${this.activeTab === 'pgn' ? 'active fw-black bg-warning text-dark shadow-sm' : 'fw-bold text-secondary'}" data-import-tab="pgn" style="font-size: 13px;">
+                    <i class="bi bi-file-text-fill me-1 text-primary"></i>Paste PGN
+                  </button>
+                </li>
+              </ul>
+            </div>
 
-        <div class="dialog-body p-3 sm:p-4 overflow-x-hidden" id="import-tab-body"></div>
+            <div class="modal-body p-3 p-sm-4 overflow-x-hidden" id="import-tab-body"></div>
+          </div>
+        </div>
       </div>
     `;
 
     // Explicit close button click
     this.modalEl.querySelector('#btn-modal-close')?.addEventListener('click', () => this.hide());
-
-    // Native dialog cancel event (pressing Escape)
-    this.modalEl.addEventListener('cancel', (e) => {
-      e.preventDefault();
-      this.hide();
-    });
 
     // Backdrop click
     this.modalEl.addEventListener('click', (e) => {

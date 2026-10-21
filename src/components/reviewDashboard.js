@@ -679,7 +679,7 @@ export class ReviewDashboard {
             with move quality classifications, phase ratings, and key moment analysis, or challenge our 33-bot arena!
           </p>
           <div class="d-flex align-items-center gap-3">
-            <button type="button" class="btn-solid theme-warning comic-btn px-4 py-2.5" id="zero-btn-import" data-bs-toggle="dialog" data-bs-target="#import-modal">
+            <button type="button" class="btn-solid theme-warning comic-btn px-4 py-2.5" id="zero-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal">
               <i class="bi bi-cloud-arrow-up-fill me-1.5"></i> Import Game
             </button>
             <button type="button" class="btn btn-light comic-btn px-4 py-2.5" id="zero-btn-bots">
@@ -737,25 +737,36 @@ export class ReviewDashboard {
           <div class="comic-card-sm p-2.5 mb-2 d-flex align-items-center justify-content-between" id="review-move-strip"></div>
 
           <!-- Step Navigation Bar -->
-          <div class="comic-card-sm p-2 d-flex align-items-center justify-content-between gap-1 mb-2">
-            <div class="btn-group" role="group">
-              <button type="button" class="btn btn-light btn-sm comic-btn" id="btn-first" title="First Move"><i class="bi bi-chevron-bar-left"></i></button>
-              <button type="button" class="btn btn-light btn-sm comic-btn" id="btn-prev" title="Previous Move"><i class="bi bi-chevron-left"></i></button>
-              <button type="button" class="btn btn-light btn-sm comic-btn" id="btn-next" title="Next Move"><i class="bi bi-chevron-right"></i></button>
-              <button type="button" class="btn btn-light btn-sm comic-btn" id="btn-last" title="Last Move"><i class="bi bi-chevron-bar-right"></i></button>
+          <div class="comic-card-sm p-2 d-flex flex-column gap-2 mb-2">
+            <!-- Row 1: Big Thumb-Friendly Step Controls -->
+            <div class="d-flex align-items-center justify-content-between gap-1.5">
+              <button type="button" class="btn btn-light arcade-step-btn-sm" id="btn-first" title="First Move">
+                <i class="bi bi-chevron-bar-left fs-6"></i>
+              </button>
+              <button type="button" class="btn btn-light arcade-step-btn-lg flex-grow-1" id="btn-prev" title="Previous Move">
+                <i class="bi bi-chevron-left fs-5 fw-black me-1"></i><span class="small fw-black d-none sm:inline">Prev</span>
+              </button>
+
+              <span class="badge bg-secondary font-monospace px-2.5 sm:px-3 py-2 fs-6 fw-bold flex-shrink-0" id="ply-counter">0 / 0</span>
+
+              <button type="button" class="btn btn-light arcade-step-btn-lg flex-grow-1" id="btn-next" title="Next Move">
+                <span class="small fw-black d-none sm:inline me-1">Next</span><i class="bi bi-chevron-right fs-5 fw-black"></i>
+              </button>
+              <button type="button" class="btn btn-light arcade-step-btn-sm" id="btn-last" title="Last Move">
+                <i class="bi bi-chevron-bar-right fs-6"></i>
+              </button>
             </div>
 
-            <span class="badge bg-secondary font-monospace px-2.5 py-1.5" id="ply-counter">0 / 0</span>
-
-            <div class="d-flex align-items-center gap-1.5">
-              <button type="button" class="btn btn-sm btn-outline-danger comic-btn" id="btn-toggle-threat" title="Toggle Threat Arrow">
-                <i class="bi bi-shield-slash"></i>
-              </button>
-              <button type="button" class="btn btn-sm btn-warning comic-btn" id="btn-key-moment" title="Next Key Moment">
+            <!-- Row 2: Actions (Key Moment, Threat, Flip) -->
+            <div class="d-flex align-items-center justify-content-between gap-2">
+              <button type="button" class="btn btn-warning comic-btn flex-grow-1 py-1.5 fw-black" id="btn-key-moment" title="Next Key Moment">
                 <i class="bi bi-lightning-charge-fill me-1"></i>Key Moment
               </button>
-              <button type="button" class="btn btn-sm btn-light comic-btn" id="btn-flip" title="Flip Board">
-                <i class="bi bi-arrow-left-right"></i>
+              <button type="button" class="btn btn-outline-danger comic-btn px-2.5 py-1.5" id="btn-toggle-threat" title="Toggle Threat Arrow">
+                <i class="bi bi-shield-slash me-1"></i>Threat
+              </button>
+              <button type="button" class="btn btn-light comic-btn px-2.5 py-1.5" id="btn-flip" title="Flip Board">
+                <i class="bi bi-arrow-left-right me-1"></i>Flip
               </button>
             </div>
           </div>
