@@ -405,7 +405,7 @@ const PST_MG_KING = [
   24,
   14
 ];
-const FEN_EVAL_CACHE = /* @__PURE__ */ new Map();
+export const FEN_EVAL_CACHE = /* @__PURE__ */ new Map();
 export function cpToWinProb(cp, mate) {
   if (mate !== void 0 && mate !== null) {
     if (mate > 0) return 1;
@@ -624,13 +624,14 @@ export function findBestMoveLocal(fen, depth = 3) {
   const chess = new Chess(fen);
   const moves = chess.moves({ verbose: true });
   if (moves.length === 0) {
-    return { bestMoveUci: "", bestMoveSan: "", evalCp: 0, pv: [] };
+    return { bestMoveUci: "", bestMoveSan: "", secondBestMoveUci: "", secondBestMoveSan: "", evalCp: 0, pv: [] };
   }
   moves.sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a));
   const isWhite = chess.turn() === "w";
   let bestScore = isWhite ? -Infinity : Infinity;
   let secondBestScore = isWhite ? -Infinity : Infinity;
   let bestMove = moves[0];
+  let secondBestMove = moves.length > 1 ? moves[1] : null;
   let finalPv = [];
   let alpha = -Infinity;
   let beta = Infinity;
@@ -643,31 +644,52 @@ export function findBestMoveLocal(fen, depth = 3) {
     if (isWhite) {
       if (score > bestScore) {
         secondBestScore = bestScore;
+        secondBestMove = bestMove;
         bestScore = score;
         bestMove = move;
         finalPv = [moveUci, ...childPv];
         alpha = Math.max(alpha, bestScore);
       } else if (score > secondBestScore) {
         secondBestScore = score;
+        secondBestMove = move;
       }
     } else {
       if (score < bestScore) {
         secondBestScore = bestScore;
+        secondBestMove = bestMove;
         bestScore = score;
         bestMove = move;
         finalPv = [moveUci, ...childPv];
         beta = Math.min(beta, bestScore);
       } else if (score < secondBestScore) {
         secondBestScore = score;
+        secondBestMove = move;
       }
     }
   }
+
+  const bestMoveUci = `${bestMove.from}${bestMove.to}${bestMove.promotion || ""}`;
+  let secondBestMoveUci = "";
+  let secondBestMoveSan = "";
+  if (secondBestMove && (secondBestMove.from !== bestMove.from || secondBestMove.to !== bestMove.to)) {
+    secondBestMoveUci = `${secondBestMove.from}${secondBestMove.to}${secondBestMove.promotion || ""}`;
+    secondBestMoveSan = secondBestMove.san || "";
+  } else if (moves.length > 1) {
+    const fallbackMove = moves.find((m) => m.from !== bestMove.from || m.to !== bestMove.to);
+    if (fallbackMove) {
+      secondBestMoveUci = `${fallbackMove.from}${fallbackMove.to}${fallbackMove.promotion || ""}`;
+      secondBestMoveSan = fallbackMove.san || "";
+    }
+  }
+
   return {
-    bestMoveUci: `${bestMove.from}${bestMove.to}${bestMove.promotion || ""}`,
+    bestMoveUci,
     bestMoveSan: bestMove.san,
+    secondBestMoveUci,
+    secondBestMoveSan,
     evalCp: bestScore,
     multiPv2Cp: secondBestScore !== (isWhite ? -Infinity : Infinity) ? secondBestScore : void 0,
-    pv: finalPv.length > 0 ? finalPv : [`${bestMove.from}${bestMove.to}${bestMove.promotion || ""}`]
+    pv: finalPv.length > 0 ? finalPv : [bestMoveUci]
   };
 }
 async function fetchLichessCloudEval(fen) {
@@ -744,6 +766,8 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
       scoreCp: localSearch.evalCp,
       mate: null,
       pv: localSearch.pv,
+      bestMoveUci: localSearch.bestMoveUci,
+      secondBestMoveUci: localSearch.secondBestMoveUci,
       multiPv2ScoreCp: localSearch.multiPv2Cp,
       source: "local"
     };
@@ -756,6 +780,13 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
   if (totalPieces <= 7) {
     const tablebase = await fetchSyzygyTablebase(fen);
     if (tablebase) {
+      if (!tablebase.bestMoveUci && tablebase.pv && tablebase.pv[0]) {
+        tablebase.bestMoveUci = tablebase.pv[0];
+      }
+      if (!tablebase.secondBestMoveUci) {
+        const fallback = findBestMoveLocal(fen, 1);
+        tablebase.secondBestMoveUci = fallback.secondBestMoveUci;
+      }
       FEN_EVAL_CACHE.set(fen, tablebase);
       return tablebase;
     }
@@ -764,10 +795,13 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
   const targetDepth = 14;
   const sfEval = await stockfishService.evaluate(fen, targetDepth, 800);
   if (sfEval && sfEval.bestMoveUci) {
+    const fallback = findBestMoveLocal(fen, 1);
     const sfResult = {
       scoreCp: sfEval.scoreCp,
       mate: sfEval.mate,
       pv: sfEval.pv,
+      bestMoveUci: sfEval.bestMoveUci,
+      secondBestMoveUci: fallback.secondBestMoveUci,
       multiPv2ScoreCp: sfEval.multiPv2ScoreCp,
       source: "stockfish"
     };
@@ -780,6 +814,8 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
     scoreCp: localSearch.evalCp,
     mate: null,
     pv: localSearch.pv,
+    bestMoveUci: localSearch.bestMoveUci,
+    secondBestMoveUci: localSearch.secondBestMoveUci,
     multiPv2ScoreCp: localSearch.multiPv2Cp,
     source: "local"
   };

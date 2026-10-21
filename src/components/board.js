@@ -27,6 +27,7 @@ export class Chessboard {
     this.legalMovesFrom = options.legalMovesFrom || null; // (square) => string[] destinations
     this.lastMove = options.lastMove || null; // { from, to }
     this.bestMove = options.bestMove || null; // { from, to }
+    this.secondBestMove = options.secondBestMove || null; // { from, to }
     this.threatMove = options.threatMove || null; // { from, to }
     this.badge = options.badge || null; // { square, classification }
 
@@ -39,7 +40,7 @@ export class Chessboard {
 
   setProps(newProps) {
     let shouldRerender = false;
-    ['fen', 'orientation', 'theme', 'interactive', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'threatMove', 'badge'].forEach((k) => {
+    ['fen', 'orientation', 'theme', 'interactive', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'secondBestMove', 'threatMove', 'badge'].forEach((k) => {
       if (newProps[k] !== undefined && newProps[k] !== this[k]) {
         this[k] = newProps[k];
         shouldRerender = true;
@@ -245,24 +246,30 @@ export class Chessboard {
 
     boardWrapper.appendChild(grid);
 
-    // SVG Arrows Layer (Best move, threat arrow)
+    // SVG Arrows Layer (Best move, second best move, threat arrow)
     const svgLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svgLayer.setAttribute('class', 'position-absolute top-0 start-0 w-100 h-100 pointer-events-none');
     svgLayer.style.pointerEvents = 'none';
     svgLayer.style.zIndex = '15';
 
-    if (this.bestMove && this.bestMove.from && this.bestMove.to) {
-      this.drawArrow(svgLayer, this.bestMove.from, this.bestMove.to, '#22c55e', false, 'best-move');
+    // Thin green arrow for second best move (rendered underneath if overlapping)
+    if (this.secondBestMove && this.secondBestMove.from && this.secondBestMove.to) {
+      this.drawArrow(svgLayer, this.secondBestMove.from, this.secondBestMove.to, '#10b981', false, 'second-best-move', 2.2);
     }
+    // Thick green arrow for best move
+    if (this.bestMove && this.bestMove.from && this.bestMove.to) {
+      this.drawArrow(svgLayer, this.bestMove.from, this.bestMove.to, '#10b981', false, 'best-move', 4.8);
+    }
+    // Red dashed arrow for threat
     if (this.threatMove && this.threatMove.from && this.threatMove.to) {
-      this.drawArrow(svgLayer, this.threatMove.from, this.threatMove.to, '#ef4444', true, 'threat-move');
+      this.drawArrow(svgLayer, this.threatMove.from, this.threatMove.to, '#ef4444', true, 'threat-move', 3.5);
     }
 
     boardWrapper.appendChild(svgLayer);
     this.container.appendChild(boardWrapper);
   }
 
-  drawArrow(svg, fromSq, toSq, color, dashed = false, idPrefix = 'arrow') {
+  drawArrow(svg, fromSq, toSq, color, dashed = false, idPrefix = 'arrow', strokeWidth = 3.5) {
     const getCoords = (sq) => {
       if (!sq || sq.length < 2) return null;
       const f = sq[0];
@@ -290,22 +297,29 @@ export class Chessboard {
     const dist = Math.hypot(dx, dy);
     if (dist < 1) return;
 
-    const endX = x1 + Math.cos(angle) * (dist - 3.5);
-    const endY = y1 + Math.sin(angle) * (dist - 3.5);
+    const isThick = strokeWidth >= 4;
+    const isThin = strokeWidth <= 2.5;
+    const markerW = isThick ? 7 : (isThin ? 4.5 : 6);
+    const markerH = isThick ? 7 : (isThin ? 4.5 : 6);
+    const refX = markerW * 0.65;
+    const refY = markerH * 0.5;
+
+    const endX = x1 + Math.cos(angle) * (dist - (isThick ? 3.8 : 3.2));
+    const endY = y1 + Math.sin(angle) * (dist - (isThick ? 3.8 : 3.2));
 
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
     marker.setAttribute('id', `marker-${idPrefix}`);
-    marker.setAttribute('markerWidth', '6');
-    marker.setAttribute('markerHeight', '6');
-    marker.setAttribute('refX', '4');
-    marker.setAttribute('refY', '3');
+    marker.setAttribute('markerWidth', String(markerW));
+    marker.setAttribute('markerHeight', String(markerH));
+    marker.setAttribute('refX', String(refX));
+    marker.setAttribute('refY', String(refY));
     marker.setAttribute('orient', 'auto');
 
     const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    polygon.setAttribute('points', '0 0, 6 3, 0 6');
+    polygon.setAttribute('points', `0 0, ${markerW} ${refY}, 0 ${markerH}`);
     polygon.setAttribute('fill', color);
-    polygon.setAttribute('opacity', '0.9');
+    polygon.setAttribute('opacity', isThin ? '0.75' : '0.9');
     marker.appendChild(polygon);
     defs.appendChild(marker);
     svg.appendChild(defs);
@@ -316,9 +330,9 @@ export class Chessboard {
     line.setAttribute('x2', `${endX}%`);
     line.setAttribute('y2', `${endY}%`);
     line.setAttribute('stroke', color);
-    line.setAttribute('stroke-width', '3.5');
+    line.setAttribute('stroke-width', String(strokeWidth));
     line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('opacity', '0.9');
+    line.setAttribute('opacity', isThin ? '0.75' : '0.9');
     if (dashed) {
       line.setAttribute('stroke-dasharray', '5,5');
     }

@@ -8,6 +8,7 @@ import { Chess } from 'chess.js';
 import { Chessboard } from './board.js';
 import { soundService } from '../services/sound.js';
 import { getComicBadge, COMIC_DICTIONARY } from '../services/comicBadges.js';
+import { findBestMoveLocal, FEN_EVAL_CACHE } from '../services/engine.js';
 
 export class ReviewDashboard {
   constructor(containerEl, options = {}) {
@@ -190,14 +191,39 @@ export class ReviewDashboard {
     });
   }
 
+  getTopMovesForFen(fen) {
+    if (!fen) return { best: null, second: null };
+    try {
+      const cached = typeof FEN_EVAL_CACHE !== 'undefined' ? FEN_EVAL_CACHE.get(fen) : null;
+      let bestUci = cached?.bestMoveUci;
+      let secondUci = cached?.secondBestMoveUci;
+
+      if (!bestUci && typeof findBestMoveLocal === 'function') {
+        const local = findBestMoveLocal(fen, 2);
+        bestUci = local.bestMoveUci;
+        secondUci = local.secondBestMoveUci;
+      }
+
+      const best = bestUci && bestUci.length >= 4
+        ? { from: bestUci.slice(0, 2), to: bestUci.slice(2, 4) }
+        : null;
+
+      const second = secondUci && secondUci.length >= 4 && (secondUci.slice(0, 2) !== best?.from || secondUci.slice(2, 4) !== best?.to)
+        ? { from: secondUci.slice(0, 2), to: secondUci.slice(2, 4) }
+        : null;
+
+      return { best, second };
+    } catch {
+      return { best: null, second: null };
+    }
+  }
+
   updateBoardAndControls() {
     const cur = this.getCurrentEval();
     const fen = cur ? cur.fen : (this.game ? this.game.initialFen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
     const lastMove = cur ? { from: cur.from, to: cur.to } : null;
 
-    const bestMove = cur?.bestMoveUci && cur.bestMoveUci.length >= 4
-      ? { from: cur.bestMoveUci.slice(0, 2), to: cur.bestMoveUci.slice(2, 4) }
-      : null;
+    const { best: bestMove, second: secondBestMove } = this.getTopMovesForFen(fen);
 
     const threatMove = this.isThreatActive && cur?.threat?.uci && cur.threat.uci.length >= 4
       ? { from: cur.threat.uci.slice(0, 2), to: cur.threat.uci.slice(2, 4) }
@@ -210,6 +236,7 @@ export class ReviewDashboard {
       orientation: this.orientation,
       lastMove,
       bestMove,
+      secondBestMove,
       threatMove,
       badge,
     });

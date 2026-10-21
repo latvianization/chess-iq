@@ -2024,13 +2024,14 @@ function findBestMoveLocal(fen, depth = 3) {
   const chess = new Chess(fen);
   const moves = chess.moves({ verbose: true });
   if (moves.length === 0) {
-    return { bestMoveUci: "", bestMoveSan: "", evalCp: 0, pv: [] };
+    return { bestMoveUci: "", bestMoveSan: "", secondBestMoveUci: "", secondBestMoveSan: "", evalCp: 0, pv: [] };
   }
   moves.sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a));
   const isWhite = chess.turn() === "w";
   let bestScore = isWhite ? -Infinity : Infinity;
   let secondBestScore = isWhite ? -Infinity : Infinity;
   let bestMove = moves[0];
+  let secondBestMove = moves.length > 1 ? moves[1] : null;
   let finalPv = [];
   let alpha = -Infinity;
   let beta = Infinity;
@@ -2043,31 +2044,52 @@ function findBestMoveLocal(fen, depth = 3) {
     if (isWhite) {
       if (score > bestScore) {
         secondBestScore = bestScore;
+        secondBestMove = bestMove;
         bestScore = score;
         bestMove = move;
         finalPv = [moveUci, ...childPv];
         alpha = Math.max(alpha, bestScore);
       } else if (score > secondBestScore) {
         secondBestScore = score;
+        secondBestMove = move;
       }
     } else {
       if (score < bestScore) {
         secondBestScore = bestScore;
+        secondBestMove = bestMove;
         bestScore = score;
         bestMove = move;
         finalPv = [moveUci, ...childPv];
         beta = Math.min(beta, bestScore);
       } else if (score < secondBestScore) {
         secondBestScore = score;
+        secondBestMove = move;
       }
     }
   }
+
+  const bestMoveUci = `${bestMove.from}${bestMove.to}${bestMove.promotion || ""}`;
+  let secondBestMoveUci = "";
+  let secondBestMoveSan = "";
+  if (secondBestMove && (secondBestMove.from !== bestMove.from || secondBestMove.to !== bestMove.to)) {
+    secondBestMoveUci = `${secondBestMove.from}${secondBestMove.to}${secondBestMove.promotion || ""}`;
+    secondBestMoveSan = secondBestMove.san || "";
+  } else if (moves.length > 1) {
+    const fallbackMove = moves.find((m) => m.from !== bestMove.from || m.to !== bestMove.to);
+    if (fallbackMove) {
+      secondBestMoveUci = `${fallbackMove.from}${fallbackMove.to}${fallbackMove.promotion || ""}`;
+      secondBestMoveSan = fallbackMove.san || "";
+    }
+  }
+
   return {
-    bestMoveUci: `${bestMove.from}${bestMove.to}${bestMove.promotion || ""}`,
+    bestMoveUci,
     bestMoveSan: bestMove.san,
+    secondBestMoveUci,
+    secondBestMoveSan,
     evalCp: bestScore,
     multiPv2Cp: secondBestScore !== (isWhite ? -Infinity : Infinity) ? secondBestScore : void 0,
-    pv: finalPv.length > 0 ? finalPv : [`${bestMove.from}${bestMove.to}${bestMove.promotion || ""}`]
+    pv: finalPv.length > 0 ? finalPv : [bestMoveUci]
   };
 }
 async function fetchLichessCloudEval(fen) {
@@ -2144,6 +2166,8 @@ async function evaluateFenHybrid(fen, isDeep = false) {
       scoreCp: localSearch.evalCp,
       mate: null,
       pv: localSearch.pv,
+      bestMoveUci: localSearch.bestMoveUci,
+      secondBestMoveUci: localSearch.secondBestMoveUci,
       multiPv2ScoreCp: localSearch.multiPv2Cp,
       source: "local"
     };
@@ -2156,6 +2180,13 @@ async function evaluateFenHybrid(fen, isDeep = false) {
   if (totalPieces <= 7) {
     const tablebase = await fetchSyzygyTablebase(fen);
     if (tablebase) {
+      if (!tablebase.bestMoveUci && tablebase.pv && tablebase.pv[0]) {
+        tablebase.bestMoveUci = tablebase.pv[0];
+      }
+      if (!tablebase.secondBestMoveUci) {
+        const fallback = findBestMoveLocal(fen, 1);
+        tablebase.secondBestMoveUci = fallback.secondBestMoveUci;
+      }
       FEN_EVAL_CACHE.set(fen, tablebase);
       return tablebase;
     }
@@ -2164,10 +2195,13 @@ async function evaluateFenHybrid(fen, isDeep = false) {
   const targetDepth = 14;
   const sfEval = await stockfishService.evaluate(fen, targetDepth, 800);
   if (sfEval && sfEval.bestMoveUci) {
+    const fallback = findBestMoveLocal(fen, 1);
     const sfResult = {
       scoreCp: sfEval.scoreCp,
       mate: sfEval.mate,
       pv: sfEval.pv,
+      bestMoveUci: sfEval.bestMoveUci,
+      secondBestMoveUci: fallback.secondBestMoveUci,
       multiPv2ScoreCp: sfEval.multiPv2ScoreCp,
       source: "stockfish"
     };
@@ -2180,6 +2214,8 @@ async function evaluateFenHybrid(fen, isDeep = false) {
     scoreCp: localSearch.evalCp,
     mate: null,
     pv: localSearch.pv,
+    bestMoveUci: localSearch.bestMoveUci,
+    secondBestMoveUci: localSearch.secondBestMoveUci,
     multiPv2ScoreCp: localSearch.multiPv2Cp,
     source: "local"
   };
@@ -2763,6 +2799,7 @@ class Chessboard {
     this.legalMovesFrom = options.legalMovesFrom || null; // (square) => string[] destinations
     this.lastMove = options.lastMove || null; // { from, to }
     this.bestMove = options.bestMove || null; // { from, to }
+    this.secondBestMove = options.secondBestMove || null; // { from, to }
     this.threatMove = options.threatMove || null; // { from, to }
     this.badge = options.badge || null; // { square, classification }
 
@@ -2775,7 +2812,7 @@ class Chessboard {
 
   setProps(newProps) {
     let shouldRerender = false;
-    ['fen', 'orientation', 'theme', 'interactive', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'threatMove', 'badge'].forEach((k) => {
+    ['fen', 'orientation', 'theme', 'interactive', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'secondBestMove', 'threatMove', 'badge'].forEach((k) => {
       if (newProps[k] !== undefined && newProps[k] !== this[k]) {
         this[k] = newProps[k];
         shouldRerender = true;
@@ -2981,24 +3018,30 @@ class Chessboard {
 
     boardWrapper.appendChild(grid);
 
-    // SVG Arrows Layer (Best move, threat arrow)
+    // SVG Arrows Layer (Best move, second best move, threat arrow)
     const svgLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svgLayer.setAttribute('class', 'position-absolute top-0 start-0 w-100 h-100 pointer-events-none');
     svgLayer.style.pointerEvents = 'none';
     svgLayer.style.zIndex = '15';
 
-    if (this.bestMove && this.bestMove.from && this.bestMove.to) {
-      this.drawArrow(svgLayer, this.bestMove.from, this.bestMove.to, '#22c55e', false, 'best-move');
+    // Thin green arrow for second best move (rendered underneath if overlapping)
+    if (this.secondBestMove && this.secondBestMove.from && this.secondBestMove.to) {
+      this.drawArrow(svgLayer, this.secondBestMove.from, this.secondBestMove.to, '#10b981', false, 'second-best-move', 2.2);
     }
+    // Thick green arrow for best move
+    if (this.bestMove && this.bestMove.from && this.bestMove.to) {
+      this.drawArrow(svgLayer, this.bestMove.from, this.bestMove.to, '#10b981', false, 'best-move', 4.8);
+    }
+    // Red dashed arrow for threat
     if (this.threatMove && this.threatMove.from && this.threatMove.to) {
-      this.drawArrow(svgLayer, this.threatMove.from, this.threatMove.to, '#ef4444', true, 'threat-move');
+      this.drawArrow(svgLayer, this.threatMove.from, this.threatMove.to, '#ef4444', true, 'threat-move', 3.5);
     }
 
     boardWrapper.appendChild(svgLayer);
     this.container.appendChild(boardWrapper);
   }
 
-  drawArrow(svg, fromSq, toSq, color, dashed = false, idPrefix = 'arrow') {
+  drawArrow(svg, fromSq, toSq, color, dashed = false, idPrefix = 'arrow', strokeWidth = 3.5) {
     const getCoords = (sq) => {
       if (!sq || sq.length < 2) return null;
       const f = sq[0];
@@ -3026,22 +3069,29 @@ class Chessboard {
     const dist = Math.hypot(dx, dy);
     if (dist < 1) return;
 
-    const endX = x1 + Math.cos(angle) * (dist - 3.5);
-    const endY = y1 + Math.sin(angle) * (dist - 3.5);
+    const isThick = strokeWidth >= 4;
+    const isThin = strokeWidth <= 2.5;
+    const markerW = isThick ? 7 : (isThin ? 4.5 : 6);
+    const markerH = isThick ? 7 : (isThin ? 4.5 : 6);
+    const refX = markerW * 0.65;
+    const refY = markerH * 0.5;
+
+    const endX = x1 + Math.cos(angle) * (dist - (isThick ? 3.8 : 3.2));
+    const endY = y1 + Math.sin(angle) * (dist - (isThick ? 3.8 : 3.2));
 
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
     marker.setAttribute('id', `marker-${idPrefix}`);
-    marker.setAttribute('markerWidth', '6');
-    marker.setAttribute('markerHeight', '6');
-    marker.setAttribute('refX', '4');
-    marker.setAttribute('refY', '3');
+    marker.setAttribute('markerWidth', String(markerW));
+    marker.setAttribute('markerHeight', String(markerH));
+    marker.setAttribute('refX', String(refX));
+    marker.setAttribute('refY', String(refY));
     marker.setAttribute('orient', 'auto');
 
     const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    polygon.setAttribute('points', '0 0, 6 3, 0 6');
+    polygon.setAttribute('points', `0 0, ${markerW} ${refY}, 0 ${markerH}`);
     polygon.setAttribute('fill', color);
-    polygon.setAttribute('opacity', '0.9');
+    polygon.setAttribute('opacity', isThin ? '0.75' : '0.9');
     marker.appendChild(polygon);
     defs.appendChild(marker);
     svg.appendChild(defs);
@@ -3052,9 +3102,9 @@ class Chessboard {
     line.setAttribute('x2', `${endX}%`);
     line.setAttribute('y2', `${endY}%`);
     line.setAttribute('stroke', color);
-    line.setAttribute('stroke-width', '3.5');
+    line.setAttribute('stroke-width', String(strokeWidth));
     line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('opacity', '0.9');
+    line.setAttribute('opacity', isThin ? '0.75' : '0.9');
     if (dashed) {
       line.setAttribute('stroke-dasharray', '5,5');
     }
@@ -3659,6 +3709,7 @@ class BotArena {
 
 
 
+
 class ReviewDashboard {
   constructor(containerEl, options = {}) {
     this.container = containerEl;
@@ -3840,14 +3891,39 @@ class ReviewDashboard {
     });
   }
 
+  getTopMovesForFen(fen) {
+    if (!fen) return { best: null, second: null };
+    try {
+      const cached = typeof FEN_EVAL_CACHE !== 'undefined' ? FEN_EVAL_CACHE.get(fen) : null;
+      let bestUci = cached?.bestMoveUci;
+      let secondUci = cached?.secondBestMoveUci;
+
+      if (!bestUci && typeof findBestMoveLocal === 'function') {
+        const local = findBestMoveLocal(fen, 2);
+        bestUci = local.bestMoveUci;
+        secondUci = local.secondBestMoveUci;
+      }
+
+      const best = bestUci && bestUci.length >= 4
+        ? { from: bestUci.slice(0, 2), to: bestUci.slice(2, 4) }
+        : null;
+
+      const second = secondUci && secondUci.length >= 4 && (secondUci.slice(0, 2) !== best?.from || secondUci.slice(2, 4) !== best?.to)
+        ? { from: secondUci.slice(0, 2), to: secondUci.slice(2, 4) }
+        : null;
+
+      return { best, second };
+    } catch {
+      return { best: null, second: null };
+    }
+  }
+
   updateBoardAndControls() {
     const cur = this.getCurrentEval();
     const fen = cur ? cur.fen : (this.game ? this.game.initialFen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
     const lastMove = cur ? { from: cur.from, to: cur.to } : null;
 
-    const bestMove = cur?.bestMoveUci && cur.bestMoveUci.length >= 4
-      ? { from: cur.bestMoveUci.slice(0, 2), to: cur.bestMoveUci.slice(2, 4) }
-      : null;
+    const { best: bestMove, second: secondBestMove } = this.getTopMovesForFen(fen);
 
     const threatMove = this.isThreatActive && cur?.threat?.uci && cur.threat.uci.length >= 4
       ? { from: cur.threat.uci.slice(0, 2), to: cur.threat.uci.slice(2, 4) }
@@ -3860,6 +3936,7 @@ class ReviewDashboard {
       orientation: this.orientation,
       lastMove,
       bestMove,
+      secondBestMove,
       threatMove,
       badge,
     });
