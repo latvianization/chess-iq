@@ -191,7 +191,7 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
       const moverWinProbAfter = item.side === "w" ? whiteWinProbAfter : 1 - whiteWinProbAfter;
       const winProbLoss = Math.max(0, moverWinProbBefore - moverWinProbAfter);
       const accuracy = calculateMoveAccuracy(winProbLoss);
-      const bestMoveUci = engineBefore.pv && engineBefore.pv[0] ? engineBefore.pv[0] : "";
+      const bestMoveUci = (engineBefore.pv && engineBefore.pv[0]) || engineBefore.bestMoveUci || "";
       let bestMoveSan = "";
       if (bestMoveUci) {
         try {

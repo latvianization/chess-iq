@@ -916,22 +916,29 @@ function isMaterialSacrifice(fenBefore, fenAfter, moverColor) {
 }
 export function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter, winProbLoss, isBook, multiPv1WinProb, multiPv2WinProb, fenBefore, fenAfter, moverColor) {
   if (isBook) return "book";
-  const isMatchingBest = playedUci === bestMoveUci || winProbLoss <= 0.01;
-  if (isMatchingBest && winProbAfter >= 0.48 && winProbBefore < 0.9) {
-    if (isMaterialSacrifice(fenBefore, fenAfter, moverColor)) {
-      return "brilliant";
+  const isExactBest = Boolean(bestMoveUci && playedUci === bestMoveUci);
+  const isMatchingBest = isExactBest || winProbLoss <= 0.008;
+
+  // 1. If player played the top engine move, it is always Best (or Brilliant/Great)
+  if (isMatchingBest) {
+    if (winProbAfter >= 0.48 && winProbBefore < 0.9) {
+      if (isMaterialSacrifice(fenBefore, fenAfter, moverColor)) {
+        return "brilliant";
+      }
     }
+    if (multiPv2WinProb !== void 0 && multiPv1WinProb - multiPv2WinProb >= 0.15) {
+      return "great";
+    }
+    return "best";
   }
-  if (isMatchingBest && multiPv2WinProb !== void 0 && multiPv1WinProb - multiPv2WinProb >= 0.15) {
-    return "great";
-  }
+
+  // 2. Negative classifications ONLY evaluate when player did NOT play the best move
   if (winProbBefore >= 0.75 && winProbAfter <= 0.55) {
     return "missed_win";
   }
   if (winProbLoss > 0.2) return "blunder";
   if (winProbLoss > 0.1) return "mistake";
   if (winProbLoss > 0.05) return "inaccuracy";
-  if (isMatchingBest || winProbLoss <= 5e-3) return "best";
   if (winProbLoss <= 0.02) return "excellent";
   return "good";
 }
