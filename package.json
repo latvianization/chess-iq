@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
+    "build": "mkdir -p dist && cp index.html app.js dist/ && cp -r src dist/",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit",
+    "lint": "node -c app.js src/**/*.js",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
   },

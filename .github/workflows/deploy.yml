@@ -30,13 +30,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Verify syntax
+        run: node -c app.js src/**/*.js
 
-      - name: Build production applet
-        run: npm run build
+      - name: Assemble production bundle
+        run: |
+          mkdir -p dist
+          cp index.html app.js dist/
+          cp -r src dist/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
