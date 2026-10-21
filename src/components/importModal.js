@@ -27,6 +27,30 @@ export class ImportModal {
     this.render();
   }
 
+  formatOpeningBadge(eco) {
+    if (!eco) {
+      return `<span class="badge bg-body-tertiary text-secondary font-monospace" style="font-size: 10px;">PGN</span>`;
+    }
+    if (typeof eco === 'string' && eco.startsWith('http')) {
+      let label = 'Opening';
+      try {
+        const slug = eco.split('/openings/')[1] || eco.split('/').filter(Boolean).pop();
+        if (slug) {
+          const raw = slug.split(/-\d+\./)[0].replace(/-/g, ' ').trim();
+          label = decodeURIComponent(raw) || 'Opening';
+        }
+      } catch {}
+      return `<a href="${eco}" target="_blank" rel="noopener noreferrer"
+        class="badge bg-body-tertiary text-warning text-decoration-none border border-warning-subtle text-truncate"
+        style="max-width: 140px; font-size: 10px; vertical-align: middle;"
+        title="${label} (${eco})"
+        onclick="event.stopPropagation();">
+        <i class="bi bi-book me-1"></i>${label} <i class="bi bi-box-arrow-up-right ms-0.5" style="font-size: 8px;"></i>
+      </a>`;
+    }
+    return `<span class="badge bg-body-tertiary text-secondary font-monospace" style="font-size: 10px;">${eco}</span>`;
+  }
+
   getBsModal() {
     if (this.bsModal) return this.bsModal;
     try {
@@ -200,9 +224,7 @@ export class ImportModal {
                           <span class="badge bg-warning-subtle text-dark border border-warning-subtle fw-bold" style="font-size: 11px;">
                             <i class="bi ${tcIcon} me-1"></i>${g.timeControl}
                           </span>
-                          <span class="badge bg-body-tertiary text-secondary font-monospace" style="font-size: 10px;">
-                            ${g.eco || 'PGN'}
-                          </span>
+                          ${this.formatOpeningBadge(g.eco)}
                           <span class="text-secondary small" style="font-size: 11px;">
                             ${g.date}
                           </span>
