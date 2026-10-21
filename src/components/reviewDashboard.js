@@ -403,12 +403,23 @@ export class ReviewDashboard {
       counterEl.textContent = `${this.currentPly} / ${this.game?.plies.length || 0}`;
     }
 
-    // Update Active Row in Move Table
+    // Update Active Row in Move Table (scroll container only, never whole window)
+    const scrollContainer = this.container.querySelector('.move-history-container');
     this.container.querySelectorAll('.move-list-row').forEach((row) => {
       const plyNum = parseInt(row.dataset.ply, 10);
       if (plyNum === this.currentPly) {
         row.classList.add('bg-warning-subtle', 'fw-black', 'border', 'border-warning');
-        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        if (scrollContainer) {
+          const rowTop = row.offsetTop;
+          const rowHeight = row.offsetHeight;
+          const containerTop = scrollContainer.scrollTop;
+          const containerHeight = scrollContainer.clientHeight;
+          if (rowTop < containerTop) {
+            scrollContainer.scrollTop = rowTop;
+          } else if (rowTop + rowHeight > containerTop + containerHeight) {
+            scrollContainer.scrollTop = rowTop + rowHeight - containerHeight;
+          }
+        }
       } else {
         row.classList.remove('bg-warning-subtle', 'fw-black', 'border', 'border-warning');
       }
@@ -658,7 +669,7 @@ export class ReviewDashboard {
           </div>
           <div class="d-flex align-items-center justify-content-between w-100 max-w-md fg-secondary small font-monospace fw-bold px-1">
             <span id="review-analysis-step">${this.analysisProgress.total > 0 ? `${this.analysisProgress.current} / ${this.analysisProgress.total} plies` : 'Initializing...'}</span>
-            <span class="badge theme-warning" id="review-analysis-eta">Estimating time...</span>
+            <span class="badge bg-warning text-dark font-monospace" id="review-analysis-eta">Estimating time...</span>
             <span id="review-analysis-pct">${pct}%</span>
           </div>
         </div>
@@ -670,9 +681,9 @@ export class ReviewDashboard {
       // Zero State (No game active)
       this.container.innerHTML = `
         <div class="d-flex flex-column align-items-center justify-content-center p-4 sm:p-5 text-center comic-card max-w-2xl mx-auto my-4">
-          <span class="badge theme-warning border border-dark rounded-4 p-3 fs-1 mb-3 shadow-sm">
-            ♟
-          </span>
+          <div class="badge bg-warning text-dark border border-dark rounded-4 p-3 fs-1 mb-3 shadow-sm d-inline-flex align-items-center justify-content-center" style="width: 72px; height: 72px;">
+            <span class="lh-1" style="font-size: 2.25rem;">♟</span>
+          </div>
           <h3 class="fw-black mb-2">No Game Currently in Review</h3>
           <p class="fg-secondary small max-w-md mx-auto mb-4 font-medium leading-relaxed">
             Import a game from Chess.com, Lichess, or paste any PGN to run deep Stockfish engine diagnostics
@@ -716,9 +727,9 @@ export class ReviewDashboard {
 
     // Active Review Dashboard
     this.container.innerHTML = `
-      <div class="row g-3 lg:g-4">
-        <!-- Left: Sticky Board Column -->
-        <div class="col-12 lg:col-7 mobile-sticky-top">
+      <div class="row g-3 g-lg-4">
+        <!-- Left: Board Column -->
+        <div class="col-12 col-lg-6 col-xl-5 mobile-sticky-top">
           <!-- PV Banner (Tactical line playback) -->
           <div id="pv-banner-area" class="d-none"></div>
 
@@ -775,13 +786,13 @@ export class ReviewDashboard {
           <div class="comic-card-sm p-2 mb-2" id="advantage-chart-area"></div>
         </div>
 
-        <!-- Right: Move List & Performance Stats -->
-        <div class="col-12 lg:col-5 d-flex flex-column gap-3">
+        <!-- Right: Move List & Performance Stats in Columns on Desktop -->
+        <div class="col-12 col-lg-6 col-xl-7 d-flex flex-column gap-3">
           <!-- Match Overview Header Card -->
           <div class="comic-card p-3">
             <div class="d-flex align-items-center justify-content-between">
               <div>
-                <div class="fw-black fs-6 text-truncate" style="max-width: 240px;">
+                <div class="fw-black fs-6 text-truncate" style="max-width: 280px;">
                   ${this.game.white} vs ${this.game.black}
                 </div>
                 <div class="text-secondary small" style="font-size: 11px;">
@@ -794,117 +805,124 @@ export class ReviewDashboard {
             </div>
           </div>
 
-          <!-- Move History List -->
-          <div class="comic-card p-3">
-            <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
-              <h6 class="mb-0 fw-black"><i class="bi bi-list-ol me-1.5 text-warning"></i>Move History</h6>
-              <span class="badge bg-body-secondary text-dark fw-bold font-monospace">${this.game.plies.length} Plies</span>
-            </div>
-            <div class="move-history-container">
-              <table class="table table-sm table-hover align-middle mb-0" style="font-size: 13px;">
-                <tbody>
-                  ${this.buildMoveTableRows()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Phase Accuracy & Elo Card -->
-          <div class="comic-card p-3">
-            <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
-              <h6 class="mb-0 fw-black"><i class="bi bi-trophy-fill me-1.5 text-warning"></i>Game Performance</h6>
-              <span class="badge bg-body-secondary text-secondary font-monospace fw-bold" style="font-size: 11px;">You vs Opponent</span>
-            </div>
-
-            <!-- Dual Accuracy Comparison -->
-            <div class="row g-2 mb-3">
-              <div class="col-6">
-                <div class="arcade-stat-chip p-2 text-start">
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <span class="small fw-bold text-truncate">${isWhiteUser ? '⚪ White' : '⚫ Black'} (You)</span>
-                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 10px;">YOU</span>
-                  </div>
-                  <div class="d-flex align-items-baseline gap-1">
-                    <span class="fw-black fs-4 text-success font-monospace">${userAcc}%</span>
-                    <span class="text-secondary small">accuracy</span>
-                  </div>
+          <!-- Desktop Columns: Move History & Performance Cards Side-by-Side -->
+          <div class="row g-3">
+            <!-- Column 1: Move History List -->
+            <div class="col-12 col-md-6">
+              <div class="comic-card p-3 h-100 d-flex flex-column">
+                <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
+                  <h6 class="mb-0 fw-black"><i class="bi bi-list-ol me-1.5 text-warning"></i>Move History</h6>
+                  <span class="badge bg-body-secondary text-dark fw-bold font-monospace">${this.game.plies.length} Plies</span>
                 </div>
-              </div>
-              <div class="col-6">
-                <div class="arcade-stat-chip p-2 text-start">
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <span class="small fw-bold text-truncate">${isWhiteUser ? '⚫ Black' : '⚪ White'}</span>
-                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill font-monospace" style="font-size: 10px;">OPP</span>
-                  </div>
-                  <div class="d-flex align-items-baseline gap-1">
-                    <span class="fw-black fs-4 text-secondary font-monospace">${oppAcc}%</span>
-                    <span class="text-secondary small">accuracy</span>
-                  </div>
+                <div class="move-history-container flex-grow-1" style="max-height: 480px;">
+                  <table class="table table-sm table-hover align-middle mb-0" style="font-size: 13px;">
+                    <tbody>
+                      ${this.buildMoveTableRows()}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
 
-            <!-- Phase Rating Comparison (Opening, Middle, Endgame) -->
-            <div class="row g-2 text-center mb-3">
-              <div class="col-4">
-                <div class="arcade-stat-chip p-2">
-                  <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
-                  <div class="d-flex justify-content-around align-items-baseline">
-                    <div class="text-center">
-                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
-                      <span class="fw-black fs-6 text-primary font-monospace">${userOpeningElo}</span>
-                    </div>
-                    <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
-                    <div class="text-center">
-                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
-                      <span class="fw-black fs-6 text-secondary font-monospace">${oppOpeningElo}</span>
-                    </div>
-                  </div>
+            <!-- Column 2: Phase Accuracy & Elo Card + Quality Breakdown -->
+            <div class="col-12 col-md-6">
+              <div class="comic-card p-3 h-100 d-flex flex-column gap-3">
+                <div class="d-flex align-items-center justify-content-between border-bottom pb-2">
+                  <h6 class="mb-0 fw-black"><i class="bi bi-trophy-fill me-1.5 text-warning"></i>Game Performance</h6>
+                  <span class="badge bg-body-secondary text-secondary font-monospace fw-bold" style="font-size: 11px;">You vs Opponent</span>
                 </div>
-              </div>
-              <div class="col-4">
-                <div class="arcade-stat-chip p-2">
-                  <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
-                  <div class="d-flex justify-content-around align-items-baseline">
-                    <div class="text-center">
-                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
-                      <span class="fw-black fs-6 text-warning font-monospace">${userMiddlegameElo}</span>
-                    </div>
-                    <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
-                    <div class="text-center">
-                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
-                      <span class="fw-black fs-6 text-secondary font-monospace">${oppMiddlegameElo}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-4">
-                <div class="arcade-stat-chip p-2">
-                  <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
-                  <div class="d-flex justify-content-around align-items-baseline">
-                    <div class="text-center">
-                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
-                      <span class="fw-black fs-6 text-success font-monospace">${userEndgameElo}</span>
-                    </div>
-                    <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
-                    <div class="text-center">
-                      <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
-                      <span class="fw-black fs-6 text-secondary font-monospace">${oppEndgameElo}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <!-- Move Classification Breakdown (Player vs Opponent) -->
-            <div class="border-top pt-2">
-              <div class="d-flex align-items-center justify-content-between px-2 pb-1.5 text-secondary" style="font-size: 11px; font-weight: 800; letter-spacing: 0.5px;">
-                <span style="width: 38px;" class="text-end">YOU</span>
-                <span>MOVE QUALITY</span>
-                <span style="width: 38px;" class="text-start">OPP</span>
-              </div>
-              <div class="d-flex flex-column gap-1">
-                ${this.buildBadgesSummary()}
+                <!-- Dual Accuracy Comparison -->
+                <div class="row g-2">
+                  <div class="col-6">
+                    <div class="arcade-stat-chip p-2 text-start">
+                      <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="small fw-bold text-truncate">${isWhiteUser ? '⚪ White' : '⚫ Black'} (You)</span>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 10px;">YOU</span>
+                      </div>
+                      <div class="d-flex align-items-baseline gap-1">
+                        <span class="fw-black fs-4 text-success font-monospace">${userAcc}%</span>
+                        <span class="text-secondary small">accuracy</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-6">
+                    <div class="arcade-stat-chip p-2 text-start">
+                      <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="small fw-bold text-truncate">${isWhiteUser ? '⚫ Black' : '⚪ White'}</span>
+                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill font-monospace" style="font-size: 10px;">OPP</span>
+                      </div>
+                      <div class="d-flex align-items-baseline gap-1">
+                        <span class="fw-black fs-4 text-secondary font-monospace">${oppAcc}%</span>
+                        <span class="text-secondary small">accuracy</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Phase Rating Comparison (Opening, Middle, Endgame) -->
+                <div class="row g-2 text-center">
+                  <div class="col-4">
+                    <div class="arcade-stat-chip p-2">
+                      <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
+                      <div class="d-flex justify-content-around align-items-baseline">
+                        <div class="text-center">
+                          <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
+                          <span class="fw-black fs-6 text-primary font-monospace">${userOpeningElo}</span>
+                        </div>
+                        <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                        <div class="text-center">
+                          <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
+                          <span class="fw-black fs-6 text-secondary font-monospace">${oppOpeningElo}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-4">
+                    <div class="arcade-stat-chip p-2">
+                      <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
+                      <div class="d-flex justify-content-around align-items-baseline">
+                        <div class="text-center">
+                          <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
+                          <span class="fw-black fs-6 text-warning font-monospace">${userMiddlegameElo}</span>
+                        </div>
+                        <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                        <div class="text-center">
+                          <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
+                          <span class="fw-black fs-6 text-secondary font-monospace">${oppMiddlegameElo}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-4">
+                    <div class="arcade-stat-chip p-2">
+                      <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
+                      <div class="d-flex justify-content-around align-items-baseline">
+                        <div class="text-center">
+                          <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
+                          <span class="fw-black fs-6 text-success font-monospace">${userEndgameElo}</span>
+                        </div>
+                        <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                        <div class="text-center">
+                          <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
+                          <span class="fw-black fs-6 text-secondary font-monospace">${oppEndgameElo}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Move Classification Breakdown (Player vs Opponent) -->
+                <div class="border-top pt-2">
+                  <div class="d-flex align-items-center justify-content-between px-2 pb-1.5 text-secondary" style="font-size: 11px; font-weight: 800; letter-spacing: 0.5px;">
+                    <span style="width: 38px;" class="text-end">YOU</span>
+                    <span>MOVE QUALITY</span>
+                    <span style="width: 38px;" class="text-start">OPP</span>
+                  </div>
+                  <div class="d-flex flex-column gap-1">
+                    ${this.buildBadgesSummary()}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
