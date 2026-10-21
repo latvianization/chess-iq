@@ -309,7 +309,9 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
   };
   plies.forEach((p) => {
     if (!p) return;
-    const cpLoss = Math.min(300, Math.max(0, p.scoreCp < 0 ? -p.scoreCp : 0));
+    const cpLoss = (p.classification === 'best' || p.classification === 'book')
+      ? 0
+      : Math.min(350, Math.round((p.winProbLoss || 0) * 500));
     if (p.color === userColor) {
       userCounts[p.classification] = (userCounts[p.classification] || 0) + 1;
       userAccuracySum += p.accuracy;

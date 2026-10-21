@@ -364,12 +364,11 @@ body {
 
 /* Eval Bar */
 .eval-bar-wrapper {
+  position: relative;
   width: 26px;
   min-height: 280px;
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 0.75rem;
   overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
@@ -377,30 +376,39 @@ body {
   background-color: #0f172a;
 }
 
-.eval-black {
-  background-color: #0f172a;
+.eval-white-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
   width: 100%;
-  transition: height 0.3s ease-out;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 4px;
-}
-
-.eval-white {
   background-color: #f8fafc;
-  width: 100%;
-  transition: height 0.3s ease-out;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  padding-bottom: 4px;
+  transition: height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1;
 }
 
-.eval-score-text {
+.eval-score-badge {
+  position: absolute;
+  left: 0;
+  width: 100%;
   font-size: 9px;
   font-weight: 900;
   font-family: "JetBrains Mono", monospace;
+  text-align: center;
+  z-index: 2;
+  pointer-events: none;
+  transition: top 0.35s ease, color 0.25s ease;
+}
+
+/* Advantage Chart */
+.advantage-chart-canvas {
+  position: relative;
+  width: 100%;
+  height: 84px;
+  background-color: #0b1120;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: crosshair;
 }
 
 /* Piece Image */

@@ -944,19 +944,20 @@ export function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter
 }
 export function calculatePhaseElo(baseElo, acpl, movesCount, isOverall = false, result = "*", userColor = "w") {
   if (movesCount < 3) return null;
-  const expectedAcpl = Math.max(12, 145 - baseElo * 0.052);
-  const eloDelta = (expectedAcpl - acpl) * 8.5;
-  const clampedDelta = Math.min(600, Math.max(-600, eloDelta));
+  const expectedAcpl = Math.max(18, 135 - baseElo * 0.05);
+  const eloDelta = (expectedAcpl - acpl) * 4.5;
+  const maxClamp = isOverall ? 320 : 220;
+  const clampedDelta = Math.min(maxClamp, Math.max(-maxClamp, eloDelta));
   let resultBonus = 0;
   if (isOverall) {
     if (result === "1-0" && userColor === "w" || result === "0-1" && userColor === "b") {
-      resultBonus = 40;
+      resultBonus = 25;
     } else if (result === "1/2-1/2") {
       resultBonus = 0;
     } else if (result !== "*") {
-      resultBonus = -40;
+      resultBonus = -25;
     }
   }
   const estimated = Math.round(baseElo + clampedDelta + resultBonus);
-  return Math.min(3200, Math.max(400, estimated));
+  return Math.min(3000, Math.max(400, estimated));
 }
