@@ -8,11 +8,12 @@ const Chess = window.Chess;
 import { Chessboard } from './board.js';
 import { soundService } from '../services/sound.js';
 import { getComicBadge, COMIC_DICTIONARY } from '../services/comicBadges.js';
-import { findBestMoveLocal, FEN_EVAL_CACHE } from '../services/engine.js';
-import { createCurvedPath, renderAdvantageChart, updateAdvantageScrubber } from './reviewAdvantageChart.js';
+import { findBestMoveLocal, FEN_EVAL_CACHE, normalizeFenKey } from '../services/engine.js';
+import { renderAdvantageChart, updateAdvantageScrubber } from './reviewAdvantageChart.js';
 import { startRetryMistake, stopRetryMistake } from './reviewRetryMistake.js';
 import { openWhyModal, closeWhyModal } from './reviewWhyModal.js';
 import { getCacheIndex, getCachedGame, clearGameCache } from '../services/gameCacheService.js';
+import { insEscape } from './insightsCharts.js';
 
 export class ReviewDashboard {
   constructor(containerEl, options = {}) {
@@ -28,8 +29,6 @@ export class ReviewDashboard {
     this.currentPly = 0;
     this.orientation = 'w';
     this.isThreatActive = false;
-    this.isPlayingPv = false;
-    this.pvTimer = null;
     this.board = null;
     this.analysisStartTime = null;
     this.advantagePoints = [];
@@ -146,11 +145,13 @@ export class ReviewDashboard {
 
   setGame(analyzedGame) {
     this.isAnalyzing = false;
+    if (this.isRetryingMistake) {
+      this.stopRetryMistake();
+    }
     this.game = analyzedGame;
     this.currentPly = analyzedGame && analyzedGame.plies.length > 0 ? 1 : 0;
     this.orientation = analyzedGame ? analyzedGame.userColor : 'w';
     this.isThreatActive = false;
-    this.stopPvPlayback();
     this.render();
   }
 
@@ -160,7 +161,6 @@ export class ReviewDashboard {
       this.stopRetryMistake();
     }
     this.currentPly = Math.max(0, Math.min(this.game.plies.length, ply));
-    this.stopPvPlayback();
 
     // Play move sound
     if (this.currentPly > 0 && this.game.plies[this.currentPly - 1]) {
@@ -206,10 +206,6 @@ export class ReviewDashboard {
     this.updateBoardAndControls();
   }
 
-  startShowWhy() {
-    this.openWhyModal();
-  }
-
   closeWhyModal() {
     closeWhyModal(this);
   }
@@ -218,60 +214,20 @@ export class ReviewDashboard {
     return openWhyModal(this, targetEval);
   }
 
-  stopPvPlayback() {
-    if (this.pvTimer) {
-      clearInterval(this.pvTimer);
-      this.pvTimer = null;
-    }
-    this.isPlayingPv = false;
-    this.updatePvBanner(null);
-  }
-
   getCurrentEval() {
     if (!this.game || this.currentPly === 0 || this.currentPly > this.game.plies.length) return null;
     return this.game.plies[this.currentPly - 1];
   }
 
-  updatePvBanner(steps, currentStep = 0) {
-    const banner = this.container.querySelector('#pv-banner-area');
-    if (!banner) return;
-
-    if (!steps) {
-      banner.innerHTML = '';
-      banner.classList.add('d-none');
-      return;
-    }
-
-    banner.classList.remove('d-none');
-    banner.innerHTML = `
-      <div class="alert alert-primary comic-card-sm d-flex align-items-center justify-content-between p-2.5 mb-2">
-        <div class="d-flex align-items-center gap-2">
-          <span class="spinner-grow spinner-grow-sm text-primary"></span>
-          <span class="small fw-bold">Tactical Continuation (${currentStep + 1}/${steps.length}):</span>
-          <span class="badge bg-primary font-monospace">${steps[currentStep]?.san || ''}</span>
-        </div>
-        <button type="button" class="btn btn-sm btn-outline-primary fw-bold" id="btn-exit-pv">Exit Line</button>
-      </div>
-    `;
-
-    banner.querySelector('#btn-exit-pv')?.addEventListener('click', () => {
-      this.stopPvPlayback();
-      this.updateBoardAndControls();
-    });
-  }
-
   getTopMovesForFen(fen) {
     if (!fen) return { best: null, second: null };
     try {
-      const fastKey = typeof normalizeFenKey === 'function' ? `${normalizeFenKey(fen)}_fast` : fen;
-      const deepKey = typeof normalizeFenKey === 'function' ? `${normalizeFenKey(fen)}_deep` : fen;
-      const cached = typeof FEN_EVAL_CACHE !== 'undefined'
-        ? (FEN_EVAL_CACHE.get(deepKey) || FEN_EVAL_CACHE.get(fastKey) || FEN_EVAL_CACHE.get(fen))
-        : null;
+      const normKey = normalizeFenKey(fen);
+      const cached = FEN_EVAL_CACHE.get(`${normKey}_deep`) || FEN_EVAL_CACHE.get(`${normKey}_fast`) || FEN_EVAL_CACHE.get(fen);
       let bestUci = cached?.bestMoveUci;
       let secondUci = cached?.secondBestMoveUci;
 
-      if (!bestUci && typeof findBestMoveLocal === 'function') {
+      if (!bestUci) {
         const local = findBestMoveLocal(fen, 2);
         bestUci = local.bestMoveUci;
         secondUci = local.secondBestMoveUci;
@@ -399,7 +355,7 @@ export class ReviewDashboard {
           </div>
         `;
         stripEl.querySelector('#btn-retry-mistake')?.addEventListener('click', () => this.startRetryMistake());
-        stripEl.querySelector('#btn-show-why')?.addEventListener('click', () => this.startShowWhy());
+        stripEl.querySelector('#btn-show-why')?.addEventListener('click', () => this.openWhyModal());
       } else {
         stripEl.innerHTML = `
           <div class="d-flex align-items-center gap-2">
@@ -658,17 +614,17 @@ export class ReviewDashboard {
                       </div>
                       <div class="d-flex flex-column">
                         <div class="d-flex align-items-center gap-1.5 flex-wrap">
-                          <span class="fw-bold">${item.white}</span>
-                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 11px;">${item.whiteElo}</span>
+                          <span class="fw-bold">${insEscape(item.white)}</span>
+                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 11px;">${insEscape(item.whiteElo)}</span>
                           <span class="text-secondary small fw-bold">vs</span>
-                          <span class="fw-bold">${item.black}</span>
-                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 11px;">${item.blackElo}</span>
+                          <span class="fw-bold">${insEscape(item.black)}</span>
+                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 11px;">${insEscape(item.blackElo)}</span>
                         </div>
                         <div class="d-flex align-items-center gap-2 mt-1 text-secondary small flex-wrap">
                           <span><i class="bi bi-person-fill me-0.5"></i>Playing ${isUserWhite ? 'White' : 'Black'}</span>
-                          ${item.ecoName || item.eco ? `<span>• <i class="bi bi-book me-0.5"></i>${item.ecoName || item.eco}</span>` : ''}
-                          ${item.timeControl ? `<span>• <i class="bi bi-clock me-0.5"></i>${item.timeControl}</span>` : ''}
-                          ${item.date ? `<span>• ${item.date}</span>` : ''}
+                          ${item.ecoName || item.eco ? `<span>• <i class="bi bi-book me-0.5"></i>${insEscape(item.ecoName || item.eco)}</span>` : ''}
+                          ${item.timeControl ? `<span>• <i class="bi bi-clock me-0.5"></i>${insEscape(item.timeControl)}</span>` : ''}
+                          ${item.date ? `<span>• ${insEscape(item.date)}</span>` : ''}
                         </div>
                       </div>
                     </div>
@@ -732,8 +688,8 @@ export class ReviewDashboard {
     const userColor = this.game.userColor || 'w';
     const isWhiteUser = userColor === 'w';
 
-    const whiteName = this.game.white || 'White';
-    const blackName = this.game.black || 'Black';
+    const whiteName = insEscape(this.game.white || 'White');
+    const blackName = insEscape(this.game.black || 'Black');
     const whiteElo = this.game.whiteElo || 1500;
     const blackElo = this.game.blackElo || 1500;
 

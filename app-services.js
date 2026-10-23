@@ -45,13 +45,6 @@ class SoundService {
     return this.isMuted;
   }
 
-  setMuted(muted) {
-    this.isMuted = !!muted;
-    try {
-      localStorage.setItem('chess_iq_muted', String(this.isMuted));
-    } catch {}
-  }
-
   getContext() {
     if (typeof window === 'undefined' || this.isMuted) return null;
     if (!this.ctx) {
@@ -708,7 +701,26 @@ var PST_MG_KING = [
 ];
 
 /* --- src/services/engine.js --- */
-var FEN_EVAL_CACHE = /* @__PURE__ */ new Map();
+const MAX_FEN_CACHE_SIZE = 4000;
+const PST_BY_TYPE = {
+  p: PST_MG_PAWN,
+  n: PST_MG_KNIGHT,
+  b: PST_MG_BISHOP,
+  r: PST_MG_ROOK,
+  q: PST_MG_QUEEN,
+  k: PST_MG_KING
+};
+
+var FEN_EVAL_CACHE = new Map();
+
+function setFenCache(key, value) {
+  if (FEN_EVAL_CACHE.size >= MAX_FEN_CACHE_SIZE && !FEN_EVAL_CACHE.has(key)) {
+    const oldestKey = FEN_EVAL_CACHE.keys().next().value;
+    if (oldestKey !== undefined) FEN_EVAL_CACHE.delete(oldestKey);
+  }
+  FEN_EVAL_CACHE.set(key, value);
+}
+
 function cpToWinProb(cp, mate) {
   if (mate !== void 0 && mate !== null) {
     if (mate > 0) return 1.0;
@@ -717,11 +729,13 @@ function cpToWinProb(cp, mate) {
   }
   return 1 / (1 + Math.exp(-0.00368208 * cp));
 }
+
 function calculateMoveAccuracy(winProbLoss) {
   if (winProbLoss <= 0.001) return 100;
   const acc = 103.1668 * Math.exp(-4.354 * winProbLoss) - 3.1669;
   return Math.min(100, Math.max(0, Math.round(acc * 10) / 10));
 }
+
 function countTotalPieces(chess) {
   let count = 0;
   const board = chess.board();
@@ -732,6 +746,21 @@ function countTotalPieces(chess) {
   }
   return count;
 }
+
+function sumBoardMaterial(chess, color) {
+  let total = 0;
+  const board = chess.board();
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (p && p.color === color && p.type !== "k") {
+        total += PIECE_VALUES[p.type] || 0;
+      }
+    }
+  }
+  return total;
+}
+
 function countMajorMinorPieces(chess) {
   const board = chess.board();
   let total = 0;
@@ -746,31 +775,30 @@ function countMajorMinorPieces(chess) {
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const p = board[r][c];
-      if (!p) continue;
-      if (p.type !== "p" && p.type !== "k") {
-        total++;
-        if (p.color === "w") {
-          if (p.type === "q") whiteQueens++;
-          if (p.type === "r") whiteRooks++;
-          if (p.type === "b" || p.type === "n") whiteMinors++;
-          if (r === 7) whiteBackRank++;
-        } else {
-          if (p.type === "q") blackQueens++;
-          if (p.type === "r") blackRooks++;
-          if (p.type === "b" || p.type === "n") blackMinors++;
-          if (r === 0) blackBackRank++;
-        }
+      if (!p || p.type === "p" || p.type === "k") continue;
+      total++;
+      if (p.color === "w") {
+        if (p.type === "q") whiteQueens++;
+        else if (p.type === "r") whiteRooks++;
+        else if (p.type === "b" || p.type === "n") whiteMinors++;
+        if (r === 7) whiteBackRank++;
+      } else {
+        if (p.type === "q") blackQueens++;
+        else if (p.type === "r") blackRooks++;
+        else if (p.type === "b" || p.type === "n") blackMinors++;
+        if (r === 0) blackBackRank++;
       }
     }
   }
   return { total, whiteBackRank, blackBackRank, whiteQueens, blackQueens, whiteRooks, blackRooks, whiteMinors, blackMinors };
 }
-function detectPhase(ply, chess, moveSans, middlegameStartPly, endgameStartPly) {
+
+function detectPhase(ply, chess, moveSansOrIsBook, middlegameStartPly, endgameStartPly) {
   if (endgameStartPly !== null && ply >= endgameStartPly) {
     return { phase: "endgame", newMiddlegameStart: middlegameStartPly, newEndgameStart: endgameStartPly };
   }
   const mm = countMajorMinorPieces(chess);
-  const isEndgame = mm.total <= 6 || mm.whiteQueens === 0 && mm.blackQueens === 0 && mm.whiteRooks <= 1 && mm.blackRooks <= 1 && mm.whiteMinors <= 1 && mm.blackMinors <= 1;
+  const isEndgame = mm.total <= 6 || (mm.whiteQueens === 0 && mm.blackQueens === 0 && mm.whiteRooks <= 1 && mm.blackRooks <= 1 && mm.whiteMinors <= 1 && mm.blackMinors <= 1);
   if (isEndgame) {
     return {
       phase: "endgame",
@@ -781,22 +809,45 @@ function detectPhase(ply, chess, moveSans, middlegameStartPly, endgameStartPly) 
   if (middlegameStartPly !== null && ply >= middlegameStartPly) {
     return { phase: "middlegame", newMiddlegameStart: middlegameStartPly, newEndgameStart: null };
   }
-  const inBook = isBookMove(moveSans, ply - 1);
+  const inBook = typeof moveSansOrIsBook === "boolean" ? moveSansOrIsBook : isBookMove(moveSansOrIsBook, ply - 1);
   const fullMoves = Math.floor((ply - 1) / 2) + 1;
-  const isMiddlegame = !inBook && fullMoves > 10 || mm.total < 10 || mm.whiteBackRank + mm.blackBackRank < 4;
+  const isMiddlegame = (!inBook && fullMoves > 10) || mm.total < 10 || mm.whiteBackRank + mm.blackBackRank < 4;
   if (isMiddlegame) {
     return { phase: "middlegame", newMiddlegameStart: ply, newEndgameStart: null };
   }
   return { phase: "opening", newMiddlegameStart: null, newEndgameStart: null };
 }
+
 function isChessGameOver(c) {
   return typeof c.isGameOver === 'function' ? c.isGameOver() : (typeof c.game_over === 'function' ? c.game_over() : false);
 }
+
 function isChessCheckmate(c) {
   return typeof c.isCheckmate === 'function' ? c.isCheckmate() : (typeof c.in_checkmate === 'function' ? c.in_checkmate() : false);
 }
+
 function isChessInCheck(c) {
   return typeof c.inCheck === 'function' ? c.inCheck() : (typeof c.in_check === 'function' ? c.in_check() : false);
+}
+
+function evaluateBoardScore(chess) {
+  let score = 0;
+  const board = chess.board();
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (!piece) continue;
+      const baseVal = PIECE_VALUES[piece.type] || 0;
+      const pst = PST_BY_TYPE[piece.type];
+      const pstVal = pst ? (piece.color === "w" ? pst[r * 8 + c] : pst[(7 - r) * 8 + c]) : 0;
+      if (piece.color === "w") {
+        score += baseVal + pstVal;
+      } else {
+        score -= baseVal + pstVal;
+      }
+    }
+  }
+  return score;
 }
 
 function evaluatePositionLocally(fen) {
@@ -807,50 +858,11 @@ function evaluatePositionLocally(fen) {
     }
     return { cp: 0, mate: null };
   }
-  let material = 0;
-  let positional = 0;
-  const board = chess.board();
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const piece = board[r][c];
-      if (!piece) continue;
-      const baseVal = PIECE_VALUES[piece.type];
-      const squareIdx = r * 8 + c;
-      const flippedIdx = (7 - r) * 8 + c;
-      let pstVal = 0;
-      switch (piece.type) {
-        case "p":
-          pstVal = piece.color === "w" ? PST_MG_PAWN[squareIdx] : PST_MG_PAWN[flippedIdx];
-          break;
-        case "n":
-          pstVal = piece.color === "w" ? PST_MG_KNIGHT[squareIdx] : PST_MG_KNIGHT[flippedIdx];
-          break;
-        case "b":
-          pstVal = piece.color === "w" ? PST_MG_BISHOP[squareIdx] : PST_MG_BISHOP[flippedIdx];
-          break;
-        case "r":
-          pstVal = piece.color === "w" ? PST_MG_ROOK[squareIdx] : PST_MG_ROOK[flippedIdx];
-          break;
-        case "q":
-          pstVal = piece.color === "w" ? PST_MG_QUEEN[squareIdx] : PST_MG_QUEEN[flippedIdx];
-          break;
-        case "k":
-          pstVal = piece.color === "w" ? PST_MG_KING[squareIdx] : PST_MG_KING[flippedIdx];
-          break;
-      }
-      if (piece.color === "w") {
-        material += baseVal;
-        positional += pstVal;
-      } else {
-        material -= baseVal;
-        positional -= pstVal;
-      }
-    }
-  }
   const currentTurn = chess.turn();
   const mobility = (currentTurn === "w" ? 1 : -1) * (chess.moves().length * 2.5);
-  return { cp: material + positional + Math.round(mobility), mate: null };
+  return { cp: evaluateBoardScore(chess) + Math.round(mobility), mate: null };
 }
+
 function scoreMoveForOrdering(move) {
   if (move.captured) {
     const victimVal = PIECE_VALUES[move.captured] || 100;
@@ -865,8 +877,9 @@ function scoreMoveForOrdering(move) {
   }
   return 0;
 }
+
 function quiescence(chess, alpha, beta, qDepth = 0) {
-  const standPat = evaluatePositionLocally(chess.fen()).cp;
+  const standPat = evaluateBoardScore(chess);
   const isWhite = chess.turn() === "w";
   if (qDepth >= 4) return standPat;
   if (isWhite) {
@@ -892,8 +905,9 @@ function quiescence(chess, alpha, beta, qDepth = 0) {
   }
   return isWhite ? alpha : beta;
 }
+
 function alphaBeta(chess, depth, alpha, beta, pvArray) {
-  if (depth === 0 || isChessGameOver(chess)) {
+  if (depth === 0) {
     return quiescence(chess, alpha, beta);
   }
   const moves = chess.moves({ verbose: true });
@@ -903,10 +917,12 @@ function alphaBeta(chess, depth, alpha, beta, pvArray) {
     }
     return 0;
   }
+  if (isChessGameOver(chess)) {
+    return 0;
+  }
   moves.sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a));
   const isWhite = chess.turn() === "w";
   let bestScore = isWhite ? -Infinity : Infinity;
-  let childPv = [];
   for (const move of moves) {
     chess.move(move);
     const localChildPv = [];
@@ -934,6 +950,7 @@ function alphaBeta(chess, depth, alpha, beta, pvArray) {
   }
   return bestScore;
 }
+
 function findBestMoveLocal(fen, depth = 3) {
   const chess = new Chess(fen);
   const moves = chess.moves({ verbose: true });
@@ -1006,35 +1023,7 @@ function findBestMoveLocal(fen, depth = 3) {
     pv: finalPv.length > 0 ? finalPv : [bestMoveUci]
   };
 }
-async function fetchLichessCloudEval(fen) {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1e3);
-    const encodedFen = encodeURIComponent(fen);
-    const res = await fetch(`https://lichess.org/api/cloud-eval?fen=${encodedFen}&multiPv=2`, {
-      signal: controller.signal,
-      headers: { Accept: "application/json" }
-    });
-    clearTimeout(timeoutId);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.pvs && data.pvs.length > 0) {
-        const top = data.pvs[0];
-        const second = data.pvs[1];
-        const pvStr = top.moves ? top.moves.split(" ") : [];
-        return {
-          scoreCp: top.cp ?? (top.mate ? top.mate > 0 ? 3e3 : -3e3 : 0),
-          mate: top.mate ?? null,
-          pv: pvStr,
-          multiPv2ScoreCp: second ? second.cp ?? void 0 : void 0,
-          source: "cloud"
-        };
-      }
-    }
-  } catch {
-  }
-  return null;
-}
+
 async function fetchSyzygyTablebase(fen) {
   try {
     const controller = new AbortController();
@@ -1070,6 +1059,7 @@ async function fetchSyzygyTablebase(fen) {
   }
   return null;
 }
+
 function normalizeFenKey(fen) {
   if (!fen) return "";
   const parts = fen.trim().split(/\s+/);
@@ -1117,7 +1107,7 @@ async function evaluateFenHybrid(fen, isDeep = false) {
       tablebase.bestMoveUci = tablebase.bestMoveUci || (tablebase.pv && tablebase.pv[0]) || "";
       tablebase.secondBestMoveUci = tablebase.secondBestMoveUci || findBestMoveLocal(fen, 1).secondBestMoveUci;
       const whiteResult = toWhitePerspective(tablebase, fen);
-      FEN_EVAL_CACHE.set(cacheKey, whiteResult);
+      setFenCache(cacheKey, whiteResult);
       return whiteResult;
     }
   }
@@ -1135,12 +1125,12 @@ async function evaluateFenHybrid(fen, isDeep = false) {
       multiPv2ScoreCp: sfEval.multiPv2ScoreCp ?? fallback?.multiPv2Cp,
       source: "stockfish"
     }, fen);
-    FEN_EVAL_CACHE.set(cacheKey, sfResult);
+    setFenCache(cacheKey, sfResult);
     return sfResult;
   }
 
   const localResult = localEvaluation(fen, profile.depth <= 8 ? 2 : 3);
-  FEN_EVAL_CACHE.set(cacheKey, localResult);
+  setFenCache(cacheKey, localResult);
   return localResult;
 }
 
@@ -1178,6 +1168,12 @@ function isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci = 
   try {
     const cBefore = new Chess(fenBefore);
     const cAfter = new Chess(fenAfter);
+    const moverValBefore = sumBoardMaterial(cBefore, moverColor);
+    const moverValAfter = sumBoardMaterial(cAfter, moverColor);
+
+    if (moverValAfter <= moverValBefore - 200) {
+      return true;
+    }
 
     if (opponentBestUci && opponentBestUci.length >= 4) {
       const from = opponentBestUci.slice(0, 2);
@@ -1185,29 +1181,14 @@ function isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci = 
       const promotion = opponentBestUci.length > 4 ? opponentBestUci[4] : void 0;
       const oppMove = cAfter.move({ from, to, promotion });
       if (oppMove && oppMove.captured) {
-        let moverValBefore = 0;
-        let moverValAfterOpp = 0;
-        cBefore.board().flat().forEach((p) => {
-          if (p && p.color === moverColor && p.type !== "k") moverValBefore += PIECE_VALUES[p.type];
-        });
-        cAfter.board().flat().forEach((p) => {
-          if (p && p.color === moverColor && p.type !== "k") moverValAfterOpp += PIECE_VALUES[p.type];
-        });
+        const moverValAfterOpp = sumBoardMaterial(cAfter, moverColor);
         if (moverValAfterOpp <= moverValBefore - 200) {
           return true;
         }
       }
     }
 
-    let moverValBefore = 0;
-    let moverValAfter = 0;
-    cBefore.board().flat().forEach((p) => {
-      if (p && p.color === moverColor && p.type !== "k") moverValBefore += PIECE_VALUES[p.type];
-    });
-    cAfter.board().flat().forEach((p) => {
-      if (p && p.color === moverColor && p.type !== "k") moverValAfter += PIECE_VALUES[p.type];
-    });
-    return moverValAfter <= moverValBefore - 200;
+    return false;
   } catch {
     return false;
   }
@@ -1271,8 +1252,6 @@ function calculatePerformanceElo(baseElo, accuracy, movesCount, result = "*", us
   const estimated = Math.round(anchor + clampedDelta + resultBonus);
   return Math.min(3100, Math.max(400, estimated));
 }
-
-var calculatePhaseElo = calculatePerformanceElo;
 
 /* --- src/services/engineRefutations.js --- */
 async function detectThreat(fen) {
@@ -1401,6 +1380,22 @@ async function getDeepContinuation(fen, maxPlies = 10) {
   return steps;
 }
 
+const PIECE_PAWN_UNITS = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+
+function getMaterialDiffInPawns(chess, moverColor) {
+  let diff = 0;
+  const board = chess.board();
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (!p) continue;
+      const val = PIECE_PAWN_UNITS[p.type] || 0;
+      diff += p.color === moverColor ? val : -val;
+    }
+  }
+  return diff;
+}
+
 function summarizePunishment(fenStart, fenEnd, moverColor) {
   try {
     const cEnd = new Chess(fenEnd);
@@ -1409,26 +1404,7 @@ function summarizePunishment(fenStart, fenEnd, moverColor) {
     }
 
     const cStart = new Chess(fenStart);
-    const pieceVal = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
-    let moverStart = 0;
-    let oppStart = 0;
-    cStart.board().flat().forEach((p) => {
-      if (p) {
-        if (p.color === moverColor) moverStart += (pieceVal[p.type] || 0);
-        else oppStart += (pieceVal[p.type] || 0);
-      }
-    });
-
-    let moverEnd = 0;
-    let oppEnd = 0;
-    cEnd.board().flat().forEach((p) => {
-      if (p) {
-        if (p.color === moverColor) moverEnd += (pieceVal[p.type] || 0);
-        else oppEnd += (pieceVal[p.type] || 0);
-      }
-    });
-
-    const netLoss = (moverStart - oppStart) - (moverEnd - oppEnd);
+    const netLoss = getMaterialDiffInPawns(cStart, moverColor) - getMaterialDiffInPawns(cEnd, moverColor);
     if (netLoss >= 9) return `Opponent wins your Queen (+${netLoss})`;
     if (netLoss >= 5) return `Opponent wins a Rook (+${netLoss})`;
     if (netLoss >= 3) return `Opponent wins a minor piece (+${netLoss})`;
@@ -1756,12 +1732,15 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
   let endgameStartPly = null;
   let lastWhiteClock = null;
   let lastBlackClock = null;
+  let bookCount = 0;
   for (let i = 0; i < moveHistory.length; i++) {
     const moveObj = moveHistory[i];
     const fenBefore = replayChess.fen();
     const side = replayChess.turn();
     const plyNum = i + 1;
-    const phaseInfo = detectPhase(plyNum, replayChess, moveSans, middlegameStartPly, endgameStartPly);
+    const isBook = isBookMove(moveSans, i);
+    if (isBook) bookCount++;
+    const phaseInfo = detectPhase(plyNum, replayChess, isBook, middlegameStartPly, endgameStartPly);
     if (phaseInfo.newMiddlegameStart && !middlegameStartPly) middlegameStartPly = phaseInfo.newMiddlegameStart;
     if (phaseInfo.newEndgameStart && !endgameStartPly) endgameStartPly = phaseInfo.newEndgameStart;
     const rawClock = clocks[i] ?? null;
@@ -1776,7 +1755,6 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
       }
     }
     const isTimeTrouble = rawClock !== null && rawClock < 20;
-    const isBook = isBookMove(moveSans, i);
     replayChess.move(moveObj);
     const fenAfter = replayChess.fen();
     precomputed.push({
@@ -1808,7 +1786,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
     const nextIsEngineMove = idx + 1 < totalPlies && !precomputed[idx + 1].isBook;
     if (!item.isBook || nextIsEngineMove) fensToEvaluate.push(item.fenAfter);
   });
-  console.log(`[Analysis] Collected ${fensToEvaluate.length} positions to evaluate (${precomputed.filter(p => p.isBook).length} book moves skipped)`);
+  console.log(`[Analysis] Collected ${fensToEvaluate.length} positions to evaluate (${bookCount} book moves skipped)`);
   await prefetchEvaluations(fensToEvaluate, isDeep, (done, total) => {
     if (onProgress) return onProgress(Math.round((done / total) * totalPlies), totalPlies);
   });
@@ -1816,6 +1794,22 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
   let prevEngine = precomputed.length > 0
     ? await evaluateFenHybrid(precomputed[0].fenBefore, isDeep)
     : { scoreCp: 20, mate: null, pv: [] };
+
+  const sanHelperChess = new Chess();
+  const uciToSanOnLoadedBoard = (uci) => {
+    if (!uci || uci.length < 4) return "";
+    try {
+      const from = uci.slice(0, 2);
+      const to = uci.slice(2, 4);
+      const promotion = uci.length > 4 ? uci[4] : void 0;
+      const m = sanHelperChess.move({ from, to, promotion });
+      if (m) {
+        sanHelperChess.undo();
+        return m.san;
+      }
+    } catch {}
+    return uci;
+  };
 
   for (let i = 0; i < totalPlies; i++) {
     const item = precomputed[i];
@@ -1873,31 +1867,19 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
       const winProbLoss = Math.max(0, moverWinProbBefore - moverWinProbAfter);
       const accuracy = calculateMoveAccuracy(winProbLoss);
       const bestMoveUci = (engineBefore.pv && engineBefore.pv[0]) || engineBefore.bestMoveUci || "";
+      const secondBestMoveUci = engineBefore.secondBestMoveUci || "";
       let bestMoveSan = "";
-      if (bestMoveUci) {
+      let secondBestMoveSan = "";
+      if (bestMoveUci || (secondBestMoveUci && secondBestMoveUci !== bestMoveUci)) {
         try {
-          const testChess = new Chess(item.fenBefore);
-          const from = bestMoveUci.slice(0, 2);
-          const to = bestMoveUci.slice(2, 4);
-          const promotion = bestMoveUci.length > 4 ? bestMoveUci[4] : void 0;
-          const m = testChess.move({ from, to, promotion });
-          if (m) bestMoveSan = m.san;
+          sanHelperChess.load(item.fenBefore);
+          if (bestMoveUci) bestMoveSan = uciToSanOnLoadedBoard(bestMoveUci);
+          if (secondBestMoveUci && secondBestMoveUci !== bestMoveUci) {
+            secondBestMoveSan = uciToSanOnLoadedBoard(secondBestMoveUci);
+          }
         } catch {
           bestMoveSan = bestMoveUci;
-        }
-      }
-      const secondBestMoveUci = engineBefore.secondBestMoveUci || "";
-      let secondBestMoveSan = "";
-      if (secondBestMoveUci && secondBestMoveUci !== bestMoveUci) {
-        try {
-          const testChess2 = new Chess(item.fenBefore);
-          const from = secondBestMoveUci.slice(0, 2);
-          const to = secondBestMoveUci.slice(2, 4);
-          const promotion = secondBestMoveUci.length > 4 ? secondBestMoveUci[4] : void 0;
-          const m2 = testChess2.move({ from, to, promotion });
-          if (m2) secondBestMoveSan = m2.san;
-        } catch {
-          secondBestMoveSan = secondBestMoveUci;
+          secondBestMoveSan = secondBestMoveUci !== bestMoveUci ? secondBestMoveUci : "";
         }
       }
       const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
@@ -2003,18 +1985,6 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
   let oppMovesCount = 0;
   let impulsiveBlunders = 0;
   let timeTroubleBlunders = 0;
-  const userPhaseLosses = {
-    opening: [],
-    middlegame: [],
-    endgame: [],
-    overall: []
-  };
-  const oppPhaseLosses = {
-    opening: [],
-    middlegame: [],
-    endgame: [],
-    overall: []
-  };
   const userPhaseAcc = {
     opening: [],
     middlegame: [],
@@ -2027,9 +1997,6 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
   };
   plies.forEach((p) => {
     if (!p) return;
-    const cpLoss = (p.classification === 'best' || p.classification === 'book')
-      ? 0
-      : Math.min(350, Math.round((p.winProbLoss || 0) * 500));
     if (p.color === userColor) {
       userCounts[p.classification] = (userCounts[p.classification] || 0) + 1;
       userAccuracySum += p.accuracy;
@@ -2038,22 +2005,17 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
       if (p.isTimeTrouble && (p.classification === "blunder" || p.classification === "mistake")) {
         timeTroubleBlunders++;
       }
-      userPhaseLosses[p.phase].push(cpLoss);
-      userPhaseLosses.overall.push(cpLoss);
       if (userPhaseAcc[p.phase]) userPhaseAcc[p.phase].push(p.accuracy);
     } else {
       opponentCounts[p.classification] = (opponentCounts[p.classification] || 0) + 1;
       oppAccuracySum += p.accuracy;
       oppMovesCount++;
-      oppPhaseLosses[p.phase].push(cpLoss);
-      oppPhaseLosses.overall.push(cpLoss);
       if (oppPhaseAcc[p.phase]) oppPhaseAcc[p.phase].push(p.accuracy);
     }
   });
   const userAccuracy = userMovesCount > 0 ? Math.round(userAccuracySum / userMovesCount * 10) / 10 : 85;
   const opponentAccuracy = oppMovesCount > 0 ? Math.round(oppAccuracySum / oppMovesCount * 10) / 10 : 85;
   const overallAccuracy = Math.round((userAccuracy + opponentAccuracy) / 2 * 10) / 10;
-  const calcAcpl = (arr) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 25;
   const calcAvgAcc = (arr) => arr.length > 0 ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10 : null;
 
   const userPhaseAccuracy = {
@@ -2069,19 +2031,6 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
 
   const oppColor = userColor === "w" ? "b" : "w";
   const oppBaseElo = userColor === "w" ? blackElo : whiteElo;
-
-  const userPhaseAcpl = {
-    opening: calcAcpl(userPhaseLosses.opening),
-    middlegame: calcAcpl(userPhaseLosses.middlegame),
-    endgame: calcAcpl(userPhaseLosses.endgame),
-    overall: calcAcpl(userPhaseLosses.overall)
-  };
-  const oppPhaseAcpl = {
-    opening: calcAcpl(oppPhaseLosses.opening),
-    middlegame: calcAcpl(oppPhaseLosses.middlegame),
-    endgame: calcAcpl(oppPhaseLosses.endgame),
-    overall: calcAcpl(oppPhaseLosses.overall)
-  };
 
   const overallGameElo = calculatePerformanceElo(userBaseElo, userAccuracy, userMovesCount, result, userColor) ?? userBaseElo;
   const oppOverallGameElo = calculatePerformanceElo(oppBaseElo, opponentAccuracy, oppMovesCount, result, oppColor) ?? oppBaseElo;
@@ -2109,27 +2058,13 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
     ecoName,
     initialFen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
     plies,
-    accuracy: userAccuracy,
     overallAccuracy,
     userAccuracy,
     opponentAccuracy,
     userPhaseAccuracy,
     opponentPhaseAccuracy,
     overallGameElo,
-    userGameElo: overallGameElo,
     oppGameElo: oppOverallGameElo,
-    opponentGameElo: oppOverallGameElo,
-    openingElo,
-    middlegameElo,
-    endgameElo,
-    oppOpeningElo,
-    oppMiddlegameElo,
-    oppEndgameElo,
-    phaseElos: {
-      opening: openingElo,
-      middlegame: middlegameElo,
-      endgame: endgameElo
-    },
     userPhaseElos: {
       opening: openingElo,
       middlegame: middlegameElo,
@@ -2142,12 +2077,10 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
     },
     middlegameStartPly: middlegameStartPly ?? 20,
     endgameStartPly: endgameStartPly ?? 50,
-    counts: userCounts,
     userCounts,
     opponentCounts,
     impulsiveBlunders,
-    timeTroubleBlunders,
-    phaseAcpl: userPhaseAcpl
+    timeTroubleBlunders
   };
   const totalDuration = Date.now() - analysisStart;
   console.log(`[Analysis] Finished in ${totalDuration}ms: User accuracy ${userAccuracy}%, Opponent ${opponentAccuracy}%, Performance ${overallGameElo} Elo`);
@@ -2567,10 +2500,6 @@ class BackgroundAnalysisQueue {
     });
   }
 
-  enqueueGames(games, username = '') {
-    this.setQueue(games, username);
-  }
-
   startIdleProcessing() {
     this.isPaused = false;
     this.scheduleNext(1000);
@@ -2586,10 +2515,6 @@ class BackgroundAnalysisQueue {
       window.cancelIdleCallback(this.idleHandle);
       this.idleHandle = null;
     }
-  }
-
-  resume() {
-    this.startIdleProcessing();
   }
 
   scheduleNext(delayMs = 1500) {
@@ -2652,12 +2577,6 @@ class BackgroundAnalysisQueue {
         this.scheduleNext(2000);
       }
     }
-  }
-
-  clear() {
-    this.queue = [];
-    this.pause();
-    this.isAnalyzing = false;
   }
 }
 

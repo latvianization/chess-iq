@@ -150,16 +150,16 @@ export function renderAdvantageChart(dashboard) {
 
     canvas.addEventListener('click', (e) => handleInteraction(e.clientX));
 
-    let isDragging = false;
+    const onWindowMouseMove = (e) => handleInteraction(e.clientX);
+    const onWindowMouseUp = () => {
+      window.removeEventListener('mousemove', onWindowMouseMove);
+      window.removeEventListener('mouseup', onWindowMouseUp);
+    };
+
     canvas.addEventListener('mousedown', (e) => {
-      isDragging = true;
       handleInteraction(e.clientX);
-    });
-    window.addEventListener('mousemove', (e) => {
-      if (isDragging) handleInteraction(e.clientX);
-    });
-    window.addEventListener('mouseup', () => {
-      isDragging = false;
+      window.addEventListener('mousemove', onWindowMouseMove);
+      window.addEventListener('mouseup', onWindowMouseUp);
     });
 
     canvas.addEventListener('mousemove', (e) => {

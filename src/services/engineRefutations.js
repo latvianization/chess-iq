@@ -128,6 +128,22 @@ export async function getDeepContinuation(fen, maxPlies = 10) {
   return steps;
 }
 
+const PIECE_PAWN_UNITS = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+
+function getMaterialDiffInPawns(chess, moverColor) {
+  let diff = 0;
+  const board = chess.board();
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (!p) continue;
+      const val = PIECE_PAWN_UNITS[p.type] || 0;
+      diff += p.color === moverColor ? val : -val;
+    }
+  }
+  return diff;
+}
+
 export function summarizePunishment(fenStart, fenEnd, moverColor) {
   try {
     const cEnd = new Chess(fenEnd);
@@ -136,26 +152,7 @@ export function summarizePunishment(fenStart, fenEnd, moverColor) {
     }
 
     const cStart = new Chess(fenStart);
-    const pieceVal = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
-    let moverStart = 0;
-    let oppStart = 0;
-    cStart.board().flat().forEach((p) => {
-      if (p) {
-        if (p.color === moverColor) moverStart += (pieceVal[p.type] || 0);
-        else oppStart += (pieceVal[p.type] || 0);
-      }
-    });
-
-    let moverEnd = 0;
-    let oppEnd = 0;
-    cEnd.board().flat().forEach((p) => {
-      if (p) {
-        if (p.color === moverColor) moverEnd += (pieceVal[p.type] || 0);
-        else oppEnd += (pieceVal[p.type] || 0);
-      }
-    });
-
-    const netLoss = (moverStart - oppStart) - (moverEnd - oppEnd);
+    const netLoss = getMaterialDiffInPawns(cStart, moverColor) - getMaterialDiffInPawns(cEnd, moverColor);
     if (netLoss >= 9) return `Opponent wins your Queen (+${netLoss})`;
     if (netLoss >= 5) return `Opponent wins a Rook (+${netLoss})`;
     if (netLoss >= 3) return `Opponent wins a minor piece (+${netLoss})`;

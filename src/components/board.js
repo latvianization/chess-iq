@@ -8,9 +8,12 @@
 const Chess = window.Chess;
 import { INLINE_PIECE_DATA_URLS } from './pieceSvgs.js';
 import { getComicBadge, COMIC_DICTIONARY } from '../services/comicBadges.js';
+import { isChessInCheck } from '../services/engine.js';
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
+const FILES_REV = [...FILES].reverse();
+const RANKS_REV = [...RANKS].reverse();
 
 const THEMES = {
   green: { light: '#ebecd0', dark: '#739552' },
@@ -179,10 +182,15 @@ export class Chessboard {
 
     const left = document.createElement('div');
     left.className = 'd-flex align-items-center gap-1.5 min-w-0';
-    left.innerHTML = `
-      <span style="font-size: 13px; line-height: 1;">${isWhite ? '⚪' : '⚫'}</span>
-      <span class="text-truncate fw-bold" style="max-width: 160px;">${name}</span>
-    `;
+    const dotSpan = document.createElement('span');
+    dotSpan.style.cssText = 'font-size: 13px; line-height: 1;';
+    dotSpan.textContent = isWhite ? '⚪' : '⚫';
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'text-truncate fw-bold';
+    nameSpan.style.maxWidth = '160px';
+    nameSpan.textContent = name;
+    left.appendChild(dotSpan);
+    left.appendChild(nameSpan);
 
     const right = document.createElement('div');
     right.className = 'd-flex align-items-center';
@@ -216,8 +224,9 @@ export class Chessboard {
     this.container.innerHTML = '';
 
     const board = this.parseFen(this.fen);
-    const files = this.orientation === 'w' ? FILES : [...FILES].reverse();
-    const ranks = this.orientation === 'w' ? RANKS : [...RANKS].reverse();
+    const isWhiteOrientation = this.orientation === 'w';
+    const files = isWhiteOrientation ? FILES : FILES_REV;
+    const ranks = isWhiteOrientation ? RANKS : RANKS_REV;
     const themeColors = THEMES[this.theme] || THEMES.green;
     const pendingAnimations = [];
 
@@ -225,18 +234,16 @@ export class Chessboard {
     try {
       if (Chess) {
         const c = new Chess(this.fen);
-        if (typeof c.in_check === 'function' && c.in_check()) {
-          const turn = c.turn();
-          const kingChar = turn === 'w' ? 'K' : 'k';
-          ranks.forEach((r) => {
-            files.forEach((f) => {
-              const origR = RANKS.indexOf(r);
-              const origF = FILES.indexOf(f);
-              if (board[origR] && board[origR][origF] === kingChar) {
-                checkSquare = `${f}${r}`;
+        if (isChessInCheck(c)) {
+          const kingChar = c.turn() === 'w' ? 'K' : 'k';
+          for (let r = 0; r < 8 && !checkSquare; r++) {
+            for (let f = 0; f < 8; f++) {
+              if (board[r] && board[r][f] === kingChar) {
+                checkSquare = `${FILES[f]}${RANKS[r]}`;
+                break;
               }
-            });
-          });
+            }
+          }
         }
       }
     } catch {}
@@ -302,8 +309,8 @@ export class Chessboard {
           sqDiv.appendChild(rankLabel);
         }
 
-        const origR = RANKS.indexOf(rank);
-        const origF = FILES.indexOf(file);
+        const origR = isWhiteOrientation ? rIdx : 7 - rIdx;
+        const origF = isWhiteOrientation ? fIdx : 7 - fIdx;
         const pieceChar = board[origR] ? board[origR][origF] : null;
 
         if (pieceChar) {
@@ -521,14 +528,12 @@ export class Chessboard {
   }
 
   drawArrow(svg, fromSq, toSq, color, dashed = false, idPrefix = 'arrow', strokeWidth = 3.5) {
+    const files = this.orientation === 'w' ? FILES : FILES_REV;
+    const ranks = this.orientation === 'w' ? RANKS : RANKS_REV;
     const getCoords = (sq) => {
       if (!sq || sq.length < 2) return null;
-      const f = sq[0];
-      const r = sq[1];
-      const files = this.orientation === 'w' ? FILES : [...FILES].reverse();
-      const ranks = this.orientation === 'w' ? RANKS : [...RANKS].reverse();
-      const x = files.indexOf(f);
-      const y = ranks.indexOf(r);
+      const x = files.indexOf(sq[0]);
+      const y = ranks.indexOf(sq[1]);
       if (x === -1 || y === -1) return null;
       return { x, y };
     };

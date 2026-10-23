@@ -6,10 +6,16 @@
 
 const Chess = window.Chess;
 const confetti = window.confetti || function() {};
-import { BOTS_33, TIER_CONFIG } from '../data/botsData.js';
+import { BOTS_33 } from '../data/botsData.js';
 import { Chessboard } from './board.js';
 import { soundService } from '../services/sound.js';
-import { evaluatePositionLocally, findBestMoveLocal } from '../services/engine.js';
+import {
+  evaluatePositionLocally,
+  findBestMoveLocal,
+  isChessCheckmate,
+  isChessGameOver,
+  isChessInCheck
+} from '../services/engine.js';
 import { closeGameOverModal, showGameOverModal, getBotRecords, recordBotResult } from './botGameOverModal.js';
 
 export class BotArena {
@@ -119,7 +125,7 @@ export class BotArena {
         if (canSpeak && Math.random() < 0.20) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
         }
-      } else if (typeof this.chess.inCheck === 'function' ? this.chess.inCheck() : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false)) {
+      } else if (isChessInCheck(this.chess)) {
         soundService.playCheck();
         if (canSpeak && Math.random() < 0.15) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
@@ -144,10 +150,7 @@ export class BotArena {
     const thinkTime = Math.min(1200, Math.max(350, 200 + (this.selectedBot.elo - 400) * 0.5));
 
     setTimeout(() => {
-      const isOver = typeof this.chess.isGameOver === 'function'
-        ? this.chess.isGameOver()
-        : (typeof this.chess.game_over === 'function' ? this.chess.game_over() : false);
-      if (isOver) return;
+      if (isChessGameOver(this.chess)) return;
 
       const legalMoves = this.chess.moves({ verbose: true });
       if (legalMoves.length === 0) return;
@@ -179,9 +182,7 @@ export class BotArena {
         if (move.captured) soundService.playCapture();
         else soundService.playMove();
 
-        const isInCheck = typeof this.chess.inCheck === 'function'
-          ? this.chess.inCheck()
-          : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false);
+        const isInCheck = isChessInCheck(this.chess);
 
         const plyCount = this.chess.history().length;
         const canSpeak = plyCount - this.lastSpeechPly >= 4;
@@ -257,10 +258,7 @@ export class BotArena {
 
   checkGameOver() {
     let reason = '';
-    const isMate = typeof this.chess.isCheckmate === 'function'
-      ? this.chess.isCheckmate()
-      : (typeof this.chess.in_checkmate === 'function' ? this.chess.in_checkmate() : false);
-
+    const isMate = isChessCheckmate(this.chess);
     const isDraw = typeof this.chess.isDraw === 'function'
       ? this.chess.isDraw()
       : (typeof this.chess.in_draw === 'function' ? this.chess.in_draw() : false);

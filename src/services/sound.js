@@ -12,13 +12,6 @@ class SoundService {
     return this.isMuted;
   }
 
-  setMuted(muted) {
-    this.isMuted = !!muted;
-    try {
-      localStorage.setItem('chess_iq_muted', String(this.isMuted));
-    } catch {}
-  }
-
   getContext() {
     if (typeof window === 'undefined' || this.isMuted) return null;
     if (!this.ctx) {

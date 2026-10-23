@@ -41,6 +41,8 @@ if (Chess && Chess.prototype) {
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
+const FILES_REV = [...FILES].reverse();
+const RANKS_REV = [...RANKS].reverse();
 
 const THEMES = {
   green: { light: '#ebecd0', dark: '#739552' },
@@ -209,10 +211,15 @@ class Chessboard {
 
     const left = document.createElement('div');
     left.className = 'd-flex align-items-center gap-1.5 min-w-0';
-    left.innerHTML = `
-      <span style="font-size: 13px; line-height: 1;">${isWhite ? '⚪' : '⚫'}</span>
-      <span class="text-truncate fw-bold" style="max-width: 160px;">${name}</span>
-    `;
+    const dotSpan = document.createElement('span');
+    dotSpan.style.cssText = 'font-size: 13px; line-height: 1;';
+    dotSpan.textContent = isWhite ? '⚪' : '⚫';
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'text-truncate fw-bold';
+    nameSpan.style.maxWidth = '160px';
+    nameSpan.textContent = name;
+    left.appendChild(dotSpan);
+    left.appendChild(nameSpan);
 
     const right = document.createElement('div');
     right.className = 'd-flex align-items-center';
@@ -246,8 +253,9 @@ class Chessboard {
     this.container.innerHTML = '';
 
     const board = this.parseFen(this.fen);
-    const files = this.orientation === 'w' ? FILES : [...FILES].reverse();
-    const ranks = this.orientation === 'w' ? RANKS : [...RANKS].reverse();
+    const isWhiteOrientation = this.orientation === 'w';
+    const files = isWhiteOrientation ? FILES : FILES_REV;
+    const ranks = isWhiteOrientation ? RANKS : RANKS_REV;
     const themeColors = THEMES[this.theme] || THEMES.green;
     const pendingAnimations = [];
 
@@ -255,18 +263,16 @@ class Chessboard {
     try {
       if (Chess) {
         const c = new Chess(this.fen);
-        if (typeof c.in_check === 'function' && c.in_check()) {
-          const turn = c.turn();
-          const kingChar = turn === 'w' ? 'K' : 'k';
-          ranks.forEach((r) => {
-            files.forEach((f) => {
-              const origR = RANKS.indexOf(r);
-              const origF = FILES.indexOf(f);
-              if (board[origR] && board[origR][origF] === kingChar) {
-                checkSquare = `${f}${r}`;
+        if (isChessInCheck(c)) {
+          const kingChar = c.turn() === 'w' ? 'K' : 'k';
+          for (let r = 0; r < 8 && !checkSquare; r++) {
+            for (let f = 0; f < 8; f++) {
+              if (board[r] && board[r][f] === kingChar) {
+                checkSquare = `${FILES[f]}${RANKS[r]}`;
+                break;
               }
-            });
-          });
+            }
+          }
         }
       }
     } catch {}
@@ -332,8 +338,8 @@ class Chessboard {
           sqDiv.appendChild(rankLabel);
         }
 
-        const origR = RANKS.indexOf(rank);
-        const origF = FILES.indexOf(file);
+        const origR = isWhiteOrientation ? rIdx : 7 - rIdx;
+        const origF = isWhiteOrientation ? fIdx : 7 - fIdx;
         const pieceChar = board[origR] ? board[origR][origF] : null;
 
         if (pieceChar) {
@@ -551,14 +557,12 @@ class Chessboard {
   }
 
   drawArrow(svg, fromSq, toSq, color, dashed = false, idPrefix = 'arrow', strokeWidth = 3.5) {
+    const files = this.orientation === 'w' ? FILES : FILES_REV;
+    const ranks = this.orientation === 'w' ? RANKS : RANKS_REV;
     const getCoords = (sq) => {
       if (!sq || sq.length < 2) return null;
-      const f = sq[0];
-      const r = sq[1];
-      const files = this.orientation === 'w' ? FILES : [...FILES].reverse();
-      const ranks = this.orientation === 'w' ? RANKS : [...RANKS].reverse();
-      const x = files.indexOf(f);
-      const y = ranks.indexOf(r);
+      const x = files.indexOf(sq[0]);
+      const y = ranks.indexOf(sq[1]);
       if (x === -1 || y === -1) return null;
       return { x, y };
     };
@@ -653,15 +657,12 @@ function showGameOverModal(arena, reason = 'Game Completed') {
   const isWin = arena.gameResult === 'win';
   const isLoss = arena.gameResult === 'loss';
 
-  let resultBadgeClass = 'bg-secondary text-white';
   let resultTitle = 'DRAW';
   let resultIcon = '🤝';
   if (isWin) {
-    resultBadgeClass = 'bg-success text-white border border-light';
     resultTitle = 'VICTORY!';
     resultIcon = '🏆';
   } else if (isLoss) {
-    resultBadgeClass = 'bg-danger text-white border border-light';
     resultTitle = 'DEFEAT';
     resultIcon = '💀';
   }
@@ -874,7 +875,7 @@ class BotArena {
         if (canSpeak && Math.random() < 0.20) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
         }
-      } else if (typeof this.chess.inCheck === 'function' ? this.chess.inCheck() : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false)) {
+      } else if (isChessInCheck(this.chess)) {
         soundService.playCheck();
         if (canSpeak && Math.random() < 0.15) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
@@ -899,10 +900,7 @@ class BotArena {
     const thinkTime = Math.min(1200, Math.max(350, 200 + (this.selectedBot.elo - 400) * 0.5));
 
     setTimeout(() => {
-      const isOver = typeof this.chess.isGameOver === 'function'
-        ? this.chess.isGameOver()
-        : (typeof this.chess.game_over === 'function' ? this.chess.game_over() : false);
-      if (isOver) return;
+      if (isChessGameOver(this.chess)) return;
 
       const legalMoves = this.chess.moves({ verbose: true });
       if (legalMoves.length === 0) return;
@@ -934,9 +932,7 @@ class BotArena {
         if (move.captured) soundService.playCapture();
         else soundService.playMove();
 
-        const isInCheck = typeof this.chess.inCheck === 'function'
-          ? this.chess.inCheck()
-          : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false);
+        const isInCheck = isChessInCheck(this.chess);
 
         const plyCount = this.chess.history().length;
         const canSpeak = plyCount - this.lastSpeechPly >= 4;
@@ -1012,10 +1008,7 @@ class BotArena {
 
   checkGameOver() {
     let reason = '';
-    const isMate = typeof this.chess.isCheckmate === 'function'
-      ? this.chess.isCheckmate()
-      : (typeof this.chess.in_checkmate === 'function' ? this.chess.in_checkmate() : false);
-
+    const isMate = isChessCheckmate(this.chess);
     const isDraw = typeof this.chess.isDraw === 'function'
       ? this.chess.isDraw()
       : (typeof this.chess.in_draw === 'function' ? this.chess.in_draw() : false);
@@ -1443,16 +1436,16 @@ function renderAdvantageChart(dashboard) {
 
     canvas.addEventListener('click', (e) => handleInteraction(e.clientX));
 
-    let isDragging = false;
+    const onWindowMouseMove = (e) => handleInteraction(e.clientX);
+    const onWindowMouseUp = () => {
+      window.removeEventListener('mousemove', onWindowMouseMove);
+      window.removeEventListener('mouseup', onWindowMouseUp);
+    };
+
     canvas.addEventListener('mousedown', (e) => {
-      isDragging = true;
       handleInteraction(e.clientX);
-    });
-    window.addEventListener('mousemove', (e) => {
-      if (isDragging) handleInteraction(e.clientX);
-    });
-    window.addEventListener('mouseup', () => {
-      isDragging = false;
+      window.addEventListener('mousemove', onWindowMouseMove);
+      window.addEventListener('mouseup', onWindowMouseUp);
     });
 
     canvas.addEventListener('mousemove', (e) => {
@@ -1498,7 +1491,6 @@ function startRetryMistake(dashboard) {
 
   dashboard.isRetryingMistake = true;
   dashboard.retryHintActive = false;
-  dashboard.stopPvPlayback();
 
   const banner = dashboard.container.querySelector('#pv-banner-area');
   if (banner) {
@@ -2460,6 +2452,7 @@ async function openInsights({ platform, username, onSelectGame }) {
 
 
 
+
 class ImportModal {
   constructor(modalEl, options = {}) {
     this.modalEl = modalEl;
@@ -2806,15 +2799,15 @@ class ImportModal {
                         <div class="d-flex flex-column gap-1 flex-grow-1" style="min-width: 0; overflow: hidden;">
                           <div class="d-flex align-items-center gap-2 ${isUserWhite ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
                             <span class="fs-6 lh-1">⚪</span>
-                            <span class="text-truncate" style="max-width: 170px;">${g.white}</span>
-                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${g.whiteElo}</span>
+                            <span class="text-truncate" style="max-width: 170px;">${insEscape(g.white)}</span>
+                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${insEscape(g.whiteElo)}</span>
                             ${isUserWhite ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
                           </div>
 
                           <div class="d-flex align-items-center gap-2 ${isUserBlack ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
                             <span class="fs-6 lh-1">⚫</span>
-                            <span class="text-truncate" style="max-width: 170px;">${g.black}</span>
-                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${g.blackElo}</span>
+                            <span class="text-truncate" style="max-width: 170px;">${insEscape(g.black)}</span>
+                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${insEscape(g.blackElo)}</span>
                             ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
                           </div>
 
@@ -3035,8 +3028,6 @@ class ReviewDashboard {
     this.currentPly = 0;
     this.orientation = 'w';
     this.isThreatActive = false;
-    this.isPlayingPv = false;
-    this.pvTimer = null;
     this.board = null;
     this.analysisStartTime = null;
     this.advantagePoints = [];
@@ -3153,11 +3144,13 @@ class ReviewDashboard {
 
   setGame(analyzedGame) {
     this.isAnalyzing = false;
+    if (this.isRetryingMistake) {
+      this.stopRetryMistake();
+    }
     this.game = analyzedGame;
     this.currentPly = analyzedGame && analyzedGame.plies.length > 0 ? 1 : 0;
     this.orientation = analyzedGame ? analyzedGame.userColor : 'w';
     this.isThreatActive = false;
-    this.stopPvPlayback();
     this.render();
   }
 
@@ -3167,7 +3160,6 @@ class ReviewDashboard {
       this.stopRetryMistake();
     }
     this.currentPly = Math.max(0, Math.min(this.game.plies.length, ply));
-    this.stopPvPlayback();
 
     // Play move sound
     if (this.currentPly > 0 && this.game.plies[this.currentPly - 1]) {
@@ -3213,10 +3205,6 @@ class ReviewDashboard {
     this.updateBoardAndControls();
   }
 
-  startShowWhy() {
-    this.openWhyModal();
-  }
-
   closeWhyModal() {
     closeWhyModal(this);
   }
@@ -3225,60 +3213,20 @@ class ReviewDashboard {
     return openWhyModal(this, targetEval);
   }
 
-  stopPvPlayback() {
-    if (this.pvTimer) {
-      clearInterval(this.pvTimer);
-      this.pvTimer = null;
-    }
-    this.isPlayingPv = false;
-    this.updatePvBanner(null);
-  }
-
   getCurrentEval() {
     if (!this.game || this.currentPly === 0 || this.currentPly > this.game.plies.length) return null;
     return this.game.plies[this.currentPly - 1];
   }
 
-  updatePvBanner(steps, currentStep = 0) {
-    const banner = this.container.querySelector('#pv-banner-area');
-    if (!banner) return;
-
-    if (!steps) {
-      banner.innerHTML = '';
-      banner.classList.add('d-none');
-      return;
-    }
-
-    banner.classList.remove('d-none');
-    banner.innerHTML = `
-      <div class="alert alert-primary comic-card-sm d-flex align-items-center justify-content-between p-2.5 mb-2">
-        <div class="d-flex align-items-center gap-2">
-          <span class="spinner-grow spinner-grow-sm text-primary"></span>
-          <span class="small fw-bold">Tactical Continuation (${currentStep + 1}/${steps.length}):</span>
-          <span class="badge bg-primary font-monospace">${steps[currentStep]?.san || ''}</span>
-        </div>
-        <button type="button" class="btn btn-sm btn-outline-primary fw-bold" id="btn-exit-pv">Exit Line</button>
-      </div>
-    `;
-
-    banner.querySelector('#btn-exit-pv')?.addEventListener('click', () => {
-      this.stopPvPlayback();
-      this.updateBoardAndControls();
-    });
-  }
-
   getTopMovesForFen(fen) {
     if (!fen) return { best: null, second: null };
     try {
-      const fastKey = typeof normalizeFenKey === 'function' ? `${normalizeFenKey(fen)}_fast` : fen;
-      const deepKey = typeof normalizeFenKey === 'function' ? `${normalizeFenKey(fen)}_deep` : fen;
-      const cached = typeof FEN_EVAL_CACHE !== 'undefined'
-        ? (FEN_EVAL_CACHE.get(deepKey) || FEN_EVAL_CACHE.get(fastKey) || FEN_EVAL_CACHE.get(fen))
-        : null;
+      const normKey = normalizeFenKey(fen);
+      const cached = FEN_EVAL_CACHE.get(`${normKey}_deep`) || FEN_EVAL_CACHE.get(`${normKey}_fast`) || FEN_EVAL_CACHE.get(fen);
       let bestUci = cached?.bestMoveUci;
       let secondUci = cached?.secondBestMoveUci;
 
-      if (!bestUci && typeof findBestMoveLocal === 'function') {
+      if (!bestUci) {
         const local = findBestMoveLocal(fen, 2);
         bestUci = local.bestMoveUci;
         secondUci = local.secondBestMoveUci;
@@ -3406,7 +3354,7 @@ class ReviewDashboard {
           </div>
         `;
         stripEl.querySelector('#btn-retry-mistake')?.addEventListener('click', () => this.startRetryMistake());
-        stripEl.querySelector('#btn-show-why')?.addEventListener('click', () => this.startShowWhy());
+        stripEl.querySelector('#btn-show-why')?.addEventListener('click', () => this.openWhyModal());
       } else {
         stripEl.innerHTML = `
           <div class="d-flex align-items-center gap-2">
@@ -3665,17 +3613,17 @@ class ReviewDashboard {
                       </div>
                       <div class="d-flex flex-column">
                         <div class="d-flex align-items-center gap-1.5 flex-wrap">
-                          <span class="fw-bold">${item.white}</span>
-                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 11px;">${item.whiteElo}</span>
+                          <span class="fw-bold">${insEscape(item.white)}</span>
+                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 11px;">${insEscape(item.whiteElo)}</span>
                           <span class="text-secondary small fw-bold">vs</span>
-                          <span class="fw-bold">${item.black}</span>
-                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 11px;">${item.blackElo}</span>
+                          <span class="fw-bold">${insEscape(item.black)}</span>
+                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 11px;">${insEscape(item.blackElo)}</span>
                         </div>
                         <div class="d-flex align-items-center gap-2 mt-1 text-secondary small flex-wrap">
                           <span><i class="bi bi-person-fill me-0.5"></i>Playing ${isUserWhite ? 'White' : 'Black'}</span>
-                          ${item.ecoName || item.eco ? `<span>• <i class="bi bi-book me-0.5"></i>${item.ecoName || item.eco}</span>` : ''}
-                          ${item.timeControl ? `<span>• <i class="bi bi-clock me-0.5"></i>${item.timeControl}</span>` : ''}
-                          ${item.date ? `<span>• ${item.date}</span>` : ''}
+                          ${item.ecoName || item.eco ? `<span>• <i class="bi bi-book me-0.5"></i>${insEscape(item.ecoName || item.eco)}</span>` : ''}
+                          ${item.timeControl ? `<span>• <i class="bi bi-clock me-0.5"></i>${insEscape(item.timeControl)}</span>` : ''}
+                          ${item.date ? `<span>• ${insEscape(item.date)}</span>` : ''}
                         </div>
                       </div>
                     </div>
@@ -3739,8 +3687,8 @@ class ReviewDashboard {
     const userColor = this.game.userColor || 'w';
     const isWhiteUser = userColor === 'w';
 
-    const whiteName = this.game.white || 'White';
-    const blackName = this.game.black || 'Black';
+    const whiteName = insEscape(this.game.white || 'White');
+    const blackName = insEscape(this.game.black || 'Black');
     const whiteElo = this.game.whiteElo || 1500;
     const blackElo = this.game.blackElo || 1500;
 

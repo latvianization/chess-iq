@@ -196,7 +196,7 @@ class App {
     // Theme selector dropdown/menu
     const menuToggle = document.querySelector('[data-bs-toggle="menu"], [data-bs-toggle="dropdown"]');
     const menuEl = document.querySelector('.menu, .dropdown-menu');
-    if (menuToggle && menuEl) {
+    if (menuToggle && menuEl && !bootstrap?.Dropdown) {
       menuToggle.addEventListener('click', (e) => {
         e.stopPropagation();
         menuEl.classList.toggle('show');

@@ -308,41 +308,6 @@ function isBookMove(moveSans, moveIndex) {
 }
 
 /* --- src/data/botsData.js --- */
-var TIER_CONFIG = {
-  rookie: {
-    name: 'Rookies',
-    range: '400 - 750 Elo',
-    color: '#0284c7', // Sky Blue
-    bg: '#f0f9ff',
-    border: '#bae6fd',
-    icon: '🌱',
-  },
-  challenger: {
-    name: 'Challengers',
-    range: '800 - 1150 Elo',
-    color: '#16a34a', // Hero Green
-    bg: '#f0fdf4',
-    border: '#bbf7d0',
-    icon: '⚡',
-  },
-  hero: {
-    name: 'Heroes',
-    range: '1200 - 1550 Elo',
-    color: '#ea580c', // Comic Orange
-    bg: '#fff7ed',
-    border: '#fed7aa',
-    icon: '🦸',
-  },
-  titan: {
-    name: 'Grand Titans',
-    range: '1600 - 2000 Elo',
-    color: '#9333ea', // Cosmic Purple
-    bg: '#faf5ff',
-    border: '#e9d5ff',
-    icon: '👑',
-  },
-};
-
 var BOTS_33 = [
   // ─── TIER 1: ROOKIES (400 - 750) ──────────────────────────────────────────
   {

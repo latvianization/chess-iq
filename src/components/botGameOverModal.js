@@ -28,15 +28,12 @@ export function showGameOverModal(arena, reason = 'Game Completed') {
   const isWin = arena.gameResult === 'win';
   const isLoss = arena.gameResult === 'loss';
 
-  let resultBadgeClass = 'bg-secondary text-white';
   let resultTitle = 'DRAW';
   let resultIcon = '🤝';
   if (isWin) {
-    resultBadgeClass = 'bg-success text-white border border-light';
     resultTitle = 'VICTORY!';
     resultIcon = '🏆';
   } else if (isLoss) {
-    resultBadgeClass = 'bg-danger text-white border border-light';
     resultTitle = 'DEFEAT';
     resultIcon = '💀';
   }

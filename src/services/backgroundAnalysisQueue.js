@@ -32,10 +32,6 @@ class BackgroundAnalysisQueue {
     });
   }
 
-  enqueueGames(games, username = '') {
-    this.setQueue(games, username);
-  }
-
   startIdleProcessing() {
     this.isPaused = false;
     this.scheduleNext(1000);
@@ -51,10 +47,6 @@ class BackgroundAnalysisQueue {
       window.cancelIdleCallback(this.idleHandle);
       this.idleHandle = null;
     }
-  }
-
-  resume() {
-    this.startIdleProcessing();
   }
 
   scheduleNext(delayMs = 1500) {
@@ -117,12 +109,6 @@ class BackgroundAnalysisQueue {
         this.scheduleNext(2000);
       }
     }
-  }
-
-  clear() {
-    this.queue = [];
-    this.pause();
-    this.isAnalyzing = false;
   }
 }
 

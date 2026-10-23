@@ -2,15 +2,13 @@ const Chess = window.Chess;
 import {
   calculateMoveAccuracy,
   calculatePerformanceElo,
-  calculatePhaseElo,
   classifyMove,
   cpToWinProb,
   detectPhase,
-  detectThreat,
   evaluateFenHybrid,
   prefetchEvaluations
 } from "./engine.js";
-import { prepareMoveExplanation } from "./engineRefutations.js";
+import { detectThreat, prepareMoveExplanation } from "./engineRefutations.js";
 import { findMatchingEco, isBookMove } from "./ecoDictionary.js";
 export function parseClockToSeconds(clockStr) {
   const match = clockStr.match(/(\d+):(\d+):?(\d+)?(\.\d+)?/);
@@ -101,12 +99,15 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
   let endgameStartPly = null;
   let lastWhiteClock = null;
   let lastBlackClock = null;
+  let bookCount = 0;
   for (let i = 0; i < moveHistory.length; i++) {
     const moveObj = moveHistory[i];
     const fenBefore = replayChess.fen();
     const side = replayChess.turn();
     const plyNum = i + 1;
-    const phaseInfo = detectPhase(plyNum, replayChess, moveSans, middlegameStartPly, endgameStartPly);
+    const isBook = isBookMove(moveSans, i);
+    if (isBook) bookCount++;
+    const phaseInfo = detectPhase(plyNum, replayChess, isBook, middlegameStartPly, endgameStartPly);
     if (phaseInfo.newMiddlegameStart && !middlegameStartPly) middlegameStartPly = phaseInfo.newMiddlegameStart;
     if (phaseInfo.newEndgameStart && !endgameStartPly) endgameStartPly = phaseInfo.newEndgameStart;
     const rawClock = clocks[i] ?? null;
@@ -121,7 +122,6 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
       }
     }
     const isTimeTrouble = rawClock !== null && rawClock < 20;
-    const isBook = isBookMove(moveSans, i);
     replayChess.move(moveObj);
     const fenAfter = replayChess.fen();
     precomputed.push({
@@ -153,7 +153,7 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     const nextIsEngineMove = idx + 1 < totalPlies && !precomputed[idx + 1].isBook;
     if (!item.isBook || nextIsEngineMove) fensToEvaluate.push(item.fenAfter);
   });
-  console.log(`[Analysis] Collected ${fensToEvaluate.length} positions to evaluate (${precomputed.filter(p => p.isBook).length} book moves skipped)`);
+  console.log(`[Analysis] Collected ${fensToEvaluate.length} positions to evaluate (${bookCount} book moves skipped)`);
   await prefetchEvaluations(fensToEvaluate, isDeep, (done, total) => {
     if (onProgress) return onProgress(Math.round((done / total) * totalPlies), totalPlies);
   });
@@ -161,6 +161,22 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
   let prevEngine = precomputed.length > 0
     ? await evaluateFenHybrid(precomputed[0].fenBefore, isDeep)
     : { scoreCp: 20, mate: null, pv: [] };
+
+  const sanHelperChess = new Chess();
+  const uciToSanOnLoadedBoard = (uci) => {
+    if (!uci || uci.length < 4) return "";
+    try {
+      const from = uci.slice(0, 2);
+      const to = uci.slice(2, 4);
+      const promotion = uci.length > 4 ? uci[4] : void 0;
+      const m = sanHelperChess.move({ from, to, promotion });
+      if (m) {
+        sanHelperChess.undo();
+        return m.san;
+      }
+    } catch {}
+    return uci;
+  };
 
   for (let i = 0; i < totalPlies; i++) {
     const item = precomputed[i];
@@ -218,31 +234,19 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
       const winProbLoss = Math.max(0, moverWinProbBefore - moverWinProbAfter);
       const accuracy = calculateMoveAccuracy(winProbLoss);
       const bestMoveUci = (engineBefore.pv && engineBefore.pv[0]) || engineBefore.bestMoveUci || "";
+      const secondBestMoveUci = engineBefore.secondBestMoveUci || "";
       let bestMoveSan = "";
-      if (bestMoveUci) {
+      let secondBestMoveSan = "";
+      if (bestMoveUci || (secondBestMoveUci && secondBestMoveUci !== bestMoveUci)) {
         try {
-          const testChess = new Chess(item.fenBefore);
-          const from = bestMoveUci.slice(0, 2);
-          const to = bestMoveUci.slice(2, 4);
-          const promotion = bestMoveUci.length > 4 ? bestMoveUci[4] : void 0;
-          const m = testChess.move({ from, to, promotion });
-          if (m) bestMoveSan = m.san;
+          sanHelperChess.load(item.fenBefore);
+          if (bestMoveUci) bestMoveSan = uciToSanOnLoadedBoard(bestMoveUci);
+          if (secondBestMoveUci && secondBestMoveUci !== bestMoveUci) {
+            secondBestMoveSan = uciToSanOnLoadedBoard(secondBestMoveUci);
+          }
         } catch {
           bestMoveSan = bestMoveUci;
-        }
-      }
-      const secondBestMoveUci = engineBefore.secondBestMoveUci || "";
-      let secondBestMoveSan = "";
-      if (secondBestMoveUci && secondBestMoveUci !== bestMoveUci) {
-        try {
-          const testChess2 = new Chess(item.fenBefore);
-          const from = secondBestMoveUci.slice(0, 2);
-          const to = secondBestMoveUci.slice(2, 4);
-          const promotion = secondBestMoveUci.length > 4 ? secondBestMoveUci[4] : void 0;
-          const m2 = testChess2.move({ from, to, promotion });
-          if (m2) secondBestMoveSan = m2.san;
-        } catch {
-          secondBestMoveSan = secondBestMoveUci;
+          secondBestMoveSan = secondBestMoveUci !== bestMoveUci ? secondBestMoveUci : "";
         }
       }
       const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
@@ -348,18 +352,6 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
   let oppMovesCount = 0;
   let impulsiveBlunders = 0;
   let timeTroubleBlunders = 0;
-  const userPhaseLosses = {
-    opening: [],
-    middlegame: [],
-    endgame: [],
-    overall: []
-  };
-  const oppPhaseLosses = {
-    opening: [],
-    middlegame: [],
-    endgame: [],
-    overall: []
-  };
   const userPhaseAcc = {
     opening: [],
     middlegame: [],
@@ -372,9 +364,6 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
   };
   plies.forEach((p) => {
     if (!p) return;
-    const cpLoss = (p.classification === 'best' || p.classification === 'book')
-      ? 0
-      : Math.min(350, Math.round((p.winProbLoss || 0) * 500));
     if (p.color === userColor) {
       userCounts[p.classification] = (userCounts[p.classification] || 0) + 1;
       userAccuracySum += p.accuracy;
@@ -383,22 +372,17 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
       if (p.isTimeTrouble && (p.classification === "blunder" || p.classification === "mistake")) {
         timeTroubleBlunders++;
       }
-      userPhaseLosses[p.phase].push(cpLoss);
-      userPhaseLosses.overall.push(cpLoss);
       if (userPhaseAcc[p.phase]) userPhaseAcc[p.phase].push(p.accuracy);
     } else {
       opponentCounts[p.classification] = (opponentCounts[p.classification] || 0) + 1;
       oppAccuracySum += p.accuracy;
       oppMovesCount++;
-      oppPhaseLosses[p.phase].push(cpLoss);
-      oppPhaseLosses.overall.push(cpLoss);
       if (oppPhaseAcc[p.phase]) oppPhaseAcc[p.phase].push(p.accuracy);
     }
   });
   const userAccuracy = userMovesCount > 0 ? Math.round(userAccuracySum / userMovesCount * 10) / 10 : 85;
   const opponentAccuracy = oppMovesCount > 0 ? Math.round(oppAccuracySum / oppMovesCount * 10) / 10 : 85;
   const overallAccuracy = Math.round((userAccuracy + opponentAccuracy) / 2 * 10) / 10;
-  const calcAcpl = (arr) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 25;
   const calcAvgAcc = (arr) => arr.length > 0 ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10 : null;
 
   const userPhaseAccuracy = {
@@ -414,19 +398,6 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
 
   const oppColor = userColor === "w" ? "b" : "w";
   const oppBaseElo = userColor === "w" ? blackElo : whiteElo;
-
-  const userPhaseAcpl = {
-    opening: calcAcpl(userPhaseLosses.opening),
-    middlegame: calcAcpl(userPhaseLosses.middlegame),
-    endgame: calcAcpl(userPhaseLosses.endgame),
-    overall: calcAcpl(userPhaseLosses.overall)
-  };
-  const oppPhaseAcpl = {
-    opening: calcAcpl(oppPhaseLosses.opening),
-    middlegame: calcAcpl(oppPhaseLosses.middlegame),
-    endgame: calcAcpl(oppPhaseLosses.endgame),
-    overall: calcAcpl(oppPhaseLosses.overall)
-  };
 
   const overallGameElo = calculatePerformanceElo(userBaseElo, userAccuracy, userMovesCount, result, userColor) ?? userBaseElo;
   const oppOverallGameElo = calculatePerformanceElo(oppBaseElo, opponentAccuracy, oppMovesCount, result, oppColor) ?? oppBaseElo;
@@ -454,27 +425,13 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     ecoName,
     initialFen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
     plies,
-    accuracy: userAccuracy,
     overallAccuracy,
     userAccuracy,
     opponentAccuracy,
     userPhaseAccuracy,
     opponentPhaseAccuracy,
     overallGameElo,
-    userGameElo: overallGameElo,
     oppGameElo: oppOverallGameElo,
-    opponentGameElo: oppOverallGameElo,
-    openingElo,
-    middlegameElo,
-    endgameElo,
-    oppOpeningElo,
-    oppMiddlegameElo,
-    oppEndgameElo,
-    phaseElos: {
-      opening: openingElo,
-      middlegame: middlegameElo,
-      endgame: endgameElo
-    },
     userPhaseElos: {
       opening: openingElo,
       middlegame: middlegameElo,
@@ -487,12 +444,10 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     },
     middlegameStartPly: middlegameStartPly ?? 20,
     endgameStartPly: endgameStartPly ?? 50,
-    counts: userCounts,
     userCounts,
     opponentCounts,
     impulsiveBlunders,
-    timeTroubleBlunders,
-    phaseAcpl: userPhaseAcpl
+    timeTroubleBlunders
   };
   const totalDuration = Date.now() - analysisStart;
   console.log(`[Analysis] Finished in ${totalDuration}ms: User accuracy ${userAccuracy}%, Opponent ${opponentAccuracy}%, Performance ${overallGameElo} Elo`);

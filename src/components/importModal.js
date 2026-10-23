@@ -8,6 +8,7 @@ import { fetchChessComGames, fetchLichessGames } from '../services/importApi.js'
 import { getGameCacheInfo, clearGameCache, getCacheStats } from '../services/gameCacheService.js';
 import { backgroundAnalysisQueue } from '../services/backgroundAnalysisQueue.js';
 import { openInsights } from './insightsModal.js';
+import { insEscape } from './insightsCharts.js';
 
 export class ImportModal {
   constructor(modalEl, options = {}) {
@@ -355,15 +356,15 @@ export class ImportModal {
                         <div class="d-flex flex-column gap-1 flex-grow-1" style="min-width: 0; overflow: hidden;">
                           <div class="d-flex align-items-center gap-2 ${isUserWhite ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
                             <span class="fs-6 lh-1">⚪</span>
-                            <span class="text-truncate" style="max-width: 170px;">${g.white}</span>
-                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${g.whiteElo}</span>
+                            <span class="text-truncate" style="max-width: 170px;">${insEscape(g.white)}</span>
+                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${insEscape(g.whiteElo)}</span>
                             ${isUserWhite ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
                           </div>
 
                           <div class="d-flex align-items-center gap-2 ${isUserBlack ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
                             <span class="fs-6 lh-1">⚫</span>
-                            <span class="text-truncate" style="max-width: 170px;">${g.black}</span>
-                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${g.blackElo}</span>
+                            <span class="text-truncate" style="max-width: 170px;">${insEscape(g.black)}</span>
+                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${insEscape(g.blackElo)}</span>
                             ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
                           </div>
 

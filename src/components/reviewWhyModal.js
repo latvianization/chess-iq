@@ -2,8 +2,12 @@ const Chess = window.Chess;
 import { Chessboard } from './board.js';
 import { soundService } from '../services/sound.js';
 import { getComicBadge } from '../services/comicBadges.js';
-import { getDeepContinuation, summarizePunishment } from '../services/engine.js';
-import { MIN_CONTINUATION_PLIES, extendContinuation } from '../services/engineRefutations.js';
+import {
+  MIN_CONTINUATION_PLIES,
+  extendContinuation,
+  getDeepContinuation,
+  summarizePunishment
+} from '../services/engineRefutations.js';
 
 export function closeWhyModal(dashboard) {
   if (dashboard.whyTimer) {

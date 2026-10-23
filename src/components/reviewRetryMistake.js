@@ -7,7 +7,6 @@ export function startRetryMistake(dashboard) {
 
   dashboard.isRetryingMistake = true;
   dashboard.retryHintActive = false;
-  dashboard.stopPvPlayback();
 
   const banner = dashboard.container.querySelector('#pv-banner-area');
   if (banner) {
