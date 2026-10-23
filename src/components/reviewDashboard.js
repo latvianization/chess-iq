@@ -12,12 +12,14 @@ import { findBestMoveLocal, FEN_EVAL_CACHE } from '../services/engine.js';
 import { createCurvedPath, renderAdvantageChart, updateAdvantageScrubber } from './reviewAdvantageChart.js';
 import { startRetryMistake, stopRetryMistake } from './reviewRetryMistake.js';
 import { openWhyModal, closeWhyModal } from './reviewWhyModal.js';
+import { getCacheIndex, getCachedGame, clearGameCache } from '../services/gameCacheService.js';
 
 export class ReviewDashboard {
   constructor(containerEl, options = {}) {
     this.container = containerEl;
     this.onOpenImport = options.onOpenImport || null;
     this.onSwitchToBots = options.onSwitchToBots || null;
+    this.onSelectGame = options.onSelectGame || null;
     this.theme = options.theme || 'green';
 
     this.game = null; // AnalyzedGame object
@@ -34,6 +36,16 @@ export class ReviewDashboard {
     this.advantageMidY = 42;
     this.isRetryingMistake = false;
     this.retryHintActive = false;
+
+    window.addEventListener('chess_iq_cache_updated', () => {
+      if (!this.game && !this.isAnalyzing) this.render();
+    });
+    window.addEventListener('chess_iq_cache_cleared', () => {
+      if (!this.game && !this.isAnalyzing) this.render();
+    });
+    window.addEventListener('chess_iq_games_imported', () => {
+      if (!this.game && !this.isAnalyzing) this.render();
+    });
 
     this.initKeyboardNavigation();
     this.render();
@@ -486,6 +498,67 @@ export class ReviewDashboard {
     renderAdvantageChart(this);
   }
 
+  getSavedGamesList() {
+    const list = [];
+    const seenIds = new Set();
+
+    const cachedIndex = getCacheIndex();
+    cachedIndex.forEach((item) => {
+      seenIds.add(item.id || item.key);
+      list.push({
+        type: 'analyzed',
+        key: item.key,
+        id: item.id || item.key,
+        white: item.white || 'White',
+        black: item.black || 'Black',
+        whiteElo: item.whiteElo || 1500,
+        blackElo: item.blackElo || 1500,
+        result: item.result || '*',
+        date: item.date || '',
+        userColor: item.userColor || 'w',
+        accuracy: item.accuracy ?? 85,
+        elo: item.elo || 1500,
+        eco: item.eco || '',
+        ecoName: item.ecoName || '',
+        timeControl: item.timeControl || '',
+        savedAt: item.savedAt || 0
+      });
+    });
+
+    try {
+      const savedImport = JSON.parse(localStorage.getItem('chess_iq_imported_games') || 'null');
+      if (savedImport && Array.isArray(savedImport.games)) {
+        const username = (savedImport.username || '').toLowerCase();
+        savedImport.games.forEach((g) => {
+          if (!seenIds.has(g.id)) {
+            seenIds.add(g.id);
+            const isUserWhite = g.white && g.white.toLowerCase() === username;
+            const isUserBlack = g.black && g.black.toLowerCase() === username;
+            const userColor = isUserWhite ? 'w' : (isUserBlack ? 'b' : 'w');
+            list.push({
+              type: 'imported',
+              id: g.id,
+              pgn: g.pgn,
+              white: g.white || 'White',
+              black: g.black || 'Black',
+              whiteElo: g.whiteElo || 1500,
+              blackElo: g.blackElo || 1500,
+              result: g.result || '*',
+              date: g.date || '',
+              userColor,
+              eco: g.eco || '',
+              ecoName: '',
+              timeControl: g.timeControl || '',
+              savedAt: g.endTime || 0
+            });
+          }
+        });
+      }
+    } catch {}
+
+    return list;
+  }
+
   render() {
     if (this.isAnalyzing) {
       const pct = this.analysisProgress.total > 0
@@ -512,7 +585,7 @@ export class ReviewDashboard {
     }
 
     if (!this.game) {
-      // Zero State (No game active)
+      const savedGames = this.getSavedGamesList();
       this.container.innerHTML = `
         <div class="d-flex flex-column align-items-center justify-content-center p-4 sm:p-5 text-center comic-card max-w-2xl mx-auto my-4">
           <div class="badge bg-warning text-dark border border-dark rounded-4 p-3 fs-1 mb-3 shadow-sm d-inline-flex align-items-center justify-content-center" style="width: 72px; height: 72px;">
@@ -532,6 +605,94 @@ export class ReviewDashboard {
             </button>
           </div>
         </div>
+
+        ${savedGames.length > 0 ? `
+          <div class="max-w-2xl mx-auto my-4 w-100">
+            <div class="d-flex align-items-center justify-content-between mb-3 px-1">
+              <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-warning text-dark border border-dark rounded-pill px-2.5 py-1 fw-bold" style="font-size: 12px;">
+                  <i class="bi bi-clock-history me-1"></i>Saved Games (${savedGames.length})
+                </span>
+                <span class="small text-secondary fw-bold">From local storage</span>
+              </div>
+              <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2.5 comic-btn fw-bold" id="zero-btn-clear-history" style="font-size: 11px;">
+                <i class="bi bi-trash3 me-1"></i>Clear All
+              </button>
+            </div>
+
+            <div class="d-flex flex-column gap-2.5">
+              ${savedGames.map((item, idx) => {
+                const isUserWhite = item.userColor === 'w';
+                let resultBadge = '';
+                let cardBorder = '';
+                let isWin = false;
+                let isLoss = false;
+                const isDraw = item.result === '1/2-1/2';
+
+                if (item.result === '1-0') {
+                  if (isUserWhite) isWin = true;
+                  else isLoss = true;
+                } else if (item.result === '0-1') {
+                  if (!isUserWhite) isWin = true;
+                  else isLoss = true;
+                }
+
+                if (isWin) {
+                  resultBadge = '<span class="badge bg-success text-white fw-bold px-2 py-1"><i class="bi bi-trophy-fill me-1"></i>Win</span>';
+                  cardBorder = 'border-start border-4 border-success';
+                } else if (isLoss) {
+                  resultBadge = '<span class="badge bg-danger text-white fw-bold px-2 py-1"><i class="bi bi-x-circle-fill me-1"></i>Loss</span>';
+                  cardBorder = 'border-start border-4 border-danger';
+                } else if (isDraw) {
+                  resultBadge = '<span class="badge bg-secondary text-white fw-bold px-2 py-1">Draw</span>';
+                  cardBorder = 'border-start border-4 border-secondary';
+                } else {
+                  resultBadge = `<span class="badge bg-body-secondary text-secondary fw-bold px-2 py-1">${item.result}</span>`;
+                }
+
+                return `
+                  <div class="comic-card p-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3 ${cardBorder}" data-saved-game-idx="${idx}" style="cursor: pointer;">
+                    <div class="d-flex align-items-center gap-3">
+                      <div class="flex-shrink-0 text-center" style="min-width: 58px;">
+                        ${resultBadge}
+                      </div>
+                      <div class="d-flex flex-column">
+                        <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                          <span class="fw-bold">${item.white}</span>
+                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 11px;">${item.whiteElo}</span>
+                          <span class="text-secondary small fw-bold">vs</span>
+                          <span class="fw-bold">${item.black}</span>
+                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 11px;">${item.blackElo}</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 mt-1 text-secondary small flex-wrap">
+                          <span><i class="bi bi-person-fill me-0.5"></i>Playing ${isUserWhite ? 'White' : 'Black'}</span>
+                          ${item.ecoName || item.eco ? `<span>• <i class="bi bi-book me-0.5"></i>${item.ecoName || item.eco}</span>` : ''}
+                          ${item.timeControl ? `<span>• <i class="bi bi-clock me-0.5"></i>${item.timeControl}</span>` : ''}
+                          ${item.date ? `<span>• ${item.date}</span>` : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-shrink-0 justify-content-end">
+                      ${item.type === 'analyzed' ? `
+                        <div class="text-end me-1 d-none d-sm-block">
+                          <div class="fw-black text-warning font-monospace fs-6">${item.accuracy}%</div>
+                          <div class="text-secondary small font-monospace" style="font-size: 11px;">${item.elo} Perf</div>
+                        </div>
+                        <button type="button" class="btn btn-warning btn-sm comic-btn fw-bold px-3 py-1.5" data-action-review="${idx}">
+                          <i class="bi bi-search me-1"></i>Review
+                        </button>
+                      ` : `
+                        <button type="button" class="btn btn-outline-warning btn-sm comic-btn fw-bold px-3 py-1.5" data-action-analyze="${idx}">
+                          <i class="bi bi-lightning-charge-fill me-1"></i>Analyze
+                        </button>
+                      `}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
       `;
 
       this.container.querySelector('#zero-btn-import')?.addEventListener('click', () => {
@@ -540,6 +701,31 @@ export class ReviewDashboard {
       this.container.querySelector('#zero-btn-bots')?.addEventListener('click', () => {
         if (this.onSwitchToBots) this.onSwitchToBots();
       });
+      this.container.querySelector('#zero-btn-clear-history')?.addEventListener('click', () => {
+        clearGameCache();
+        try { localStorage.removeItem('chess_iq_imported_games'); } catch {}
+        this.render();
+      });
+
+      this.container.querySelectorAll('[data-saved-game-idx]').forEach((card) => {
+        card.addEventListener('click', () => {
+          const idx = parseInt(card.getAttribute('data-saved-game-idx'), 10);
+          const item = savedGames[idx];
+          if (!item) return;
+          if (item.type === 'analyzed') {
+            const cached = getCachedGame(item.key || item.id, item.userColor);
+            if (cached) {
+              if (this.onSelectGame) this.onSelectGame(cached.pgn, item.userColor, cached);
+              else { this.setGame(cached); soundService.playSuccess(); }
+              return;
+            }
+          }
+          if (this.onSelectGame) {
+            this.onSelectGame(item.pgn || item.id, item.userColor);
+          }
+        });
+      });
+
       return;
     }
 

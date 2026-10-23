@@ -94,6 +94,14 @@ class App {
         theme: this.boardTheme,
         onOpenImport: () => this.importModal?.show(),
         onSwitchToBots: () => this.switchMode('bot'),
+        onSelectGame: (pgn, userColor, cachedGame) => {
+          if (cachedGame) {
+            this.reviewDashboard?.setGame(cachedGame);
+            soundService.playSuccess();
+          } else {
+            this.runAnalysis(pgn, userColor);
+          }
+        },
       });
     }
 
@@ -211,6 +219,7 @@ class App {
   }
 
   async runAnalysis(pgn, userColor) {
+    console.log(`[App] runAnalysis requested (userColor: ${userColor}, deepReview: ${this.isDeepReview})`);
     this.switchMode('review');
     window.scrollTo({ top: 0, behavior: 'instant' });
 
@@ -221,6 +230,7 @@ class App {
 
     const cachedGame = getCachedGame(pgn, userColor);
     if (cachedGame) {
+      console.log(`[App] Game found in cache: ${cachedGame.white} vs ${cachedGame.black} (${cachedGame.userAccuracy}% acc)`);
       this.reviewDashboard?.setGame(cachedGame);
       soundService.playSuccess();
       this.importModal?.setAnalyzing(false, 0, 0);
@@ -228,6 +238,7 @@ class App {
       return;
     }
 
+    console.log('[App] Starting fresh game analysis...');
     backgroundAnalysisQueue.pause();
     this.reviewDashboard?.showLoading(0, 0);
 
@@ -244,12 +255,13 @@ class App {
         }
       );
 
+      console.log('[App] Analysis completed, caching and loading review...');
       saveCachedGame(pgn, userColor, analyzedGame);
       this.reviewDashboard?.setGame(analyzedGame);
       soundService.playSuccess();
       backgroundAnalysisQueue.startIdleProcessing();
     } catch (err) {
-      console.error('Analysis failed:', err);
+      console.error('[App] Analysis failed:', err);
       this.reviewDashboard?.hideLoading();
       this.reviewDashboard?.render();
     } finally {

@@ -282,8 +282,11 @@ class SoundService {
 var soundService = new SoundService();
 
 /* --- src/services/stockfishWorker.js --- */
+let nextWorkerId = 1;
+
 class StockfishWorkerService {
-  constructor() {
+  constructor(id = `worker-${nextWorkerId++}`) {
+    this.id = id;
     this.worker = null;
     this.isInitialized = false;
     this.isAvailable = true;
@@ -298,6 +301,7 @@ class StockfishWorkerService {
     this.secondBestCp = void 0;
     this.secondBestMove = "";
     this.evaluationTimeoutId = null;
+    this.hardTimeoutId = null;
     this.initWorker();
   }
   initWorker() {
@@ -312,12 +316,14 @@ class StockfishWorkerService {
       this.worker.onmessage = (event) => {
         this.handleMessage(event.data);
       };
-      this.worker.onerror = () => {
+      this.worker.onerror = (err) => {
+        console.error(`[StockfishPool][${this.id}] Worker error:`, err);
         this.isAvailable = false;
         this.drainQueue();
       };
       this.worker.postMessage("uci");
-    } catch {
+    } catch (err) {
+      console.error(`[StockfishPool][${this.id}] Init failed:`, err);
       this.isAvailable = false;
     }
   }
@@ -332,10 +338,12 @@ class StockfishWorkerService {
     if (typeof line !== "string") return;
     if (line === "uciok") {
       this.isInitialized = true;
+      console.log(`[StockfishPool][${this.id}] Initialized and ready (uciok)`);
       if (this.worker) {
         this.worker.postMessage("setoption name MultiPV value 2");
         this.worker.postMessage("isready");
       }
+      this.processQueue();
       return;
     }
     if (line.startsWith("info depth")) {
@@ -381,6 +389,10 @@ class StockfishWorkerService {
         clearTimeout(this.evaluationTimeoutId);
         this.evaluationTimeoutId = null;
       }
+      if (this.hardTimeoutId) {
+        clearTimeout(this.hardTimeoutId);
+        this.hardTimeoutId = null;
+      }
       const parts = line.split(/\s+/);
       const bestMove = parts[1] && parts[1] !== "(none)" ? parts[1] : this.currentBestMove;
       const result = {
@@ -403,6 +415,9 @@ class StockfishWorkerService {
     if (this.isProcessing || this.queue.length === 0 || !this.worker || !this.isAvailable) {
       return;
     }
+    if (!this.isInitialized) {
+      return;
+    }
     const item = this.queue.shift();
     if (!item) return;
 
@@ -421,6 +436,27 @@ class StockfishWorkerService {
         try {
           this.worker.postMessage("stop");
         } catch {}
+
+        this.hardTimeoutId = setTimeout(() => {
+          if (this.pendingResolve) {
+            console.warn(`[StockfishPool][${this.id}] Hard timeout: engine did not return bestmove, resolving fallback`);
+            const fallback = {
+              bestMoveUci: this.currentBestMove || "",
+              scoreCp: this.currentScoreCp,
+              mate: this.currentMate,
+              pv: this.currentPv.length > 0 ? this.currentPv : [],
+              depth: this.currentDepth,
+              multiPv2ScoreCp: this.secondBestCp,
+              secondBestMoveUci: this.secondBestMove,
+              timedOut: true
+            };
+            const resolve = this.pendingResolve;
+            this.pendingResolve = null;
+            this.isProcessing = false;
+            resolve(fallback);
+            this.processQueue();
+          }
+        }, 300);
       }
     }, (item.maxWaitMs || 1200) + 150);
 
@@ -428,8 +464,10 @@ class StockfishWorkerService {
       this.worker.postMessage(`position fen ${item.fen}`);
       const movetimeCmd = item.maxWaitMs ? ` movetime ${item.maxWaitMs}` : "";
       this.worker.postMessage(`go depth ${item.depth}${movetimeCmd}`);
-    } catch {
+    } catch (err) {
+      console.error(`[StockfishPool][${this.id}] postMessage failed:`, err);
       if (this.evaluationTimeoutId) clearTimeout(this.evaluationTimeoutId);
+      if (this.hardTimeoutId) clearTimeout(this.hardTimeoutId);
       this.isProcessing = false;
       const resolve = this.pendingResolve;
       this.pendingResolve = null;
@@ -476,8 +514,15 @@ class StockfishPool {
     if (this.workers.length < this.targetSize) {
       this.warmUp();
     }
-    const available = this.workers.filter((w) => w.isAvailable && w.worker);
-    if (available.length === 0) return Promise.resolve(null);
+    const readyWorkers = this.workers.filter((w) => w.isAvailable && w.worker && w.isInitialized);
+    const available = readyWorkers.length > 0
+      ? readyWorkers
+      : this.workers.filter((w) => w.isAvailable && w.worker);
+
+    if (available.length === 0) {
+      console.warn("[StockfishPool] No workers available");
+      return Promise.resolve(null);
+    }
     const load = (w) => w.queue.length + (w.isProcessing ? 1 : 0);
     const leastBusy = available.reduce((best, w) => (load(w) < load(best) ? w : best));
     return leastBusy.evaluate(fen, depth, maxWaitMs);
@@ -1002,11 +1047,14 @@ async function prefetchEvaluations(fens, isDeep, onEach) {
   const unique = [...new Set(fens)];
   stockfishService.warmUp();
   const feederCount = Math.max(2, stockfishService.targetSize || stockfishService.size);
+  const profileKey = typeof isDeep === "string" ? isDeep : (isDeep ? "deep" : "fast");
+  console.log(`[Engine] Starting prefetch: ${unique.length} positions (profile: ${profileKey}, feeders: ${feederCount})`);
   let next = 0;
   let done = 0;
   let failure = null;
+  const startedAt = Date.now();
 
-  const feeders = Array.from({ length: feederCount }, async () => {
+  const feeders = Array.from({ length: feederCount }, async (_, feederIdx) => {
     while (!failure && next < unique.length) {
       const fen = unique[next++];
       try {
@@ -1014,11 +1062,14 @@ async function prefetchEvaluations(fens, isDeep, onEach) {
         done++;
         if (onEach) await onEach(done, unique.length);
       } catch (err) {
+        console.error(`[Engine] Feeder ${feederIdx} error on fen ${fen}:`, err);
         failure = err;
       }
     }
   });
   await Promise.all(feeders);
+  const elapsedMs = Date.now() - startedAt;
+  console.log(`[Engine] Prefetch completed: ${done}/${unique.length} positions evaluated in ${elapsedMs}ms (${(elapsedMs / (done || 1)).toFixed(1)}ms/pos)`);
   if (failure) throw failure;
 }
 
@@ -1454,10 +1505,16 @@ function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
       id: analyzedGame.id || key,
       white: analyzedGame.white || 'White',
       black: analyzedGame.black || 'Black',
+      whiteElo: analyzedGame.whiteElo || 1500,
+      blackElo: analyzedGame.blackElo || 1500,
+      result: analyzedGame.result || '*',
       date: analyzedGame.date || '',
       userColor: analyzedGame.userColor || userColor,
       accuracy: analyzedGame.userAccuracy ?? analyzedGame.accuracy ?? 85,
       elo: analyzedGame.overallGameElo || 1500,
+      eco: analyzedGame.eco || '',
+      ecoName: analyzedGame.ecoName || '',
+      timeControl: analyzedGame.timeControl || '',
       savedAt: Date.now()
     });
 
@@ -1636,6 +1693,8 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
   }
   const totalPlies = precomputed.length;
   const plies = new Array(totalPlies);
+  const analysisStart = Date.now();
+  console.log(`[Analysis] Starting: ${white} (${whiteElo}) vs ${black} (${blackElo}) | ${totalPlies} plies | userColor: ${userColor} | deep: ${isDeep}`);
 
   if (onProgress) {
     onProgress(0, totalPlies);
@@ -1648,6 +1707,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
     const nextIsEngineMove = idx + 1 < totalPlies && !precomputed[idx + 1].isBook;
     if (!item.isBook || nextIsEngineMove) fensToEvaluate.push(item.fenAfter);
   });
+  console.log(`[Analysis] Collected ${fensToEvaluate.length} positions to evaluate (${precomputed.filter(p => p.isBook).length} book moves skipped)`);
   await prefetchEvaluations(fensToEvaluate, isDeep, (done, total) => {
     if (onProgress) return onProgress(Math.round((done / total) * totalPlies), totalPlies);
   });
@@ -1658,6 +1718,9 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
 
   for (let i = 0; i < totalPlies; i++) {
     const item = precomputed[i];
+    if (i === 0 || i % 20 === 0 || i === totalPlies - 1) {
+      console.log(`[Analysis] Move evaluation progress: ${i + 1}/${totalPlies} plies`);
+    }
     if (item.isBook) {
       const playedUci2 = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
       const isImpulsive2 = item.timeSpent !== null && item.timeSpent < 2 && !item.isTimeTrouble;
@@ -1930,7 +1993,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
   const oppMiddlegameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.middlegame ?? opponentAccuracy, oppPhaseAcc.middlegame.length, "*", oppColor) ?? oppBaseElo;
   const oppEndgameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.endgame ?? opponentAccuracy, oppPhaseAcc.endgame.length, "*", oppColor) ?? oppBaseElo;
 
-  return {
+  const analyzedResult = {
     id: `game_${Date.now()}`,
     platform: "pgn",
     white,
@@ -1985,6 +2048,9 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
     timeTroubleBlunders,
     phaseAcpl: userPhaseAcpl
   };
+  const totalDuration = Date.now() - analysisStart;
+  console.log(`[Analysis] Finished in ${totalDuration}ms: User accuracy ${userAccuracy}%, Opponent ${opponentAccuracy}%, Performance ${overallGameElo} Elo`);
+  return analyzedResult;
 }
 const CHESSCOM_DRAW_RESULTS = ["agreed", "repetition", "stalemate", "insufficient", "50move", "timevsinsufficient"];
 

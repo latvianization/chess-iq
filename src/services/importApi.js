@@ -139,6 +139,8 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
   }
   const totalPlies = precomputed.length;
   const plies = new Array(totalPlies);
+  const analysisStart = Date.now();
+  console.log(`[Analysis] Starting: ${white} (${whiteElo}) vs ${black} (${blackElo}) | ${totalPlies} plies | userColor: ${userColor} | deep: ${isDeep}`);
 
   if (onProgress) {
     onProgress(0, totalPlies);
@@ -151,6 +153,7 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     const nextIsEngineMove = idx + 1 < totalPlies && !precomputed[idx + 1].isBook;
     if (!item.isBook || nextIsEngineMove) fensToEvaluate.push(item.fenAfter);
   });
+  console.log(`[Analysis] Collected ${fensToEvaluate.length} positions to evaluate (${precomputed.filter(p => p.isBook).length} book moves skipped)`);
   await prefetchEvaluations(fensToEvaluate, isDeep, (done, total) => {
     if (onProgress) return onProgress(Math.round((done / total) * totalPlies), totalPlies);
   });
@@ -161,6 +164,9 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
 
   for (let i = 0; i < totalPlies; i++) {
     const item = precomputed[i];
+    if (i === 0 || i % 20 === 0 || i === totalPlies - 1) {
+      console.log(`[Analysis] Move evaluation progress: ${i + 1}/${totalPlies} plies`);
+    }
     if (item.isBook) {
       const playedUci2 = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
       const isImpulsive2 = item.timeSpent !== null && item.timeSpent < 2 && !item.isTimeTrouble;
@@ -433,7 +439,7 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
   const oppMiddlegameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.middlegame ?? opponentAccuracy, oppPhaseAcc.middlegame.length, "*", oppColor) ?? oppBaseElo;
   const oppEndgameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.endgame ?? opponentAccuracy, oppPhaseAcc.endgame.length, "*", oppColor) ?? oppBaseElo;
 
-  return {
+  const analyzedResult = {
     id: `game_${Date.now()}`,
     platform: "pgn",
     white,
@@ -488,6 +494,9 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     timeTroubleBlunders,
     phaseAcpl: userPhaseAcpl
   };
+  const totalDuration = Date.now() - analysisStart;
+  console.log(`[Analysis] Finished in ${totalDuration}ms: User accuracy ${userAccuracy}%, Opponent ${opponentAccuracy}%, Performance ${overallGameElo} Elo`);
+  return analyzedResult;
 }
 const CHESSCOM_DRAW_RESULTS = ["agreed", "repetition", "stalemate", "insufficient", "50move", "timevsinsufficient"];
 

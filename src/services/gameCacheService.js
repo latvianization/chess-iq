@@ -76,10 +76,16 @@ export function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
       id: analyzedGame.id || key,
       white: analyzedGame.white || 'White',
       black: analyzedGame.black || 'Black',
+      whiteElo: analyzedGame.whiteElo || 1500,
+      blackElo: analyzedGame.blackElo || 1500,
+      result: analyzedGame.result || '*',
       date: analyzedGame.date || '',
       userColor: analyzedGame.userColor || userColor,
       accuracy: analyzedGame.userAccuracy ?? analyzedGame.accuracy ?? 85,
       elo: analyzedGame.overallGameElo || 1500,
+      eco: analyzedGame.eco || '',
+      ecoName: analyzedGame.ecoName || '',
+      timeControl: analyzedGame.timeControl || '',
       savedAt: Date.now()
     });
 

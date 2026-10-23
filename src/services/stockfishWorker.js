@@ -1,5 +1,8 @@
+let nextWorkerId = 1;
+
 class StockfishWorkerService {
-  constructor() {
+  constructor(id = `worker-${nextWorkerId++}`) {
+    this.id = id;
     this.worker = null;
     this.isInitialized = false;
     this.isAvailable = true;
@@ -14,6 +17,7 @@ class StockfishWorkerService {
     this.secondBestCp = void 0;
     this.secondBestMove = "";
     this.evaluationTimeoutId = null;
+    this.hardTimeoutId = null;
     this.initWorker();
   }
   initWorker() {
@@ -28,12 +32,14 @@ class StockfishWorkerService {
       this.worker.onmessage = (event) => {
         this.handleMessage(event.data);
       };
-      this.worker.onerror = () => {
+      this.worker.onerror = (err) => {
+        console.error(`[StockfishPool][${this.id}] Worker error:`, err);
         this.isAvailable = false;
         this.drainQueue();
       };
       this.worker.postMessage("uci");
-    } catch {
+    } catch (err) {
+      console.error(`[StockfishPool][${this.id}] Init failed:`, err);
       this.isAvailable = false;
     }
   }
@@ -48,10 +54,12 @@ class StockfishWorkerService {
     if (typeof line !== "string") return;
     if (line === "uciok") {
       this.isInitialized = true;
+      console.log(`[StockfishPool][${this.id}] Initialized and ready (uciok)`);
       if (this.worker) {
         this.worker.postMessage("setoption name MultiPV value 2");
         this.worker.postMessage("isready");
       }
+      this.processQueue();
       return;
     }
     if (line.startsWith("info depth")) {
@@ -97,6 +105,10 @@ class StockfishWorkerService {
         clearTimeout(this.evaluationTimeoutId);
         this.evaluationTimeoutId = null;
       }
+      if (this.hardTimeoutId) {
+        clearTimeout(this.hardTimeoutId);
+        this.hardTimeoutId = null;
+      }
       const parts = line.split(/\s+/);
       const bestMove = parts[1] && parts[1] !== "(none)" ? parts[1] : this.currentBestMove;
       const result = {
@@ -119,6 +131,9 @@ class StockfishWorkerService {
     if (this.isProcessing || this.queue.length === 0 || !this.worker || !this.isAvailable) {
       return;
     }
+    if (!this.isInitialized) {
+      return;
+    }
     const item = this.queue.shift();
     if (!item) return;
 
@@ -137,6 +152,27 @@ class StockfishWorkerService {
         try {
           this.worker.postMessage("stop");
         } catch {}
+
+        this.hardTimeoutId = setTimeout(() => {
+          if (this.pendingResolve) {
+            console.warn(`[StockfishPool][${this.id}] Hard timeout: engine did not return bestmove, resolving fallback`);
+            const fallback = {
+              bestMoveUci: this.currentBestMove || "",
+              scoreCp: this.currentScoreCp,
+              mate: this.currentMate,
+              pv: this.currentPv.length > 0 ? this.currentPv : [],
+              depth: this.currentDepth,
+              multiPv2ScoreCp: this.secondBestCp,
+              secondBestMoveUci: this.secondBestMove,
+              timedOut: true
+            };
+            const resolve = this.pendingResolve;
+            this.pendingResolve = null;
+            this.isProcessing = false;
+            resolve(fallback);
+            this.processQueue();
+          }
+        }, 300);
       }
     }, (item.maxWaitMs || 1200) + 150);
 
@@ -144,8 +180,10 @@ class StockfishWorkerService {
       this.worker.postMessage(`position fen ${item.fen}`);
       const movetimeCmd = item.maxWaitMs ? ` movetime ${item.maxWaitMs}` : "";
       this.worker.postMessage(`go depth ${item.depth}${movetimeCmd}`);
-    } catch {
+    } catch (err) {
+      console.error(`[StockfishPool][${this.id}] postMessage failed:`, err);
       if (this.evaluationTimeoutId) clearTimeout(this.evaluationTimeoutId);
+      if (this.hardTimeoutId) clearTimeout(this.hardTimeoutId);
       this.isProcessing = false;
       const resolve = this.pendingResolve;
       this.pendingResolve = null;
@@ -192,8 +230,15 @@ class StockfishPool {
     if (this.workers.length < this.targetSize) {
       this.warmUp();
     }
-    const available = this.workers.filter((w) => w.isAvailable && w.worker);
-    if (available.length === 0) return Promise.resolve(null);
+    const readyWorkers = this.workers.filter((w) => w.isAvailable && w.worker && w.isInitialized);
+    const available = readyWorkers.length > 0
+      ? readyWorkers
+      : this.workers.filter((w) => w.isAvailable && w.worker);
+
+    if (available.length === 0) {
+      console.warn("[StockfishPool] No workers available");
+      return Promise.resolve(null);
+    }
     const load = (w) => w.queue.length + (w.isProcessing ? 1 : 0);
     const leastBusy = available.reduce((best, w) => (load(w) < load(best) ? w : best));
     return leastBusy.evaluate(fen, depth, maxWaitMs);

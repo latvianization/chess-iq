@@ -26,6 +26,16 @@ export class ImportModal {
     this.analysisProgress = { current: 0, total: 0 };
     this.bsModal = null;
 
+    try {
+      const saved = JSON.parse(localStorage.getItem('chess_iq_imported_games') || 'null');
+      if (saved && Array.isArray(saved.games) && saved.games.length > 0) {
+        this.username = saved.username || '';
+        this.activeTab = saved.platform || 'chesscom';
+        this.fetchedGames = saved.games;
+        backgroundAnalysisQueue.setQueue(saved.games, this.username);
+      }
+    } catch {}
+
     window.addEventListener('chess_iq_game_analyzed', () => {
       if (this.fetchedGames.length > 0) this.renderTabContent();
     });
@@ -154,12 +164,34 @@ export class ImportModal {
         const games = await fetchChessComGames(this.username);
         this.fetchedGames = games;
         if (games.length === 0) this.fetchError = 'No recent games found for this player.';
-        else backgroundAnalysisQueue.setQueue(games, this.username);
+        else {
+          backgroundAnalysisQueue.setQueue(games, this.username);
+          try {
+            localStorage.setItem('chess_iq_imported_games', JSON.stringify({
+              platform: this.activeTab,
+              username: this.username,
+              games,
+              timestamp: Date.now()
+            }));
+            window.dispatchEvent(new CustomEvent('chess_iq_games_imported'));
+          } catch {}
+        }
       } else if (this.activeTab === 'lichess') {
         const games = await fetchLichessGames(this.username);
         this.fetchedGames = games;
         if (games.length === 0) this.fetchError = 'No recent games found for this player.';
-        else backgroundAnalysisQueue.setQueue(games, this.username);
+        else {
+          backgroundAnalysisQueue.setQueue(games, this.username);
+          try {
+            localStorage.setItem('chess_iq_imported_games', JSON.stringify({
+              platform: this.activeTab,
+              username: this.username,
+              games,
+              timestamp: Date.now()
+            }));
+            window.dispatchEvent(new CustomEvent('chess_iq_games_imported'));
+          } catch {}
+        }
       }
     } catch (err) {
       this.fetchError = err.message || 'Failed to fetch games.';

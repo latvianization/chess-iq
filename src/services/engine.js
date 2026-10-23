@@ -468,11 +468,14 @@ export async function prefetchEvaluations(fens, isDeep, onEach) {
   const unique = [...new Set(fens)];
   stockfishService.warmUp();
   const feederCount = Math.max(2, stockfishService.targetSize || stockfishService.size);
+  const profileKey = typeof isDeep === "string" ? isDeep : (isDeep ? "deep" : "fast");
+  console.log(`[Engine] Starting prefetch: ${unique.length} positions (profile: ${profileKey}, feeders: ${feederCount})`);
   let next = 0;
   let done = 0;
   let failure = null;
+  const startedAt = Date.now();
 
-  const feeders = Array.from({ length: feederCount }, async () => {
+  const feeders = Array.from({ length: feederCount }, async (_, feederIdx) => {
     while (!failure && next < unique.length) {
       const fen = unique[next++];
       try {
@@ -480,11 +483,14 @@ export async function prefetchEvaluations(fens, isDeep, onEach) {
         done++;
         if (onEach) await onEach(done, unique.length);
       } catch (err) {
+        console.error(`[Engine] Feeder ${feederIdx} error on fen ${fen}:`, err);
         failure = err;
       }
     }
   });
   await Promise.all(feeders);
+  const elapsedMs = Date.now() - startedAt;
+  console.log(`[Engine] Prefetch completed: ${done}/${unique.length} positions evaluated in ${elapsedMs}ms (${(elapsedMs / (done || 1)).toFixed(1)}ms/pos)`);
   if (failure) throw failure;
 }
 

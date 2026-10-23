@@ -417,22 +417,22 @@ export class BotArena {
         <!-- Collectible Bot Selection Card -->
         <div class="comic-card p-3 p-sm-4">
           <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3 mb-3">
-            <div>
-              <div class="d-flex align-items-center gap-2">
+            <div class="flex-grow-1 min-w-0">
+              <div class="d-flex align-items-center gap-2 flex-wrap">
                 <span class="fs-3">${this.selectedBot.avatar}</span>
-                <h4 class="mb-0 fw-black">${this.selectedBot.name}</h4>
-                <span class="badge bg-warning text-dark fw-bold border border-dark">${this.selectedBot.elo} Elo</span>
-                <span class="badge bg-secondary fw-semibold">${this.selectedBot.title}</span>
+                <h4 class="mb-0 fw-black text-nowrap">${this.selectedBot.name}</h4>
+                <span class="badge bg-warning text-dark fw-bold border border-dark text-nowrap">${this.selectedBot.elo} Elo</span>
+                <span class="badge bg-secondary fw-semibold text-nowrap">${this.selectedBot.title}</span>
               </div>
               <p class="text-secondary small mb-0 mt-1">${this.selectedBot.description}</p>
             </div>
 
             <!-- 4 Tier Selector Tabs -->
-            <div class="d-flex align-items-center gap-1.5 flex-wrap" role="group">
-              <button type="button" class="arcade-tier-tab ${this.activeTier === 'rookie' ? 'active' : ''}" data-tier="rookie">🌱 Rookies</button>
-              <button type="button" class="arcade-tier-tab ${this.activeTier === 'challenger' ? 'active' : ''}" data-tier="challenger">⚡ Challengers</button>
-              <button type="button" class="arcade-tier-tab ${this.activeTier === 'hero' ? 'active' : ''}" data-tier="hero">🦸 Heroes</button>
-              <button type="button" class="arcade-tier-tab ${this.activeTier === 'titan' ? 'active' : ''}" data-tier="titan">👑 Titans</button>
+            <div class="d-flex align-items-center gap-1.5 flex-nowrap flex-shrink-0 overflow-x-auto mw-100 py-1" style="scrollbar-width: none;" role="group">
+              <button type="button" class="arcade-tier-tab text-nowrap ${this.activeTier === 'rookie' ? 'active' : ''}" data-tier="rookie">🌱 Rookies</button>
+              <button type="button" class="arcade-tier-tab text-nowrap ${this.activeTier === 'challenger' ? 'active' : ''}" data-tier="challenger">⚡ Challengers</button>
+              <button type="button" class="arcade-tier-tab text-nowrap ${this.activeTier === 'hero' ? 'active' : ''}" data-tier="hero">🦸 Heroes</button>
+              <button type="button" class="arcade-tier-tab text-nowrap ${this.activeTier === 'titan' ? 'active' : ''}" data-tier="titan">👑 Titans</button>
             </div>
           </div>
 
@@ -451,12 +451,10 @@ export class BotArena {
                 .map(
                   (b) => `
                   <div class="arcade-bot-card flex-shrink-0 ${b.id === this.selectedBot.id ? 'active' : ''}" data-bot-id="${b.id}">
+                    ${records[b.id]?.wins ? `<span class="arcade-bot-win-badge" title="Defeated ${records[b.id].wins} time(s)">🏆 ${records[b.id].wins}</span>` : ''}
                     <span class="arcade-bot-avatar">${b.avatar}</span>
                     <span class="arcade-bot-name">${b.name}</span>
-                    <span class="arcade-bot-elo d-flex align-items-center justify-content-center gap-1">
-                      ${b.elo}
-                      ${records[b.id]?.wins ? `<span class="badge bg-warning text-dark py-0 px-1" title="Defeated ${records[b.id].wins} time(s)">🏆 ${records[b.id].wins}</span>` : ''}
-                    </span>
+                    <span class="arcade-bot-elo">${b.elo}</span>
                   </div>
                 `
                 )
