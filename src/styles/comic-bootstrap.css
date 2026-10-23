@@ -609,6 +609,24 @@ body {
   animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+.why-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1060;
+  background-color: rgba(10, 12, 18, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.why-dialog {
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

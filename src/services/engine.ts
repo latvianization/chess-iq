@@ -790,3 +790,101 @@ export function calculatePhaseElo(
   const estimated = Math.round(baseElo + clampedDelta + resultBonus);
   return Math.min(3000, Math.max(400, estimated));
 }
+
+export async function getDeepContinuation(fen: string, maxPlies = 10): Promise<any[]> {
+  const steps: any[] = [];
+  try {
+    const chess = new Chess(fen);
+    let pvMoves: string[] = [];
+
+    if (stockfishService && stockfishService.isAvailable) {
+      try {
+        const sf = await stockfishService.evaluate(fen, 12, 500);
+        if (sf && sf.pv && sf.pv.length > 0) {
+          pvMoves = sf.pv;
+        }
+      } catch {
+      }
+    }
+
+    if (pvMoves.length === 0) {
+      const local = findBestMoveLocal(fen, 2);
+      if (local && local.pv && local.pv.length > 0) {
+        pvMoves = local.pv;
+      }
+    }
+
+    let currentFen = fen;
+    for (let i = 0; i < maxPlies; i++) {
+      if (isChessGameOver(chess)) break;
+
+      let nextUci = pvMoves[i];
+      if (!nextUci) {
+        const local = findBestMoveLocal(currentFen, 2);
+        nextUci = local.bestMoveUci;
+      }
+      if (!nextUci || nextUci.length < 4) break;
+
+      const from = nextUci.slice(0, 2);
+      const to = nextUci.slice(2, 4);
+      const promotion = nextUci.length > 4 ? (nextUci[4] as any) : undefined;
+      const m = chess.move({ from, to, promotion });
+      if (!m) break;
+
+      currentFen = chess.fen();
+      steps.push({
+        ply: i + 1,
+        san: m.san,
+        uci: `${m.from}${m.to}${m.promotion || ''}`,
+        from: m.from,
+        to: m.to,
+        fen: currentFen,
+        color: m.color,
+        piece: m.piece,
+        captured: m.captured || null,
+        isCheck: isChessInCheck(chess),
+        isCheckmate: isChessCheckmate(chess)
+      });
+    }
+  } catch {
+  }
+  return steps;
+}
+
+export function summarizePunishment(fenStart: string, fenEnd: string, moverColor: 'w' | 'b'): string {
+  try {
+    const cEnd = new Chess(fenEnd);
+    if (isChessCheckmate(cEnd)) {
+      return "Forces checkmate against you";
+    }
+
+    const cStart = new Chess(fenStart);
+    const pieceVal: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+    let moverStart = 0;
+    let oppStart = 0;
+    cStart.board().flat().forEach((p) => {
+      if (p) {
+        if (p.color === moverColor) moverStart += (pieceVal[p.type] || 0);
+        else oppStart += (pieceVal[p.type] || 0);
+      }
+    });
+
+    let moverEnd = 0;
+    let oppEnd = 0;
+    cEnd.board().flat().forEach((p) => {
+      if (p) {
+        if (p.color === moverColor) moverEnd += (pieceVal[p.type] || 0);
+        else oppEnd += (pieceVal[p.type] || 0);
+      }
+    });
+
+    const netLoss = (moverStart - oppStart) - (moverEnd - oppEnd);
+    if (netLoss >= 9) return `Opponent wins your Queen (+${netLoss})`;
+    if (netLoss >= 5) return `Opponent wins a Rook (+${netLoss})`;
+    if (netLoss >= 3) return `Opponent wins a minor piece (+${netLoss})`;
+    if (netLoss >= 1) return `Opponent wins material (+${netLoss} pawn${netLoss > 1 ? 's' : ''})`;
+    return "Opponent converts into a winning positional advantage";
+  } catch {
+    return "Opponent gains a decisive tactical advantage";
+  }
+}
