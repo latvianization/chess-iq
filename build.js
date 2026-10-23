@@ -105,3 +105,7 @@ if (typeof window !== 'undefined') {
   fs.writeFileSync(targetName, body);
   console.log(`Built ${targetName} (${(body.length / 1024).toFixed(1)} KB)`);
 }
+
+if (!fs.existsSync('stockfish.js') && fs.existsSync('public/stockfish.js')) {
+  fs.copyFileSync('public/stockfish.js', 'stockfish.js');
+}

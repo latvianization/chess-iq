@@ -1,4 +1,21 @@
 let nextWorkerId = 1;
+let resolvedStockfishUrl = null;
+
+function getCandidateWorkerUrls() {
+  if (typeof window !== "undefined" && window.__STOCKFISH_URL__) {
+    return [window.__STOCKFISH_URL__];
+  }
+  const base = (typeof window !== "undefined" && window.__BASE_URL__) || "./";
+  const normalizedBase = base.endsWith("/") ? base : `${base}/`;
+  const list = [
+    `${normalizedBase}stockfish.js`,
+    `${normalizedBase}public/stockfish.js`,
+    "./stockfish.js",
+    "./public/stockfish.js",
+    "/stockfish.js"
+  ];
+  return [...new Set(list)];
+}
 
 class StockfishWorkerService {
   constructor(id = `worker-${nextWorkerId++}`) {
@@ -18,6 +35,7 @@ class StockfishWorkerService {
     this.secondBestMove = "";
     this.evaluationTimeoutId = null;
     this.hardTimeoutId = null;
+    this.candidateIndex = 0;
     this.initWorker();
   }
   initWorker() {
@@ -25,16 +43,27 @@ class StockfishWorkerService {
       this.isAvailable = false;
       return;
     }
+    const candidates = getCandidateWorkerUrls();
+    const workerUrl = resolvedStockfishUrl || candidates[this.candidateIndex] || candidates[0];
+    this.workerUrl = workerUrl;
+
     try {
-      const base = (typeof window !== "undefined" && window.__BASE_URL__) || "./";
-      const workerUrl = `${base.endsWith("/") ? base : `${base}/`}stockfish.js`;
       this.worker = new Worker(workerUrl);
       this.worker.onmessage = (event) => {
         this.handleMessage(event.data);
       };
       this.worker.onerror = (err) => {
+        if (!this.isInitialized && !resolvedStockfishUrl && this.candidateIndex + 1 < candidates.length) {
+          try {
+            this.worker.terminate();
+          } catch {}
+          this.candidateIndex++;
+          this.initWorker();
+          return;
+        }
+
         const msg = (err && err.message) || (err && err.type ? `Event (${err.type})` : "Worker error");
-        console.warn(`[StockfishPool][${this.id}] Worker error (${msg}), taking offline`);
+        console.warn(`[StockfishPool][${this.id}] Worker offline (${msg})`);
         this.isAvailable = false;
         this.drainQueue();
         try {
@@ -43,8 +72,14 @@ class StockfishWorkerService {
       };
       this.worker.postMessage("uci");
     } catch (err) {
-      console.error(`[StockfishPool][${this.id}] Init failed:`, err);
+      if (!this.isInitialized && !resolvedStockfishUrl && this.candidateIndex + 1 < candidates.length) {
+        this.candidateIndex++;
+        this.initWorker();
+        return;
+      }
+      console.warn(`[StockfishPool][${this.id}] Init failed:`, err?.message || err);
       this.isAvailable = false;
+      this.drainQueue();
     }
   }
   drainQueue() {
@@ -71,6 +106,9 @@ class StockfishWorkerService {
     if (typeof line !== "string") return;
     if (line === "uciok") {
       this.isInitialized = true;
+      if (!resolvedStockfishUrl && this.workerUrl) {
+        resolvedStockfishUrl = this.workerUrl;
+      }
       console.log(`[StockfishPool][${this.id}] Initialized and ready (uciok)`);
       if (this.worker) {
         this.worker.postMessage("setoption name MultiPV value 2");
@@ -222,33 +260,57 @@ class StockfishWorkerService {
   }
 }
 const POOL_MAX_WORKERS = 4;
+const MAX_CONSECUTIVE_INIT_FAILURES = 3;
 
 class StockfishPool {
   constructor() {
     const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
     this.targetSize = Math.min(POOL_MAX_WORKERS, Math.max(1, cores - 1));
     this.workers = [new StockfishWorkerService()];
+    this.consecutiveFailures = 0;
+    this.isPermanentlyDisabled = false;
   }
   cleanDeadWorkers() {
-    this.workers = this.workers.filter((w) => w.isAvailable);
+    const dead = this.workers.filter((w) => !w.isAvailable);
+    if (dead.length > 0) {
+      const failedDuringInit = dead.some((w) => !w.isInitialized);
+      if (failedDuringInit) {
+        this.consecutiveFailures += dead.length;
+      }
+      this.workers = this.workers.filter((w) => w.isAvailable);
+    }
+    if (this.consecutiveFailures >= MAX_CONSECUTIVE_INIT_FAILURES && this.workers.length === 0) {
+      if (!this.isPermanentlyDisabled) {
+        this.isPermanentlyDisabled = true;
+        console.warn("[StockfishPool] Web Workers cannot run in this environment. Falling back to built-in local engine.");
+      }
+    }
   }
   warmUp() {
+    if (this.isPermanentlyDisabled) return;
     this.cleanDeadWorkers();
+    if (this.isPermanentlyDisabled) return;
     while (this.workers.length < this.targetSize) {
       this.workers.push(new StockfishWorkerService());
     }
   }
   get size() {
-    return this.workers.filter((w) => w.isAvailable).length;
+    return this.isPermanentlyDisabled ? 0 : this.workers.filter((w) => w.isAvailable).length;
   }
   get isAvailable() {
-    return this.workers.some((w) => w.isAvailable);
+    return !this.isPermanentlyDisabled && this.workers.some((w) => w.isAvailable);
   }
   isEngineReady() {
-    return this.workers.some((w) => w.isEngineReady());
+    return !this.isPermanentlyDisabled && this.workers.some((w) => w.isEngineReady());
   }
   evaluate(fen, depth = 14, maxWaitMs = 1000) {
+    if (this.isPermanentlyDisabled) {
+      return Promise.resolve(null);
+    }
     this.cleanDeadWorkers();
+    if (this.isPermanentlyDisabled) {
+      return Promise.resolve(null);
+    }
     if (this.workers.length === 0) {
       this.workers.push(new StockfishWorkerService());
     }
@@ -256,12 +318,14 @@ class StockfishPool {
       this.warmUp();
     }
     const readyWorkers = this.workers.filter((w) => w.isAvailable && w.worker && w.isInitialized);
+    if (readyWorkers.length > 0) {
+      this.consecutiveFailures = 0;
+    }
     const available = readyWorkers.length > 0
       ? readyWorkers
       : this.workers.filter((w) => w.isAvailable && w.worker);
 
     if (available.length === 0) {
-      console.warn("[StockfishPool] No workers available");
       return Promise.resolve(null);
     }
     const load = (w) => w.queue.length + (w.isProcessing ? 1 : 0);
