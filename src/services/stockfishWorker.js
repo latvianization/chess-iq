@@ -138,11 +138,12 @@ class StockfishWorkerService {
           this.worker.postMessage("stop");
         } catch {}
       }
-    }, item.maxWaitMs || 1200);
+    }, (item.maxWaitMs || 1200) + 150);
 
     try {
       this.worker.postMessage(`position fen ${item.fen}`);
-      this.worker.postMessage(`go depth ${item.depth}`);
+      const movetimeCmd = item.maxWaitMs ? ` movetime ${item.maxWaitMs}` : "";
+      this.worker.postMessage(`go depth ${item.depth}${movetimeCmd}`);
     } catch {
       if (this.evaluationTimeoutId) clearTimeout(this.evaluationTimeoutId);
       this.isProcessing = false;
@@ -170,7 +171,7 @@ const POOL_MAX_WORKERS = 8;
 class StockfishPool {
   constructor() {
     const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
-    this.targetSize = Math.min(POOL_MAX_WORKERS, Math.max(2, cores - 2));
+    this.targetSize = Math.min(POOL_MAX_WORKERS, Math.max(2, cores - 1));
     this.workers = [new StockfishWorkerService()];
   }
   warmUp() {
@@ -188,6 +189,9 @@ class StockfishPool {
     return this.workers.some((w) => w.isEngineReady());
   }
   evaluate(fen, depth = 14, maxWaitMs = 1000) {
+    if (this.workers.length < this.targetSize) {
+      this.warmUp();
+    }
     const available = this.workers.filter((w) => w.isAvailable && w.worker);
     if (available.length === 0) return Promise.resolve(null);
     const load = (w) => w.queue.length + (w.isProcessing ? 1 : 0);

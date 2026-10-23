@@ -32,13 +32,13 @@ jobs:
           node-version: 20
 
       - name: Verify syntax
-        run: node -c app.js src/**/*.js
+        run: node -c app-*.js src/**/*.js
 
       - name: Assemble production bundle
         run: |
           node build.js
           mkdir -p dist
-          cp index.html app.js dist/
+          cp index.html app-*.js dist/
           cp -r src dist/
           cp -r public/* dist/
 

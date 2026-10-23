@@ -1,5 +1,5 @@
 import { fetchChessComGames, fetchLichessGames, analyzeFullPgn } from './importApi.js';
-import { getCachedGame } from './gameCacheService.js';
+import { getCachedGame, saveCachedGame } from './gameCacheService.js';
 import { computeInsights } from './insightsAggregate.js';
 import { backgroundAnalysisQueue } from './backgroundAnalysisQueue.js';
 
@@ -132,38 +132,49 @@ export async function runInsights({ platform, username, force = false, onStatus,
   const pending = games.filter((g) => !entry.summaries[g.id] && !entry.skipped.includes(g.id));
   const startedAt = Date.now();
   let cancelled = false;
+  let doneCount = 0;
+  let nextIdx = 0;
+  const CONCURRENCY = 2;
 
-  for (let i = 0; i < pending.length; i++) {
-    if (shouldCancel()) {
-      cancelled = true;
-      break;
-    }
-    const game = pending[i];
-    const color = insUserColor(game, username);
-    const elapsed = Date.now() - startedAt;
-    const etaMs = i > 0 ? (elapsed / i) * (pending.length - i) : null;
-    onStatus({ stage: 'analyzing', done: i, total: pending.length, game, etaMs });
-
-    try {
-      let analyzed = getCachedGame(game.id || game.pgn, color);
-      if (!analyzed) {
-        analyzed = await analyzeFullPgn(game.pgn, color, true, (current, total) => {
-          if (shouldCancel()) throw new Error(INSIGHTS_CANCELLED);
-          onStatus({ stage: 'analyzing', done: i, total: pending.length, game, etaMs, ply: current, plyTotal: total });
-        }, true);
-      }
-      const summary = insSummarize(game, analyzed, color);
-      if (summary) entry.summaries[game.id] = summary;
-      else entry.skipped.push(game.id);
-    } catch (err) {
-      if (err && err.message === INSIGHTS_CANCELLED) {
+  async function worker() {
+    while (nextIdx < pending.length && !cancelled) {
+      if (shouldCancel()) {
         cancelled = true;
         break;
       }
-      entry.skipped.push(game.id);
+      const i = nextIdx++;
+      const game = pending[i];
+      const color = insUserColor(game, username);
+      const elapsed = Date.now() - startedAt;
+      const etaMs = doneCount > 0 ? (elapsed / doneCount) * (pending.length - doneCount) : null;
+      onStatus({ stage: 'analyzing', done: doneCount, total: pending.length, game, etaMs });
+
+      try {
+        let analyzed = getCachedGame(game.id || game.pgn, color);
+        if (!analyzed) {
+          analyzed = await analyzeFullPgn(game.pgn, color, 'insights', (current, total) => {
+            if (shouldCancel()) throw new Error(INSIGHTS_CANCELLED);
+            onStatus({ stage: 'analyzing', done: doneCount, total: pending.length, game, etaMs, ply: current, plyTotal: total });
+          }, true);
+          if (analyzed) saveCachedGame(game.id || game.pgn, color, analyzed);
+        }
+        const summary = insSummarize(game, analyzed, color);
+        if (summary) entry.summaries[game.id] = summary;
+        else entry.skipped.push(game.id);
+      } catch (err) {
+        if (err && err.message === INSIGHTS_CANCELLED) {
+          cancelled = true;
+          break;
+        }
+        entry.skipped.push(game.id);
+      }
+      doneCount++;
+      insSave(platform, username, entry);
     }
-    insSave(platform, username, entry);
   }
+
+  const workers = Array.from({ length: Math.min(CONCURRENCY, pending.length) }, () => worker());
+  await Promise.all(workers);
 
   entry.report = computeInsights(Object.values(entry.summaries)) || entry.report;
   entry.generatedAt = cancelled ? 0 : Date.now();

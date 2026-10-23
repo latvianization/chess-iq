@@ -397,8 +397,9 @@ export function normalizeFenKey(fen) {
 }
 
 const ENGINE_PROFILES = {
-  fast: { depth: 5, maxWaitMs: 2000 },
-  deep: { depth: 10, maxWaitMs: 3000 }
+  fast: { depth: 8, maxWaitMs: 300 },
+  deep: { depth: 12, maxWaitMs: 600 },
+  insights: { depth: 8, maxWaitMs: 100 }
 };
 
 function toWhitePerspective(result, fen) {
@@ -425,11 +426,12 @@ function localEvaluation(fen, depth) {
 }
 
 export async function evaluateFenHybrid(fen, isDeep = false) {
-  const cacheKey = `${normalizeFenKey(fen)}_${isDeep ? "deep" : "fast"}`;
+  const profileKey = typeof isDeep === "string" ? isDeep : (isDeep ? "deep" : "fast");
+  const cacheKey = `${normalizeFenKey(fen)}_${profileKey}`;
   const cached = FEN_EVAL_CACHE.get(cacheKey);
   if (cached) return cached;
 
-  if (isDeep && countTotalPieces(new Chess(fen)) <= 7) {
+  if (isDeep === true && countTotalPieces(new Chess(fen)) <= 7) {
     const tablebase = await fetchSyzygyTablebase(fen);
     if (tablebase) {
       tablebase.bestMoveUci = tablebase.bestMoveUci || (tablebase.pv && tablebase.pv[0]) || "";
@@ -440,7 +442,7 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
     }
   }
 
-  const profile = isDeep ? ENGINE_PROFILES.deep : ENGINE_PROFILES.fast;
+  const profile = ENGINE_PROFILES[profileKey] || ENGINE_PROFILES.fast;
   const sfEval = await stockfishService.evaluate(fen, profile.depth, profile.maxWaitMs);
   if (sfEval && sfEval.bestMoveUci) {
     const fallback = sfEval.secondBestMoveUci && sfEval.multiPv2ScoreCp !== void 0 ? null : findBestMoveLocal(fen, 1);
@@ -457,7 +459,7 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
     return sfResult;
   }
 
-  const localResult = localEvaluation(fen, isDeep ? 3 : 2);
+  const localResult = localEvaluation(fen, profile.depth <= 8 ? 2 : 3);
   FEN_EVAL_CACHE.set(cacheKey, localResult);
   return localResult;
 }
@@ -465,7 +467,7 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
 export async function prefetchEvaluations(fens, isDeep, onEach) {
   const unique = [...new Set(fens)];
   stockfishService.warmUp();
-  const feederCount = Math.max(1, stockfishService.size);
+  const feederCount = Math.max(2, stockfishService.targetSize || stockfishService.size);
   let next = 0;
   let done = 0;
   let failure = null;
