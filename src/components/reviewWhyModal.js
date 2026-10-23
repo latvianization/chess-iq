@@ -18,12 +18,14 @@ async function openWhyModal(dashboard, targetEval = null) {
 
   closeWhyModal(dashboard);
 
+  const isBrilliant = cur.classification === 'brilliant';
   const comic = getComicBadge(cur.classification, cur.san);
-  const classificationName = cur.classification.replace('_', ' ');
+  const classificationName = isBrilliant ? 'Brilliant Move' : cur.classification.replace('_', ' ');
 
   const winProbBeforePct = Math.round((cur.moverWinProbBefore ?? cur.winProbBefore ?? 0.5) * 100);
   const winProbAfterPct = Math.round((cur.moverWinProbAfter ?? cur.winProb ?? 0.5) * 100);
   const winLossPct = Math.max(0, winProbBeforePct - winProbAfterPct);
+  const winGainPct = Math.max(0, winProbAfterPct - winProbBeforePct);
 
   const evalBefore = cur.scoreBefore !== undefined ? (cur.scoreBefore / 100).toFixed(1) : null;
   const evalAfter = cur.scoreAfter !== undefined ? (cur.scoreAfter / 100).toFixed(1) : null;
@@ -39,7 +41,7 @@ async function openWhyModal(dashboard, targetEval = null) {
             ${comic.symbol} ${comic.term}
           </span>
           <div>
-            <h5 class="mb-0 fw-black fs-6">Why was ${cur.san} a ${classificationName}?</h5>
+            <h5 class="mb-0 fw-black fs-6">${isBrilliant ? `Why was ${cur.san} Brilliant?` : `Why was ${cur.san} a ${classificationName}?`}</h5>
             <div class="text-secondary small font-monospace" style="font-size: 11px;">Move ${Math.ceil((cur.ply || 1) / 2)}${cur.color === 'b' ? '... ' : '. '}${cur.san}</div>
           </div>
         </div>
@@ -49,10 +51,10 @@ async function openWhyModal(dashboard, targetEval = null) {
       <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
         <div class="arcade-mode-pills" role="group">
           <button type="button" class="arcade-pill active" id="why-tab-punishment" disabled>
-            <i class="bi bi-lightning-charge-fill me-1 text-danger"></i>Opponent's Punishment
+            ${isBrilliant ? '<i class="bi bi-gem me-1" style="color: #06b6d4;"></i>Winning Follow-up' : '<i class="bi bi-lightning-charge-fill me-1 text-danger"></i>Opponent\'s Punishment'}
           </button>
           <button type="button" class="arcade-pill" id="why-tab-best" disabled>
-            <i class="bi bi-star-fill me-1 text-success"></i>Best Alternative (${cur.bestMoveSan || 'Top Move'})
+            ${isBrilliant ? `<i class="bi bi-shuffle me-1 text-secondary"></i>Quiet Alternative (${cur.secondBestMoveSan || 'Alternative'})` : `<i class="bi bi-star-fill me-1 text-success"></i>Best Alternative (${cur.bestMoveSan || 'Top Move'})`}
           </button>
         </div>
         <span class="badge bg-body-secondary text-secondary font-monospace fw-bold px-2.5 py-1.5" id="why-step-counter">Move 0 / 0</span>
@@ -67,13 +69,13 @@ async function openWhyModal(dashboard, targetEval = null) {
             <div class="card border-0 mb-2 p-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border) !important; border-radius: 0.75rem;">
               <div class="d-flex align-items-center justify-content-between mb-1.5">
                 <span class="text-uppercase fw-bold text-secondary" style="font-size: 10px; letter-spacing: 0.5px;">Evaluation Impact</span>
-                <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace" id="why-line-tag">Punishment</span>
+                <span class="badge ${isBrilliant ? '' : 'bg-danger-subtle text-danger border border-danger-subtle'} font-monospace" id="why-line-tag" ${isBrilliant ? 'style="background: rgba(6,182,212,0.15); color: #06b6d4; border: 1px solid rgba(6,182,212,0.3);"' : ''}>${isBrilliant ? 'Winning Line' : 'Punishment'}</span>
               </div>
               <div class="d-flex align-items-center gap-3">
                 <div>
                   <span class="text-secondary small d-block" style="font-size: 10px;">Win Chance</span>
                   <span class="fw-black font-monospace fs-6">${winProbBeforePct}% → ${winProbAfterPct}%</span>
-                  <span class="badge bg-danger text-white font-monospace ms-1" style="font-size: 10px;">-${winLossPct}%</span>
+                  ${isBrilliant ? (winGainPct > 0 ? `<span class="badge font-monospace ms-1" style="background: rgba(6,182,212,0.2); color: #06b6d4; font-size: 10px;">+${winGainPct}%</span>` : `<span class="badge bg-success-subtle text-success font-monospace ms-1" style="font-size: 10px;">Solid</span>`) : `<span class="badge bg-danger text-white font-monospace ms-1" style="font-size: 10px;">-${winLossPct}%</span>`}
                 </div>
                 ${evalBefore !== null && evalAfter !== null ? `
                 <div class="vr opacity-25"></div>
@@ -87,9 +89,9 @@ async function openWhyModal(dashboard, targetEval = null) {
 
             <div class="card border-0 mb-3 p-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border) !important; border-radius: 0.75rem;">
               <div class="d-flex align-items-start gap-2">
-                <i class="bi bi-shield-exclamation text-danger fs-5 lh-1 mt-0.5"></i>
+                <i class="bi ${isBrilliant ? 'bi-gem' : 'bi-shield-exclamation text-danger'} fs-5 lh-1 mt-0.5" ${isBrilliant ? 'style="color: #06b6d4;"' : ''}></i>
                 <div>
-                  <span class="fw-bold small d-block text-body" id="why-summary-text"><span class="spinner-border spinner-border-sm text-danger me-2" role="status"></span>Calculating what happens next...</span>
+                  <span class="fw-bold small d-block text-body" id="why-summary-text"><span class="spinner-border spinner-border-sm ${isBrilliant ? '' : 'text-danger'} me-2" ${isBrilliant ? 'style="color: #06b6d4;"' : ''} role="status"></span>Calculating what happens next...</span>
                 </div>
               </div>
             </div>
@@ -173,44 +175,61 @@ async function openWhyModal(dashboard, targetEval = null) {
   let bestSteps = cur.explanation?.bestSteps;
   let bestSummary = cur.explanation?.bestSummary;
 
-  if (!punishmentSteps || !bestSteps) {
-    punishmentSteps = [
-      { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
-    ];
-    const deepPunish = await getDeepContinuation(cur.fen, 5);
-    punishmentSteps.push(...deepPunish);
-    const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
-    punishmentSummary = summarizePunishment(cur.fen, endFen, cur.color);
+  const hasValidPunish = Array.isArray(punishmentSteps) && punishmentSteps.length > 1;
+  const hasValidBest = Array.isArray(bestSteps) && bestSteps.length > 1;
 
-    bestSteps = [
-      { ply: 0, fen: cur.fenBefore, from: null, to: null, san: 'Start' }
-    ];
-    bestSummary = 'Maintains a solid position and prevents opponent tactical counterplay.';
+  if (!hasValidPunish || !hasValidBest) {
+    if (!hasValidPunish) {
+      punishmentSteps = [
+        { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
+      ];
+      const deepPunish = await getDeepContinuation(cur.fen, 5);
+      punishmentSteps.push(...deepPunish);
+      const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
+      punishmentSummary = isBrilliant
+        ? summarizeBrilliant(cur.fen, endFen, cur.color)
+        : summarizePunishment(cur.fen, endFen, cur.color);
+    }
 
-    try {
-      const cBest = new Chess(cur.fenBefore);
-      const bUci = cur.bestMoveUci;
-      if (bUci && bUci.length >= 4) {
-        const from = bUci.slice(0, 2);
-        const to = bUci.slice(2, 4);
-        const promotion = bUci.length > 4 ? bUci[4] : void 0;
-        const m = cBest.move({ from, to, promotion });
-        if (m) {
-          bestSteps.push({
-            ply: 1,
-            san: m.san,
-            uci: bUci,
-            from: m.from,
-            to: m.to,
-            fen: cBest.fen(),
-            color: m.color
-          });
-          const deepBest = await getDeepContinuation(cBest.fen(), 4);
-          bestSteps.push(...deepBest);
-          bestSummary = `Playing ${cur.bestMoveSan || m.san} retains full equality or advantage with no tactical loss.`;
+    if (!hasValidBest) {
+      bestSteps = [
+        { ply: 0, fen: cur.fenBefore, from: null, to: null, san: 'Start' }
+      ];
+      bestSummary = isBrilliant
+        ? 'A quiet alternative that misses the decisive tactical breakthrough.'
+        : 'Maintains a solid position and prevents opponent tactical counterplay.';
+
+      try {
+        const cBest = new Chess(cur.fenBefore);
+        let bUci = isBrilliant ? (cur.secondBestMoveUci || findBestMoveLocal(cur.fenBefore, 2).secondBestMoveUci || findBestMoveLocal(cur.fenBefore, 2).bestMoveUci) : cur.bestMoveUci;
+        if (!bUci) {
+          const localBest = findBestMoveLocal(cur.fenBefore, 2);
+          bUci = isBrilliant ? (localBest.secondBestMoveUci || localBest.bestMoveUci) : localBest.bestMoveUci;
         }
+        if (bUci && bUci.length >= 4) {
+          const from = bUci.slice(0, 2);
+          const to = bUci.slice(2, 4);
+          const promotion = bUci.length > 4 ? bUci[4] : void 0;
+          const m = cBest.move({ from, to, promotion });
+          if (m) {
+            bestSteps.push({
+              ply: 1,
+              san: m.san,
+              uci: bUci,
+              from: m.from,
+              to: m.to,
+              fen: cBest.fen(),
+              color: m.color
+            });
+            const deepBest = await getDeepContinuation(cBest.fen(), 4);
+            bestSteps.push(...deepBest);
+            bestSummary = isBrilliant
+              ? `Playing ${cur.secondBestMoveSan || m.san} is a quieter alternative that misses the tactical breakthrough.`
+              : `Playing ${cur.bestMoveSan || m.san} retains full equality or advantage with no tactical loss.`;
+          }
+        }
+      } catch {
       }
-    } catch {
     }
 
     cur.explanation = { punishmentSteps, punishmentSummary, bestSteps, bestSummary };
@@ -255,6 +274,11 @@ async function openWhyModal(dashboard, targetEval = null) {
     if (!pillsContainer) return;
     pillsContainer.innerHTML = '';
 
+    if (!currentSteps || currentSteps.length === 0) {
+      pillsContainer.innerHTML = '<span class="text-secondary small fst-italic">No tactical continuation available.</span>';
+      return;
+    }
+
     currentSteps.forEach((st, idx) => {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -269,6 +293,14 @@ async function openWhyModal(dashboard, targetEval = null) {
       });
       pillsContainer.appendChild(btn);
     });
+
+    if (currentSteps.length === 1 && activeTab === 'punishment') {
+      const note = document.createElement('span');
+      note.className = 'text-secondary small fst-italic align-self-center ms-1';
+      note.style.fontSize = '11px';
+      note.textContent = '(Position offers no forcing reply)';
+      pillsContainer.appendChild(note);
+    }
   };
 
   const setTab = (tab) => {
@@ -287,8 +319,15 @@ async function openWhyModal(dashboard, targetEval = null) {
       btnBest?.classList.remove('active');
 
       if (tagEl) {
-        tagEl.className = 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace';
-        tagEl.textContent = 'Punishment';
+        if (isBrilliant) {
+          tagEl.className = 'badge font-monospace';
+          tagEl.style.cssText = 'background: rgba(6,182,212,0.15); color: #06b6d4; border: 1px solid rgba(6,182,212,0.3);';
+          tagEl.textContent = 'Winning Line';
+        } else {
+          tagEl.className = 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace';
+          tagEl.style.cssText = '';
+          tagEl.textContent = 'Punishment';
+        }
       }
       if (summaryEl) summaryEl.textContent = punishmentSummary;
     } else {
@@ -297,8 +336,15 @@ async function openWhyModal(dashboard, targetEval = null) {
       btnPunish?.classList.remove('active');
 
       if (tagEl) {
-        tagEl.className = 'badge bg-success-subtle text-success border border-success-subtle font-monospace';
-        tagEl.textContent = 'Best Line';
+        if (isBrilliant) {
+          tagEl.className = 'badge bg-secondary-subtle text-secondary border border-secondary-subtle font-monospace';
+          tagEl.style.cssText = '';
+          tagEl.textContent = 'Quiet Alternative';
+        } else {
+          tagEl.className = 'badge bg-success-subtle text-success border border-success-subtle font-monospace';
+          tagEl.style.cssText = '';
+          tagEl.textContent = 'Best Line';
+        }
       }
       if (summaryEl) summaryEl.textContent = bestSummary;
     }
@@ -389,15 +435,26 @@ async function openWhyModal(dashboard, targetEval = null) {
 
   const needsLongerLines = punishmentSteps.length - 1 < MIN_CONTINUATION_PLIES || bestSteps.length - 1 < MIN_CONTINUATION_PLIES;
   if (needsLongerLines) {
-    modal.querySelector('#why-pills-container')?.insertAdjacentHTML('beforeend', '<span class="spinner-border spinner-border-sm text-secondary align-self-center" role="status"></span>');
-    const [punishTail, bestTail] = await Promise.all([
-      extendContinuation(cur.fen, punishmentSteps.slice(1)),
-      extendContinuation(cur.fenBefore, bestSteps.slice(1))
-    ]);
-    if (!document.body.contains(modal)) return;
-    punishmentSteps.splice(1, punishmentSteps.length - 1, ...punishTail);
-    bestSteps.splice(1, bestSteps.length - 1, ...bestTail);
-    updatePills();
-    renderActiveStep();
+    modal.querySelector('#why-pills-container')?.insertAdjacentHTML('beforeend', '<span class="spinner-border spinner-border-sm text-secondary align-self-center ms-1" id="why-pills-spinner" role="status"></span>');
+    try {
+      const [punishTail, bestTail] = await Promise.all([
+        extendContinuation(cur.fen, punishmentSteps.slice(1)),
+        extendContinuation(cur.fenBefore, bestSteps.slice(1))
+      ]);
+      if (!document.body.contains(modal)) return;
+      if (punishTail && punishTail.length > 0) {
+        punishmentSteps.splice(1, punishmentSteps.length - 1, ...punishTail);
+      }
+      if (bestTail && bestTail.length > 0) {
+        bestSteps.splice(1, bestSteps.length - 1, ...bestTail);
+      }
+      cur.explanation = { punishmentSteps, punishmentSummary, bestSteps, bestSummary };
+    } catch (err) {
+      console.warn('[WhyModal] Error extending lines:', err);
+    } finally {
+      modal.querySelector('#why-pills-spinner')?.remove();
+      updatePills();
+      renderActiveStep();
+    }
   }
 }

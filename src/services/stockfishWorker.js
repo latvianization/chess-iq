@@ -264,7 +264,18 @@ class StockfishWorkerService {
       return Promise.resolve(null);
     }
     return new Promise((resolve) => {
-      this.queue.push({ fen, depth, maxWaitMs, resolve });
+      let settled = false;
+      const safeResolve = (val) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(overallTimeout);
+        resolve(val);
+      };
+      const overallTimeout = setTimeout(() => {
+        safeResolve(null);
+      }, (maxWaitMs || 1200) + 2500);
+
+      this.queue.push({ fen, depth, maxWaitMs, resolve: safeResolve });
       this.processQueue();
     });
   }

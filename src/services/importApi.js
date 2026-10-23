@@ -13,36 +13,57 @@ function parseClockToSeconds(clockStr) {
   }
 }
 function extractMovesAndClocks(pgn) {
-  const moveText = pgn.replace(/\[[^\]]*\]/g, " ").trim();
+  if (!pgn || typeof pgn !== "string") return { moves: [], clocks: [] };
+
+  // 1. Separate headers from move text: headers are [...] lines before the moves
+  let text = pgn.replace(/^\s*\[[^\]]+\]\s*$/gm, " ");
+
+  // 2. Remove variations (...) first
+  text = text.replace(/\([^)]*\)/g, " ");
+
+  // 3. Tokenize while tracking moves and clocks
   const moves = [];
   const clocks = [];
-  const tokens = moveText.split(/\s+/);
-  for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i];
-    if (!token) continue;
-    if (/^\d+\.+$/.test(token) || ["1-0", "0-1", "1/2-1/2", "*"].includes(token)) {
-      continue;
-    }
-    if (token.includes("[%clk")) {
-      let comment = token;
-      while (!comment.includes("]") && i + 1 < tokens.length) {
-        i++;
-        comment += " " + tokens[i];
-      }
-      const clkMatch = comment.match(/\[%clk\s+([^\]]+)\]/);
+  const tokenRegex = /(\{[^}]*\}|[^\s{}]+)/g;
+  let match;
+
+  while ((match = tokenRegex.exec(text)) !== null) {
+    const raw = match[1].trim();
+    if (!raw) continue;
+
+    // Check for comment containing [%clk hh:mm:ss]
+    if (raw.startsWith("{")) {
+      const clkMatch = raw.match(/\[%clk\s+([^\]]+)\]/);
       if (clkMatch) {
-        const clk = parseClockToSeconds(clkMatch[1]);
+        const seconds = parseClockToSeconds(clkMatch[1]);
         if (clocks.length > 0 && clocks[clocks.length - 1] === null) {
-          clocks[clocks.length - 1] = clk;
+          clocks[clocks.length - 1] = seconds;
         }
       }
       continue;
     }
-    if (/^[a-hKQRBNPOo0-9+#=x-]+$/.test(token)) {
-      moves.push(token);
+
+    // Skip game results
+    if (["1-0", "0-1", "1/2-1/2", "*"].includes(raw)) continue;
+
+    // Skip standalone move numbers e.g. "1.", "12...", "1..."
+    if (/^\d+\.+$/.test(raw)) continue;
+
+    // Clean move token: strip leading move numbers (e.g. "1.e4" -> "e4", "1...e5" -> "e5")
+    let moveToken = raw.replace(/^\d+\.+/, "");
+
+    // Remove annotations like ?!, ?, !, !!, !?, and NAGs like $1
+    moveToken = moveToken.replace(/[$]\d+/, "").replace(/[?!]+$/, "");
+
+    if (!moveToken) continue;
+
+    // Verify it matches valid chess SAN notation
+    if (/^[a-hKQRBNPOo0-9+#=x-]+$/.test(moveToken)) {
+      moves.push(moveToken);
       clocks.push(null);
     }
   }
+
   return { moves, clocks };
 }
 async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, skipExtras = false) {
@@ -275,7 +296,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
       if (!skipExtras && (classification === "blunder" || winProbLoss > 0.15)) {
         threat = await detectThreat(item.fenAfter);
       }
-      if (!skipExtras && (classification === "blunder" || classification === "mistake" || classification === "inaccuracy")) {
+      if (!skipExtras && (classification === "blunder" || classification === "mistake" || classification === "inaccuracy" || classification === "missed_win")) {
         explanation = await prepareMoveExplanation({
           fen: item.fenAfter,
           fenBefore: item.fenBefore,
@@ -424,6 +445,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
   const analyzedResult = {
     id: `game_${Date.now()}`,
     platform: "pgn",
+    pgn,
     white,
     black,
     whiteElo,
@@ -513,43 +535,4 @@ async function fetchChessComGames(username, limit = 15) {
     collected.push(...standardGames.reverse());
   }
   return collected.slice(0, limit).map(mapChessComGame);
-}
-async function fetchLichessGames(username, limit = 15) {
-  const cleanUsername = username.trim().toLowerCase();
-  const url = `https://lichess.org/api/games/user/${cleanUsername}?max=${limit}&clocks=true&opening=true&pgnInJson=true&perfType=ultraBullet,bullet,blitz,rapid,classical`;
-  const res = await fetch(url, {
-    headers: {
-      "Accept": "application/x-ndjson"
-    }
-  });
-  if (!res.ok) throw new Error(`Lichess user '${username}' not found.`);
-  const text = await res.text();
-  const lines = text.trim().split("\n").filter(Boolean);
-  return lines.map((line, idx) => {
-    try {
-      const g = JSON.parse(line);
-      const whiteName = g.players?.white?.user?.name || "White";
-      const blackName = g.players?.black?.user?.name || "Black";
-      let res2 = "*";
-      if (g.winner === "white") res2 = "1-0";
-      else if (g.winner === "black") res2 = "0-1";
-      else if (g.status === "draw" || g.status === "stalemate") res2 = "1/2-1/2";
-      return {
-        id: `lichess_${g.id || idx}`,
-        platform: "lichess",
-        white: whiteName,
-        black: blackName,
-        whiteElo: g.players?.white?.rating || 1500,
-        blackElo: g.players?.black?.rating || 1500,
-        result: res2,
-        date: g.createdAt ? new Date(g.createdAt).toISOString().split("T")[0] : "Recent",
-        endTime: g.lastMoveAt || g.createdAt || 0,
-        timeControl: `${g.clock?.initial || 180}+${g.clock?.increment || 0}`,
-        eco: g.opening?.eco || "B00",
-        pgn: g.pgn || ""
-      };
-    } catch {
-      return null;
-    }
-  }).filter(Boolean);
 }

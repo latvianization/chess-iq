@@ -66,13 +66,17 @@ async function detectThreat(fen) {
 
 async function getDeepContinuation(fen, maxPlies = 5) {
   const steps = [];
+  if (!fen) return steps;
   try {
     const chess = new Chess(fen);
     let pvMoves = [];
 
     if (stockfishService && stockfishService.isAvailable) {
       try {
-        const sf = await stockfishService.evaluate(fen, 14, 1000);
+        const sf = await Promise.race([
+          stockfishService.evaluate(fen, 14, 1000),
+          new Promise((resolve) => setTimeout(() => resolve(null), 1200))
+        ]);
         if (sf && sf.pv && sf.pv.length > 0) {
           pvMoves = sf.pv;
         }
@@ -92,16 +96,29 @@ async function getDeepContinuation(fen, maxPlies = 5) {
       if (isChessGameOver(chess)) break;
 
       let nextUci = pvMoves[i];
-      if (!nextUci) {
+      let m = null;
+      if (nextUci && nextUci.length >= 4) {
+        const from = nextUci.slice(0, 2);
+        const to = nextUci.slice(2, 4);
+        const promotion = nextUci.length > 4 ? nextUci[4] : void 0;
+        try { m = chess.move({ from, to, promotion }); } catch {}
+      }
+      if (!m) {
         const local = findBestMoveLocal(currentFen, 2);
         nextUci = local.bestMoveUci;
+        if (nextUci && nextUci.length >= 4) {
+          const from = nextUci.slice(0, 2);
+          const to = nextUci.slice(2, 4);
+          const promotion = nextUci.length > 4 ? nextUci[4] : void 0;
+          try { m = chess.move({ from, to, promotion }); } catch {}
+        }
       }
-      if (!nextUci || nextUci.length < 4) break;
-
-      const from = nextUci.slice(0, 2);
-      const to = nextUci.slice(2, 4);
-      const promotion = nextUci.length > 4 ? nextUci[4] : void 0;
-      const m = chess.move({ from, to, promotion });
+      if (!m) {
+        const legal = chess.moves({ verbose: true });
+        if (legal && legal.length > 0) {
+          try { m = chess.move(legal[0]); } catch {}
+        }
+      }
       if (!m) break;
 
       currentFen = chess.fen();
@@ -159,6 +176,25 @@ function summarizePunishment(fenStart, fenEnd, moverColor) {
   }
 }
 
+function summarizeBrilliant(fenStart, fenEnd, moverColor) {
+  try {
+    const cEnd = new Chess(fenEnd);
+    if (isChessCheckmate(cEnd)) {
+      return "Forced checkmate sequence following the brilliant sacrifice!";
+    }
+
+    const cStart = new Chess(fenStart);
+    const oppColor = moverColor === "w" ? "b" : "w";
+    const netOppLoss = getMaterialDiffInPawns(cStart, oppColor) - getMaterialDiffInPawns(cEnd, oppColor);
+    if (netOppLoss >= 9) return `Sacrifice shatters defenses to win opponent's Queen (+${netOppLoss})`;
+    if (netOppLoss >= 5) return `Decisive tactical breakthrough wins a Rook (+${netOppLoss})`;
+    if (netOppLoss >= 3) return `Sacrifice yields a decisive winning material advantage (+${netOppLoss})`;
+    return "Sacrifices material to initiate a decisive winning attack";
+  } catch {
+    return "A brilliant tactical sacrifice that shatters the opponent's position";
+  }
+}
+
 function replayPv(fen, pvMoves, maxPlies = 5) {
   const steps = [];
   if (!fen || !Array.isArray(pvMoves) || pvMoves.length === 0) return steps;
@@ -191,10 +227,13 @@ function replayPv(fen, pvMoves, maxPlies = 5) {
 var MIN_CONTINUATION_PLIES = 5;
 
 async function extendContinuation(startFen, steps, maxPlies = 5) {
-  if (steps.length >= MIN_CONTINUATION_PLIES) return steps;
-  const lastFen = steps.length > 0 ? steps[steps.length - 1].fen : startFen;
-  const extra = await getDeepContinuation(lastFen, maxPlies - steps.length);
-  const merged = [...steps];
+  const validSteps = Array.isArray(steps) ? steps : [];
+  if (validSteps.length >= MIN_CONTINUATION_PLIES) return validSteps;
+  const lastFen = validSteps.length > 0 ? validSteps[validSteps.length - 1].fen : startFen;
+  if (!lastFen) return validSteps;
+  const needed = Math.max(1, maxPlies - validSteps.length);
+  const extra = await getDeepContinuation(lastFen, needed);
+  const merged = [...validSteps];
   extra.forEach((step) => merged.push({ ...step, ply: merged.length + 1 }));
   return merged;
 }
@@ -210,26 +249,49 @@ async function prepareMoveExplanation(cur) {
     if (cur.punishmentPv && cur.punishmentPv.length > 0) {
       deepPunish = replayPv(cur.fen, cur.punishmentPv, 5);
     }
+    if (deepPunish.length < 5) {
+      const lastFen = deepPunish.length > 0 ? deepPunish[deepPunish.length - 1].fen : cur.fen;
+      if (lastFen) {
+        const extra = await getDeepContinuation(lastFen, 5 - deepPunish.length);
+        extra.forEach((st) => deepPunish.push({ ...st, ply: deepPunish.length + 1 }));
+      }
+    }
     punishmentSteps.push(...deepPunish);
 
+    const isBrilliant = cur.classification === 'brilliant';
     const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
-    const punishmentSummary = summarizePunishment(cur.fen, endFen, cur.color);
+    const punishmentSummary = isBrilliant
+      ? summarizeBrilliant(cur.fen, endFen, cur.color)
+      : summarizePunishment(cur.fen, endFen, cur.color);
 
     const bestSteps = [
       { ply: 0, fen: cur.fenBefore, from: null, to: null, san: 'Start' }
     ];
 
     let deepBest = [];
-    if (cur.bestPv && cur.bestPv.length > 0) {
+    if (isBrilliant && cur.secondBestMoveUci) {
+      deepBest = replayPv(cur.fenBefore, [cur.secondBestMoveUci], 1);
+    } else if (cur.bestPv && cur.bestPv.length > 0) {
       deepBest = replayPv(cur.fenBefore, cur.bestPv, 5);
     }
-    if (deepBest.length === 0) {
-      deepBest = replayPv(cur.fenBefore, [cur.bestMoveUci], 1);
+    if (deepBest.length === 0 && (cur.secondBestMoveUci || cur.bestMoveUci)) {
+      deepBest = replayPv(cur.fenBefore, [isBrilliant ? (cur.secondBestMoveUci || cur.bestMoveUci) : cur.bestMoveUci], 1);
+    }
+    if (deepBest.length < 5) {
+      const lastFen = deepBest.length > 0 ? deepBest[deepBest.length - 1].fen : cur.fenBefore;
+      if (lastFen) {
+        const extra = await getDeepContinuation(lastFen, 5 - deepBest.length);
+        extra.forEach((st) => deepBest.push({ ...st, ply: deepBest.length + 1 }));
+      }
     }
     bestSteps.push(...deepBest);
 
-    const bestSan = cur.bestMoveSan || bestSteps[1]?.san || 'the suggested move';
-    const bestSummary = `Playing ${bestSan} retains full equality or advantage with no tactical loss.`;
+    const bestSan = isBrilliant
+      ? (cur.secondBestMoveSan || bestSteps[1]?.san || 'a quiet alternative')
+      : (cur.bestMoveSan || bestSteps[1]?.san || 'the suggested move');
+    const bestSummary = isBrilliant
+      ? `Playing ${bestSan} misses the decisive tactical breakthrough.`
+      : `Playing ${bestSan} retains full equality or advantage with no tactical loss.`;
 
     return {
       punishmentSteps,

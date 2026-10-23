@@ -21,6 +21,11 @@ function hashString(str) {
 function getGameCacheKey(gameIdOrPgn, userColor = 'w') {
   if (!gameIdOrPgn) return '';
   const clean = typeof gameIdOrPgn === 'string' ? gameIdOrPgn.trim() : '';
+  if (!clean) return '';
+  // If clean is already a full cache key (e.g. pgn_xyz_w or id_xyz_w)
+  if ((clean.startsWith('pgn_') || clean.startsWith('id_')) && (clean.endsWith('_w') || clean.endsWith('_b'))) {
+    return clean;
+  }
   if (clean.length < 64 && !clean.includes('\n') && !clean.includes('1.')) {
     return `id_${clean}_${userColor}`;
   }
@@ -43,22 +48,51 @@ function saveCacheIndex(index) {
 
 function getGameCacheInfo(gameIdOrPgn, userColor = 'w') {
   const key = getGameCacheKey(gameIdOrPgn, userColor);
-  if (!key) return null;
   const index = getCacheIndex();
-  const entry = index.find((item) => item.key === key);
+  let entry = key ? index.find((item) => item.key === key) : null;
+  if (!entry && gameIdOrPgn) {
+    entry = index.find((item) =>
+      item.key === gameIdOrPgn ||
+      item.id === gameIdOrPgn ||
+      (item.key && item.key.includes(gameIdOrPgn)) ||
+      (item.pgn && item.pgn === gameIdOrPgn)
+    );
+  }
   return entry || null;
 }
 
 function getCachedGame(gameIdOrPgn, userColor = 'w') {
+  if (!gameIdOrPgn) return null;
+  // 1. Check computed key
   const key = getGameCacheKey(gameIdOrPgn, userColor);
-  if (!key) return null;
-  try {
-    const raw = localStorage.getItem(`${GAME_PREFIX}${key}`);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
+  if (key) {
+    try {
+      const raw = localStorage.getItem(`${GAME_PREFIX}${key}`);
+      if (raw) return JSON.parse(raw);
+    } catch {}
   }
+  // 2. Direct key in storage
+  if (typeof gameIdOrPgn === 'string' && gameIdOrPgn !== key) {
+    try {
+      const raw = localStorage.getItem(`${GAME_PREFIX}${gameIdOrPgn}`);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+  }
+  // 3. Fallback: Search index
+  try {
+    const index = getCacheIndex();
+    const entry = index.find((item) =>
+      item.key === gameIdOrPgn ||
+      item.id === gameIdOrPgn ||
+      (item.key && item.key.includes(gameIdOrPgn)) ||
+      (item.pgn && item.pgn === gameIdOrPgn)
+    );
+    if (entry && entry.key) {
+      const raw = localStorage.getItem(`${GAME_PREFIX}${entry.key}`);
+      if (raw) return JSON.parse(raw);
+    }
+  } catch {}
+  return null;
 }
 
 function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
@@ -67,6 +101,9 @@ function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
   if (!key) return;
 
   try {
+    const pgnToSave = analyzedGame.pgn || (typeof gameIdOrPgn === 'string' && (gameIdOrPgn.includes(' ') || gameIdOrPgn.includes('\n') || gameIdOrPgn.includes('.')) ? gameIdOrPgn : '');
+    analyzedGame.pgn = pgnToSave;
+
     const serialized = JSON.stringify(analyzedGame);
     localStorage.setItem(`${GAME_PREFIX}${key}`, serialized);
 
@@ -74,6 +111,7 @@ function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
     index.unshift({
       key,
       id: analyzedGame.id || key,
+      pgn: pgnToSave,
       white: analyzedGame.white || 'White',
       black: analyzedGame.black || 'Black',
       whiteElo: analyzedGame.whiteElo || 1500,

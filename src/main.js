@@ -230,13 +230,39 @@ class App {
     document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
     document.body.classList.remove('modal-open');
 
-    const cachedGame = getCachedGame(pgn, userColor);
+    let cachedGame = getCachedGame(pgn, userColor);
+    if (!cachedGame && typeof pgn === 'string') {
+      cachedGame = getCachedGame(pgn, 'w') || getCachedGame(pgn, 'b');
+    }
     if (cachedGame) {
       console.log(`[App] Game found in cache: ${cachedGame.white} vs ${cachedGame.black} (${cachedGame.userAccuracy}% acc)`);
       this.reviewDashboard?.setGame(cachedGame);
       soundService.playSuccess();
       this.importModal?.setAnalyzing(false, 0, 0);
       backgroundAnalysisQueue.startIdleProcessing();
+      return;
+    }
+
+    // Resolve actual PGN if an ID or key was passed
+    let actualPgn = typeof pgn === 'string' ? pgn.trim() : '';
+    if (actualPgn && !actualPgn.includes(' ') && !actualPgn.includes('\n') && !actualPgn.includes('.')) {
+      try {
+        const savedImport = JSON.parse(localStorage.getItem('chess_iq_imported_games') || 'null');
+        const match = savedImport?.games?.find((g) => g.id === actualPgn);
+        if (match?.pgn) actualPgn = match.pgn;
+      } catch {}
+      if (actualPgn === pgn && typeof getCacheIndex === 'function') {
+        const index = getCacheIndex();
+        const entry = index.find((i) => i.id === pgn || i.key === pgn);
+        if (entry?.pgn) actualPgn = entry.pgn;
+      }
+    }
+
+    if (!actualPgn || (!actualPgn.includes(' ') && !actualPgn.includes('.') && actualPgn.length < 15)) {
+      console.warn('[App] Cannot run analysis: invalid or missing PGN notation:', pgn);
+      this.reviewDashboard?.hideLoading();
+      this.reviewDashboard?.render();
+      this.importModal?.setAnalyzing(false, 0, 0);
       return;
     }
 
@@ -249,7 +275,7 @@ class App {
 
     try {
       const analyzedGame = await analyzeFullPgn(
-        pgn,
+        actualPgn,
         userColor,
         this.isDeepReview,
         async (current, total) => {
@@ -258,7 +284,7 @@ class App {
       );
 
       console.log('[App] Analysis completed, caching and loading review...');
-      saveCachedGame(pgn, userColor, analyzedGame);
+      saveCachedGame(actualPgn, userColor, analyzedGame);
       this.reviewDashboard?.setGame(analyzedGame);
       soundService.playSuccess();
       backgroundAnalysisQueue.startIdleProcessing();

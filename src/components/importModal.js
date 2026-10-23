@@ -1,14 +1,8 @@
 /**
  * Vanilla JS Import Modal Component
- * Bootstrap 5 modal supporting Chess.com, Lichess, and custom PGN imports.
+ * Bootstrap 5 modal supporting Chess.com imports.
  * Only analyzes user-imported games with live Stockfish progress.
  */
-
-
-
-
-
-
 
 class ImportModal {
   constructor(modalEl, options = {}) {
@@ -20,8 +14,6 @@ class ImportModal {
     this.isFetching = false;
     this.fetchedGames = [];
     this.fetchError = null;
-    this.customPgn = '';
-    this.customColor = 'w';
 
     this.isAnalyzing = false;
     this.analysisProgress = { current: 0, total: 0 };
@@ -31,7 +23,7 @@ class ImportModal {
       const saved = JSON.parse(localStorage.getItem('chess_iq_imported_games') || 'null');
       if (saved && Array.isArray(saved.games) && saved.games.length > 0) {
         this.username = saved.username || '';
-        this.activeTab = saved.platform || 'chesscom';
+        this.activeTab = 'chesscom';
         this.fetchedGames = saved.games;
         backgroundAnalysisQueue.setQueue(saved.games, this.username);
       }
@@ -100,11 +92,6 @@ class ImportModal {
         btn.classList.remove('disabled');
       }
     });
-    const customBtn = container.querySelector('#btn-analyze-custom-pgn');
-    if (customBtn) {
-      customBtn.innerHTML = `Analyze PGN with Stockfish ⚡`;
-      customBtn.disabled = !this.customPgn.trim();
-    }
   }
 
   show() {
@@ -161,38 +148,21 @@ class ImportModal {
     this.renderTabContent();
 
     try {
-      if (this.activeTab === 'chesscom') {
-        const games = await fetchChessComGames(this.username);
-        this.fetchedGames = games;
-        if (games.length === 0) this.fetchError = 'No recent games found for this player.';
-        else {
-          backgroundAnalysisQueue.setQueue(games, this.username);
-          try {
-            localStorage.setItem('chess_iq_imported_games', JSON.stringify({
-              platform: this.activeTab,
-              username: this.username,
-              games,
-              timestamp: Date.now()
-            }));
-            window.dispatchEvent(new CustomEvent('chess_iq_games_imported'));
-          } catch {}
-        }
-      } else if (this.activeTab === 'lichess') {
-        const games = await fetchLichessGames(this.username);
-        this.fetchedGames = games;
-        if (games.length === 0) this.fetchError = 'No recent games found for this player.';
-        else {
-          backgroundAnalysisQueue.setQueue(games, this.username);
-          try {
-            localStorage.setItem('chess_iq_imported_games', JSON.stringify({
-              platform: this.activeTab,
-              username: this.username,
-              games,
-              timestamp: Date.now()
-            }));
-            window.dispatchEvent(new CustomEvent('chess_iq_games_imported'));
-          } catch {}
-        }
+      const games = await fetchChessComGames(this.username);
+      this.fetchedGames = games;
+      if (games.length === 0) {
+        this.fetchError = 'No recent games found for this player.';
+      } else {
+        backgroundAnalysisQueue.setQueue(games, this.username);
+        try {
+          localStorage.setItem('chess_iq_imported_games', JSON.stringify({
+            platform: 'chesscom',
+            username: this.username,
+            games,
+            timestamp: Date.now()
+          }));
+          window.dispatchEvent(new CustomEvent('chess_iq_games_imported'));
+        } catch {}
       }
     } catch (err) {
       this.fetchError = err.message || 'Failed to fetch games.';
@@ -237,265 +207,211 @@ class ImportModal {
     const container = this.modalEl.querySelector('#import-tab-body');
     if (!container) return;
 
-    if (this.activeTab === 'chesscom' || this.activeTab === 'lichess') {
-      const platformName = this.activeTab === 'chesscom' ? 'Chess.com' : 'Lichess';
-      container.innerHTML = `
-        <div class="d-flex flex-column gap-3">
-          <div class="input-group">
-            <span class="input-group-text bg-body-secondary border-end-0 text-secondary"><i class="bi bi-person-fill"></i></span>
-            <input type="text" class="form-control border-start-0 ps-1" id="platform-username-input"
-              placeholder="Enter ${platformName} username..." value="${this.username}">
-            <button type="button" class="btn btn-warning fw-black px-3 d-flex align-items-center" id="btn-fetch-platform" ${this.isFetching ? 'disabled' : ''}>
-              ${this.isFetching ? '<span class="spinner-border spinner-border-sm me-1.5"></span>Fetching...' : '<i class="bi bi-search me-1.5"></i>Fetch'}
-            </button>
-          </div>
-
-          ${this.isFetching ? `
-            <div class="placeholder-wave d-flex flex-column gap-2 mt-2 w-100">
-              <div class="comic-card-sm p-3 w-100 border border-secondary border-opacity-25">
-                <div class="d-flex justify-content-between mb-2">
-                  <span class="placeholder col-4 bg-warning rounded py-1"></span>
-                  <span class="placeholder col-2 bg-secondary rounded py-1"></span>
-                </div>
-                <div class="d-flex flex-column gap-1.5">
-                  <span class="placeholder col-7 bg-body-secondary rounded"></span>
-                  <span class="placeholder col-5 bg-body-secondary rounded"></span>
-                </div>
-              </div>
-              <div class="comic-card-sm p-3 w-100 border border-secondary border-opacity-25">
-                <div class="d-flex justify-content-between mb-2">
-                  <span class="placeholder col-3 bg-warning rounded py-1"></span>
-                  <span class="placeholder col-2 bg-secondary rounded py-1"></span>
-                </div>
-                <div class="d-flex flex-column gap-1.5">
-                  <span class="placeholder col-6 bg-body-secondary rounded"></span>
-                  <span class="placeholder col-4 bg-body-secondary rounded"></span>
-                </div>
-              </div>
-            </div>
-          ` : ''}
-
-          ${this.fetchError ? `
-            <div class="alert alert-danger py-2 px-3 small font-medium mb-0">${this.fetchError}</div>
-          ` : ''}
-
-          ${this.fetchedGames.length > 0 ? `
-            <div class="d-flex flex-column gap-2 mt-1 w-100">
-              <div class="d-flex align-items-center justify-content-between">
-                <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
-                <div class="d-flex align-items-center gap-2">
-                  <button type="button" class="btn btn-warning btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-open-insights" style="font-size: 11px;">
-                    <i class="bi bi-graph-up-arrow me-1"></i>In-depth Insights (100 games)
-                  </button>
-                  ${getCacheStats().count > 0 ? `
-                    <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-clear-game-cache" style="font-size: 11px;">
-                      <i class="bi bi-trash3 me-1"></i>Clear Cache (${getCacheStats().count})
-                    </button>
-                  ` : ''}
-                </div>
-              </div>
-              <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden pe-1 w-100" style="max-height: 280px; scrollbar-width: thin;">
-                ${this.fetchedGames.map((g) => {
-                  const isUserWhite = g.white.toLowerCase() === this.username.trim().toLowerCase();
-                  const isUserBlack = g.black.toLowerCase() === this.username.trim().toLowerCase();
-                  const userColor = isUserWhite ? 'w' : (isUserBlack ? 'b' : 'w');
-                  const cacheInfo = getGameCacheInfo(g.id || g.pgn, userColor);
-                  const isReviewed = Boolean(cacheInfo);
-
-                  let userWon = false;
-                  let userLost = false;
-                  const isDraw = g.result === '1/2-1/2';
-
-                  if (g.result === '1-0') {
-                    if (isUserWhite) userWon = true;
-                    else if (isUserBlack) userLost = true;
-                  } else if (g.result === '0-1') {
-                    if (isUserBlack) userWon = true;
-                    else if (isUserWhite) userLost = true;
-                  }
-
-                  let resultBadge = '';
-                  if (userWon) {
-                    resultBadge = `<span class="badge bg-success text-white fw-bold px-2 py-1 flex-shrink-0"><i class="bi bi-trophy-fill me-1"></i>Win</span>`;
-                  } else if (userLost) {
-                    resultBadge = `<span class="badge bg-danger text-white fw-bold px-2 py-1 flex-shrink-0"><i class="bi bi-x-circle-fill me-1"></i>Loss</span>`;
-                  } else if (isDraw) {
-                    resultBadge = `<span class="badge bg-secondary text-white fw-bold px-2 py-1 flex-shrink-0">Draw</span>`;
-                  } else {
-                    resultBadge = `<span class="badge bg-body-secondary text-dark fw-bold px-2 py-1 flex-shrink-0">${g.result}</span>`;
-                  }
-
-                  let tcIcon = 'bi-stopwatch';
-                  if (g.timeControl && (g.timeControl.includes('+') || !isNaN(Number(g.timeControl)))) {
-                    tcIcon = 'bi-lightning-charge-fill';
-                  }
-
-                  const cardStatusClass = userWon ? 'card-win' : (userLost ? 'card-loss' : (isDraw ? 'card-draw' : ''));
-
-                  return `
-                    <div class="imported-game-card ${cardStatusClass} p-3 cursor-pointer w-100 mb-1" data-game-id="${g.id}">
-                      <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-light-subtle gap-2 flex-nowrap">
-                        <div class="d-flex align-items-center gap-2 overflow-hidden me-auto" style="min-width: 0;">
-                          <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold flex-shrink-0" style="font-size: 11px;">
-                            <i class="bi ${tcIcon} me-1"></i>${g.timeControl}
-                          </span>
-                          ${this.formatOpeningBadge(g.eco)}
-                        </div>
-                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                          ${isReviewed ? `
-                            <span class="badge bg-success-subtle text-success border border-success-subtle fw-bold font-monospace" style="font-size: 10px;">
-                              <i class="bi bi-lightning-charge-fill me-0.5"></i>Reviewed
-                            </span>
-                          ` : ''}
-                          <span class="text-secondary small font-monospace text-nowrap" style="font-size: 11px;">${g.date}</span>
-                          ${resultBadge}
-                        </div>
-                      </div>
-
-                      <div class="d-flex align-items-center justify-content-between gap-3" style="min-width: 0;">
-                        <div class="d-flex flex-column gap-1 flex-grow-1" style="min-width: 0; overflow: hidden;">
-                          <div class="d-flex align-items-center gap-2 ${isUserWhite ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
-                            <span class="fs-6 lh-1">⚪</span>
-                            <span class="text-truncate" style="max-width: 170px;">${insEscape(g.white)}</span>
-                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${insEscape(g.whiteElo)}</span>
-                            ${isUserWhite ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
-                          </div>
-
-                          <div class="d-flex align-items-center gap-2 ${isUserBlack ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
-                            <span class="fs-6 lh-1">⚫</span>
-                            <span class="text-truncate" style="max-width: 170px;">${insEscape(g.black)}</span>
-                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${insEscape(g.blackElo)}</span>
-                            ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
-                          </div>
-
-                          ${isReviewed ? `
-                            <div class="d-flex align-items-center gap-1.5 mt-0.5">
-                              <span class="badge bg-success-subtle text-success font-monospace fw-bold" style="font-size: 10px;">🎯 ${cacheInfo.accuracy}% acc</span>
-                              <span class="badge bg-primary-subtle text-primary font-monospace fw-bold" style="font-size: 10px;">⭐ ${cacheInfo.elo} Elo</span>
-                            </div>
-                          ` : ''}
-                        </div>
-
-                        <div class="flex-shrink-0">
-                          <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5 ${isReviewed ? 'bg-success border-success' : ''}" style="border-radius: 0.65rem; font-size: 13px !important;">
-                            <span>${isReviewed ? 'View Review' : 'Analyze'}</span> <i class="bi ${isReviewed ? 'bi-lightning-charge-fill' : 'bi-chevron-right'}" style="font-size: 11px;"></i>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      `;
-
-      const input = container.querySelector('#platform-username-input');
-      input?.addEventListener('input', (e) => { this.username = e.target.value; });
-      input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.handleFetch(); });
-      container.querySelector('#btn-fetch-platform')?.addEventListener('click', () => this.handleFetch());
-
-      container.querySelector('#btn-open-insights')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openInsights({
-          platform: this.activeTab,
-          username: this.username,
-          onSelectGame: (pgn, userColor) => this.onSelectPgn && this.onSelectPgn(pgn, userColor)
-        });
-      });
-
-      container.querySelector('#btn-clear-game-cache')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        clearGameCache();
-        this.renderTabContent();
-      });
-
-      container.querySelectorAll('[data-game-id]').forEach((card) => {
-        card.addEventListener('click', (e) => {
-          if (this.isAnalyzing) return;
-          const gameId = e.currentTarget.getAttribute('data-game-id');
-          const game = this.fetchedGames.find((g) => g.id === gameId);
-          if (game && this.onSelectPgn) {
-            const isWhite = game.white.toLowerCase() === this.username.trim().toLowerCase();
-            const userColor = isWhite ? 'w' : 'b';
-            const cacheInfo = getGameCacheInfo(game.id || game.pgn, userColor);
-
-            if (cacheInfo) {
-              this.onSelectPgn(game.pgn, userColor);
-              return;
-            }
-
-            this.isAnalyzing = true;
-            const btn = card.querySelector('.btn-analyze-card');
-            if (btn) {
-              btn.innerHTML = `<span class="spinner-border spinner-border-sm text-warning me-1"></span>Analyzing...`;
-              btn.classList.add('disabled');
-            }
-            container.querySelectorAll('[data-game-id]').forEach((c) => {
-              c.style.pointerEvents = 'none';
-              c.style.opacity = '0.65';
-            });
-            card.style.opacity = '1';
-            card.classList.add('border-warning');
-            setTimeout(() => {
-              this.onSelectPgn(game.pgn, userColor);
-            }, 40);
-          }
-        });
-      });
-    } else {
-      // Paste PGN Tab
-      container.innerHTML = `
-        <div class="d-flex flex-column gap-3">
-          <div>
-            <label class="form-label small fw-bold mb-1">Paste standard PGN notation below:</label>
-            <textarea class="form-control font-monospace" id="custom-pgn-textarea" rows="6"
-              placeholder="[Event &quot;Live Chess&quot;]&#10;1. e4 e5 2. Nf3 Nc6 3. Bc4...">${this.customPgn}</textarea>
-          </div>
-
-          <div class="d-flex align-items-center justify-content-between">
-            <span class="small fw-bold text-secondary">Analyze perspective:</span>
-            <div class="btn-group" role="group">
-              <button type="button" class="btn btn-sm ${this.customColor === 'w' ? 'btn-dark' : 'btn-outline-dark'} fw-bold" id="btn-color-white">White</button>
-              <button type="button" class="btn btn-sm ${this.customColor === 'b' ? 'btn-dark' : 'btn-outline-dark'} fw-bold" id="btn-color-black">Black</button>
-            </div>
-          </div>
-
-          <button type="button" class="arcade-btn-primary py-2.5 w-100 fw-black" id="btn-analyze-custom-pgn" ${!this.customPgn.trim() ? 'disabled' : ''}>
-            Analyze PGN with Stockfish ⚡
+    container.innerHTML = `
+      <div class="d-flex flex-column gap-3">
+        <div class="input-group">
+          <span class="input-group-text bg-body-secondary border-end-0 text-secondary"><i class="bi bi-person-fill"></i></span>
+          <input type="text" class="form-control border-start-0 ps-1" id="platform-username-input"
+            placeholder="Enter Chess.com username..." value="${this.username}">
+          <button type="button" class="btn btn-warning fw-black px-3 d-flex align-items-center" id="btn-fetch-platform" ${this.isFetching ? 'disabled' : ''}>
+            ${this.isFetching ? '<span class="spinner-border spinner-border-sm me-1.5"></span>Fetching...' : '<i class="bi bi-search me-1.5"></i>Fetch'}
           </button>
         </div>
-      `;
 
-      const textarea = container.querySelector('#custom-pgn-textarea');
-      const submitBtn = container.querySelector('#btn-analyze-custom-pgn');
+        ${this.isFetching ? `
+          <div class="placeholder-wave d-flex flex-column gap-2 mt-2 w-100">
+            <div class="comic-card-sm p-3 w-100 border border-secondary border-opacity-25">
+              <div class="d-flex justify-content-between mb-2">
+                <span class="placeholder col-4 bg-warning rounded py-1"></span>
+                <span class="placeholder col-2 bg-secondary rounded py-1"></span>
+              </div>
+              <div class="d-flex flex-column gap-1.5">
+                <span class="placeholder col-7 bg-body-secondary rounded"></span>
+                <span class="placeholder col-5 bg-body-secondary rounded"></span>
+              </div>
+            </div>
+            <div class="comic-card-sm p-3 w-100 border border-secondary border-opacity-25">
+              <div class="d-flex justify-content-between mb-2">
+                <span class="placeholder col-3 bg-warning rounded py-1"></span>
+                <span class="placeholder col-2 bg-secondary rounded py-1"></span>
+              </div>
+              <div class="d-flex flex-column gap-1.5">
+                <span class="placeholder col-6 bg-body-secondary rounded"></span>
+                <span class="placeholder col-4 bg-body-secondary rounded"></span>
+              </div>
+            </div>
+          </div>
+        ` : ''}
 
-      textarea?.addEventListener('input', (e) => {
-        this.customPgn = e.target.value;
-        if (submitBtn) {
-          submitBtn.disabled = !this.customPgn.trim();
+        ${this.fetchError ? `
+          <div class="alert alert-danger py-2 px-3 small font-medium mb-0">${this.fetchError}</div>
+        ` : ''}
+
+        ${this.fetchedGames.length > 0 ? `
+          <div class="d-flex flex-column gap-2 mt-1 w-100">
+            <div class="d-flex align-items-center justify-content-between">
+              <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
+              <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-warning btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-open-insights" style="font-size: 11px;">
+                  <i class="bi bi-graph-up-arrow me-1"></i>In-depth Insights (100 games)
+                </button>
+                ${getCacheStats().count > 0 ? `
+                  <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-clear-game-cache" style="font-size: 11px;">
+                    <i class="bi bi-trash3 me-1"></i>Clear Cache (${getCacheStats().count})
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+            <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden pe-1 w-100" style="max-height: 280px; scrollbar-width: thin;">
+              ${this.fetchedGames.map((g) => {
+                const isUserWhite = g.white.toLowerCase() === this.username.trim().toLowerCase();
+                const isUserBlack = g.black.toLowerCase() === this.username.trim().toLowerCase();
+                const userColor = isUserWhite ? 'w' : (isUserBlack ? 'b' : 'w');
+                const cacheInfo = getGameCacheInfo(g.id || g.pgn, userColor);
+                const isReviewed = Boolean(cacheInfo);
+
+                let userWon = false;
+                let userLost = false;
+                const isDraw = g.result === '1/2-1/2';
+
+                if (g.result === '1-0') {
+                  if (isUserWhite) userWon = true;
+                  else if (isUserBlack) userLost = true;
+                } else if (g.result === '0-1') {
+                  if (isUserBlack) userWon = true;
+                  else if (isUserWhite) userLost = true;
+                }
+
+                let resultBadge = '';
+                if (userWon) {
+                  resultBadge = `<span class="badge bg-success text-white fw-bold px-2 py-1 flex-shrink-0"><i class="bi bi-trophy-fill me-1"></i>Win</span>`;
+                } else if (userLost) {
+                  resultBadge = `<span class="badge bg-danger text-white fw-bold px-2 py-1 flex-shrink-0"><i class="bi bi-x-circle-fill me-1"></i>Loss</span>`;
+                } else if (isDraw) {
+                  resultBadge = `<span class="badge bg-secondary text-white fw-bold px-2 py-1 flex-shrink-0">Draw</span>`;
+                } else {
+                  resultBadge = `<span class="badge bg-body-secondary text-dark fw-bold px-2 py-1 flex-shrink-0">${g.result}</span>`;
+                }
+
+                let tcIcon = 'bi-stopwatch';
+                if (g.timeControl && (g.timeControl.includes('+') || !isNaN(Number(g.timeControl)))) {
+                  tcIcon = 'bi-lightning-charge-fill';
+                }
+
+                const cardStatusClass = userWon ? 'card-win' : (userLost ? 'card-loss' : (isDraw ? 'card-draw' : ''));
+
+                return `
+                  <div class="imported-game-card ${cardStatusClass} p-3 cursor-pointer w-100 mb-1" data-game-id="${g.id}">
+                    <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-light-subtle gap-2 flex-nowrap">
+                      <div class="d-flex align-items-center gap-2 overflow-hidden me-auto" style="min-width: 0;">
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold flex-shrink-0" style="font-size: 11px;">
+                          <i class="bi ${tcIcon} me-1"></i>${g.timeControl}
+                        </span>
+                        ${this.formatOpeningBadge(g.eco)}
+                      </div>
+                      <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                        ${isReviewed ? `
+                          <span class="badge bg-success-subtle text-success border border-success-subtle fw-bold font-monospace" style="font-size: 10px;">
+                            <i class="bi bi-lightning-charge-fill me-0.5"></i>Reviewed
+                          </span>
+                        ` : ''}
+                        <span class="text-secondary small font-monospace text-nowrap" style="font-size: 11px;">${g.date}</span>
+                        ${resultBadge}
+                      </div>
+                    </div>
+
+                    <div class="d-flex align-items-center justify-content-between gap-3" style="min-width: 0;">
+                      <div class="d-flex flex-column gap-1 flex-grow-1" style="min-width: 0; overflow: hidden;">
+                        <div class="d-flex align-items-center gap-2 ${isUserWhite ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
+                          <span class="fs-6 lh-1">⚪</span>
+                          <span class="text-truncate" style="max-width: 170px;">${insEscape(g.white)}</span>
+                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${insEscape(g.whiteElo)}</span>
+                          ${isUserWhite ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
+                        </div>
+
+                        <div class="d-flex align-items-center gap-2 ${isUserBlack ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
+                          <span class="fs-6 lh-1">⚫</span>
+                          <span class="text-truncate" style="max-width: 170px;">${insEscape(g.black)}</span>
+                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${insEscape(g.blackElo)}</span>
+                          ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
+                        </div>
+
+                        ${isReviewed ? `
+                          <div class="d-flex align-items-center gap-1.5 mt-0.5">
+                            <span class="badge bg-success-subtle text-success font-monospace fw-bold" style="font-size: 10px;">🎯 ${cacheInfo.accuracy}% acc</span>
+                            <span class="badge bg-primary-subtle text-primary font-monospace fw-bold" style="font-size: 10px;">⭐ ${cacheInfo.elo} Elo</span>
+                          </div>
+                        ` : ''}
+                      </div>
+
+                      <div class="flex-shrink-0">
+                        <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5 ${isReviewed ? 'bg-success border-success' : ''}" style="border-radius: 0.65rem; font-size: 13px !important;">
+                          <span>${isReviewed ? 'View Review' : 'Analyze'}</span> <i class="bi ${isReviewed ? 'bi-lightning-charge-fill' : 'bi-chevron-right'}" style="font-size: 11px;"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+
+    const input = container.querySelector('#platform-username-input');
+    input?.addEventListener('input', (e) => { this.username = e.target.value; });
+    input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.handleFetch(); });
+    container.querySelector('#btn-fetch-platform')?.addEventListener('click', () => this.handleFetch());
+
+    container.querySelector('#btn-open-insights')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openInsights({
+        platform: 'chesscom',
+        username: this.username,
+        onSelectGame: (pgn, userColor) => this.onSelectPgn && this.onSelectPgn(pgn, userColor)
+      });
+    });
+
+    container.querySelector('#btn-clear-game-cache')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearGameCache();
+      this.renderTabContent();
+    });
+
+    container.querySelectorAll('[data-game-id]').forEach((card) => {
+      card.addEventListener('click', (e) => {
+        if (this.isAnalyzing) return;
+        const gameId = e.currentTarget.getAttribute('data-game-id');
+        const game = this.fetchedGames.find((g) => g.id === gameId);
+        if (game && this.onSelectPgn) {
+          const isWhite = game.white.toLowerCase() === this.username.trim().toLowerCase();
+          const userColor = isWhite ? 'w' : 'b';
+          const cacheInfo = getGameCacheInfo(game.id || game.pgn, userColor);
+
+          if (cacheInfo) {
+            this.onSelectPgn(game.pgn, userColor);
+            return;
+          }
+
+          this.isAnalyzing = true;
+          const btn = card.querySelector('.btn-analyze-card');
+          if (btn) {
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm text-warning me-1"></span>Analyzing...`;
+            btn.classList.add('disabled');
+          }
+          container.querySelectorAll('[data-game-id]').forEach((c) => {
+            c.style.pointerEvents = 'none';
+            c.style.opacity = '0.65';
+          });
+          card.style.opacity = '1';
+          card.classList.add('border-warning');
+          setTimeout(() => {
+            this.onSelectPgn(game.pgn, userColor);
+          }, 40);
         }
       });
-
-      container.querySelector('#btn-color-white')?.addEventListener('click', () => {
-        this.customColor = 'w';
-        this.renderTabContent();
-      });
-
-      container.querySelector('#btn-color-black')?.addEventListener('click', () => {
-        this.customColor = 'b';
-        this.renderTabContent();
-      });
-
-      submitBtn?.addEventListener('click', () => {
-        if (this.customPgn.trim() && this.onSelectPgn) {
-          submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Starting Review...`;
-          submitBtn.disabled = true;
-          this.onSelectPgn(this.customPgn.trim(), this.customColor);
-        }
-      });
-    }
+    });
   }
 
   render() {
@@ -504,7 +420,7 @@ class ImportModal {
         <div class="modal-content comic-card overflow-hidden">
           <div class="modal-header border-bottom bg-body-tertiary px-3 px-sm-4 py-3 d-flex align-items-center justify-content-between">
             <h5 class="modal-title fw-black fs-5 mb-0 d-flex align-items-center">
-              <i class="bi bi-cloud-arrow-up-fill me-2 fg-warning"></i>Import Game for Review
+              <i class="bi bi-cloud-arrow-up-fill me-2 fg-warning"></i>Import from Chess.com
             </h5>
             <button type="button" class="btn-close" id="btn-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
@@ -512,28 +428,8 @@ class ImportModal {
           <!-- Progress overlay when analyzing -->
           <div id="import-analysis-progress" class="d-none px-4"></div>
 
-          <!-- Tab Selector -->
+          <!-- Content -->
           <div id="import-tabs-content">
-            <div class="px-3 pt-3 pb-0 bg-body-tertiary border-bottom">
-              <ul class="nav nav-pills nav-fill bg-body-secondary p-1 rounded-3 gap-1 mb-2.5" role="tablist">
-                <li class="nav-item">
-                  <button class="nav-link py-1.5 px-2 rounded-2 ${this.activeTab === 'chesscom' ? 'active fw-black bg-warning text-dark shadow-sm' : 'fw-bold text-secondary'}" data-import-tab="chesscom" style="font-size: 13px;">
-                    <i class="bi bi-check-circle-fill me-1 text-success"></i>Chess.com
-                  </button>
-                </li>
-                <li class="nav-item">
-                  <button class="nav-link py-1.5 px-2 rounded-2 ${this.activeTab === 'lichess' ? 'active fw-black bg-warning text-dark shadow-sm' : 'fw-bold text-secondary'}" data-import-tab="lichess" style="font-size: 13px;">
-                    <i class="bi bi-globe me-1 text-info"></i>Lichess
-                  </button>
-                </li>
-                <li class="nav-item">
-                  <button class="nav-link py-1.5 px-2 rounded-2 ${this.activeTab === 'pgn' ? 'active fw-black bg-warning text-dark shadow-sm' : 'fw-bold text-secondary'}" data-import-tab="pgn" style="font-size: 13px;">
-                    <i class="bi bi-file-text-fill me-1 text-primary"></i>Paste PGN
-                  </button>
-                </li>
-              </ul>
-            </div>
-
             <div class="modal-body p-3 p-sm-4 overflow-x-hidden" id="import-tab-body"></div>
           </div>
         </div>
@@ -548,15 +444,6 @@ class ImportModal {
       if (e.target === this.modalEl) {
         this.hide();
       }
-    });
-
-    // Bind tab clicks
-    this.modalEl.querySelectorAll('[data-import-tab]').forEach((tabBtn) => {
-      tabBtn.addEventListener('click', (e) => {
-        this.activeTab = e.currentTarget.getAttribute('data-import-tab');
-        this.fetchError = null;
-        this.render();
-      });
     });
 
     this.renderTabContent();

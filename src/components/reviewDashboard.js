@@ -186,7 +186,7 @@ class ReviewDashboard {
     this.analysisStartTime = null;
     this.lastUiYieldTime = 0;
     this.game = analyzedGame;
-    this.currentPly = analyzedGame && analyzedGame.plies.length > 0 ? 1 : 0;
+    this.currentPly = analyzedGame && Array.isArray(analyzedGame.plies) && analyzedGame.plies.length > 0 ? 1 : 0;
     this.orientation = analyzedGame ? analyzedGame.userColor : 'w';
     this.isThreatActive = false;
     this.render();
@@ -377,11 +377,15 @@ class ReviewDashboard {
             ` : ''}
           </div>
           <div class="d-flex align-items-center gap-2">
-            ${['inaccuracy', 'mistake', 'blunder'].includes(cur.classification) ? `
+            ${['inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(cur.classification) ? `
               <button type="button" class="btn btn-sm btn-outline-danger fw-bold comic-btn" id="btn-show-why" title="Explore what happens in the next 5 moves">
-                <i class="bi bi-question-circle me-1"></i>Why ${cur.classification === 'blunder' ? 'Blunder' : (cur.classification === 'mistake' ? 'Mistake' : 'Inaccuracy')}?
+                <i class="bi bi-question-circle me-1"></i>Why ${cur.classification === 'blunder' ? 'Blunder' : (cur.classification === 'mistake' ? 'Mistake' : (cur.classification === 'missed_win' ? 'Missed Win' : 'Inaccuracy'))}?
               </button>
-            ` : ''}
+            ` : (cur.classification === 'brilliant' ? `
+              <button type="button" class="btn btn-sm fw-bold comic-btn" id="btn-show-why" style="color: #06b6d4; border: 1px solid #06b6d4; background: rgba(6,182,212,0.08);" title="Explore why this brilliant sacrifice works">
+                <i class="bi bi-gem me-1"></i>Why Brilliant?
+              </button>
+            ` : '')}
           </div>
         `;
         stripEl.querySelector('#btn-show-why')?.addEventListener('click', () => this.openWhyModal());
@@ -514,6 +518,7 @@ class ReviewDashboard {
         type: 'analyzed',
         key: item.key,
         id: item.id || item.key,
+        pgn: item.pgn || '',
         white: item.white || 'White',
         black: item.black || 'Black',
         whiteElo: item.whiteElo || 1500,
@@ -606,7 +611,7 @@ class ReviewDashboard {
           </div>
           <h3 class="fw-black mb-2">No Game Currently in Review</h3>
           <p class="fg-secondary small max-w-md mx-auto mb-4 font-medium leading-relaxed">
-            Import a game from Chess.com, Lichess, or paste any PGN to run deep Stockfish engine diagnostics
+            Import a game from Chess.com to run deep Stockfish engine diagnostics
             with move quality classifications, phase ratings, and key moment analysis, or challenge our 33-bot arena!
           </p>
           <div class="d-flex align-items-center gap-3">
@@ -726,9 +731,9 @@ class ReviewDashboard {
           const item = savedGames[idx];
           if (!item) return;
           if (item.type === 'analyzed') {
-            const cached = getCachedGame(item.key || item.id, item.userColor);
+            const cached = getCachedGame(item.key, item.userColor) || getCachedGame(item.id, item.userColor);
             if (cached) {
-              if (this.onSelectGame) this.onSelectGame(cached.pgn, item.userColor, cached);
+              if (this.onSelectGame) this.onSelectGame(cached.pgn || item.pgn, item.userColor, cached);
               else { this.setGame(cached); soundService.playSuccess(); }
               return;
             }
@@ -1125,7 +1130,15 @@ Result: ${this.game.result || '*'}`;
   }
 
   buildMoveTableRows() {
-    if (!this.game) return '';
+    if (!this.game || !Array.isArray(this.game.plies) || this.game.plies.length === 0) {
+      return `
+        <tr>
+          <td colspan="3" class="text-center text-secondary py-4 small fw-bold">
+            <i class="bi bi-info-circle me-1"></i>No moves recorded for this game.
+          </td>
+        </tr>
+      `;
+    }
     const plies = this.game.plies;
     let html = '';
 
@@ -1133,20 +1146,21 @@ Result: ${this.game.result || '*'}`;
       const moveNum = Math.floor(i / 2) + 1;
       const whitePly = plies[i];
       const blackPly = plies[i + 1] || null;
+      if (!whitePly) continue;
 
       html += `
         <tr>
           <td class="text-secondary fw-bold text-end" style="width: 38px;">${moveNum}.</td>
           <td class="move-list-row cursor-pointer rounded px-2 py-1" data-ply="${whitePly.ply}">
             <div class="d-flex align-items-center justify-content-between">
-              <span class="font-monospace">${whitePly.san}</span>
+              <span class="font-monospace">${whitePly.san || '-'}</span>
               ${this.renderMiniBadge(whitePly.classification)}
             </div>
           </td>
           ${blackPly ? `
             <td class="move-list-row cursor-pointer rounded px-2 py-1" data-ply="${blackPly.ply}">
               <div class="d-flex align-items-center justify-content-between">
-                <span class="font-monospace">${blackPly.san}</span>
+                <span class="font-monospace">${blackPly.san || '-'}</span>
                 ${this.renderMiniBadge(blackPly.classification)}
               </div>
             </td>

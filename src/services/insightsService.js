@@ -74,8 +74,7 @@ function insSummarize(game, analyzed, color) {
 }
 
 function insFetchGames(platform, username) {
-  if (platform === 'chesscom') return fetchChessComGames(username, INSIGHTS_GAME_LIMIT);
-  return fetchLichessGames(username, INSIGHTS_GAME_LIMIT);
+  return fetchChessComGames(username, INSIGHTS_GAME_LIMIT);
 }
 
 function loadInsights(platform, username) {

@@ -12,7 +12,7 @@
   - `stockfishWorker.js`: Stockfish Web Worker pool (`StockfishPool`).
   - `engine.js`: Hybrid PST and Stockfish evaluations, move classification, win probabilities, phase detection.
   - `engineRefutations.js`: Tactical threats, continuation lines (5 moves), blunder refutations.
-  - `importApi.js`: Game fetching (Chess.com, Lichess) and PGN parsing/analysis.
+  - `importApi.js`: Game fetching (Chess.com) and PGN parsing/analysis.
   - `insightsAggregate.js` & `insightsService.js`: 100-game in-depth analytics, metrics, charts data, and 24h caching.
   - `gameCacheService.js`: Per-game analysis cache in localStorage.
   - `sound.js`: Web Audio synthesized sound effects.
