@@ -164,6 +164,9 @@ class StockfishWorkerService {
         clearTimeout(this.hardTimeoutId);
         this.hardTimeoutId = null;
       }
+      if (!this.pendingResolve) {
+        return;
+      }
       const parts = line.split(/\s+/);
       const bestMove = parts[1] && parts[1] !== "(none)" ? parts[1] : this.currentBestMove;
       const result = {
@@ -203,14 +206,16 @@ class StockfishWorkerService {
     this.pendingResolve = item.resolve;
 
     this.evaluationTimeoutId = setTimeout(() => {
+      this.evaluationTimeoutId = null;
       if (this.pendingResolve) {
         try {
           this.worker.postMessage("stop");
         } catch {}
 
         this.hardTimeoutId = setTimeout(() => {
+          this.hardTimeoutId = null;
           if (this.pendingResolve) {
-            console.warn(`[StockfishPool][${this.id}] Hard timeout: engine did not return bestmove, resolving fallback`);
+            console.warn(`[StockfishPool][${this.id}] Hard timeout: engine did not return bestmove, terminating and restarting worker`);
             const fallback = {
               bestMoveUci: this.currentBestMove || "",
               scoreCp: this.currentScoreCp,
@@ -224,12 +229,19 @@ class StockfishWorkerService {
             const resolve = this.pendingResolve;
             this.pendingResolve = null;
             this.isProcessing = false;
+
+            try {
+              if (this.worker) this.worker.terminate();
+            } catch {}
+            this.worker = null;
+            this.isInitialized = false;
+
             resolve(fallback);
-            this.processQueue();
+            this.initWorker();
           }
-        }, 300);
+        }, 1500);
       }
-    }, (item.maxWaitMs || 1200) + 150);
+    }, (item.maxWaitMs || 1200) + 300);
 
     try {
       this.worker.postMessage(`position fen ${item.fen}`);
