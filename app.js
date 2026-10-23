@@ -195,10 +195,26 @@ function getComicBadge(classification, seed = 0) {
 class SoundService {
   constructor() {
     this.ctx = null;
+    this.isMuted = typeof localStorage !== 'undefined' ? localStorage.getItem('chess_iq_muted') === 'true' : false;
+  }
+
+  toggleMute() {
+    this.isMuted = !this.isMuted;
+    try {
+      localStorage.setItem('chess_iq_muted', String(this.isMuted));
+    } catch {}
+    return this.isMuted;
+  }
+
+  setMuted(muted) {
+    this.isMuted = !!muted;
+    try {
+      localStorage.setItem('chess_iq_muted', String(this.isMuted));
+    } catch {}
   }
 
   getContext() {
-    if (typeof window === 'undefined') return null;
+    if (typeof window === 'undefined' || this.isMuted) return null;
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) {
@@ -2155,8 +2171,15 @@ async function fetchSyzygyTablebase(fen) {
   }
   return null;
 }
+function normalizeFenKey(fen) {
+  if (!fen) return "";
+  const parts = fen.trim().split(/\s+/);
+  return parts.slice(0, 4).join(" ");
+}
+
 async function evaluateFenHybrid(fen, isDeep = false) {
-  const cached = FEN_EVAL_CACHE.get(fen);
+  const cacheKey = `${normalizeFenKey(fen)}_${isDeep ? "deep" : "fast"}`;
+  const cached = FEN_EVAL_CACHE.get(cacheKey);
   if (cached) return cached;
 
   if (!isDeep) {
@@ -2170,7 +2193,7 @@ async function evaluateFenHybrid(fen, isDeep = false) {
       multiPv2ScoreCp: localSearch.multiPv2Cp,
       source: "local"
     };
-    FEN_EVAL_CACHE.set(fen, localResult);
+    FEN_EVAL_CACHE.set(cacheKey, localResult);
     return localResult;
   }
 
@@ -2186,7 +2209,7 @@ async function evaluateFenHybrid(fen, isDeep = false) {
         const fallback = findBestMoveLocal(fen, 1);
         tablebase.secondBestMoveUci = fallback.secondBestMoveUci;
       }
-      FEN_EVAL_CACHE.set(fen, tablebase);
+      FEN_EVAL_CACHE.set(cacheKey, tablebase);
       return tablebase;
     }
   }
@@ -2204,7 +2227,7 @@ async function evaluateFenHybrid(fen, isDeep = false) {
       multiPv2ScoreCp: sfEval.multiPv2ScoreCp,
       source: "stockfish"
     };
-    FEN_EVAL_CACHE.set(fen, sfResult);
+    FEN_EVAL_CACHE.set(cacheKey, sfResult);
     return sfResult;
   }
 
@@ -2218,7 +2241,7 @@ async function evaluateFenHybrid(fen, isDeep = false) {
     multiPv2ScoreCp: localSearch.multiPv2Cp,
     source: "local"
   };
-  FEN_EVAL_CACHE.set(fen, localResult);
+  FEN_EVAL_CACHE.set(cacheKey, localResult);
   return localResult;
 }
 async function detectThreat(fen) {
@@ -2526,7 +2549,10 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
       };
       prevEngine = { scoreCp: 20, mate: null, pv: [playedUci2] };
     } else {
-      const engineBefore = prevEngine;
+      let engineBefore = prevEngine;
+      if (!engineBefore || !engineBefore.bestMoveUci || (i > 0 && precomputed[i - 1].isBook)) {
+        engineBefore = await evaluateFenHybrid(item.fenBefore, isDeep);
+      }
       const engineAfter = await evaluateFenHybrid(item.fenAfter, isDeep);
       prevEngine = engineAfter;
 
@@ -2872,6 +2898,9 @@ class Chessboard {
     this.selectedSquare = null;
     this.possibleDests = [];
     this.lastAnimatedMoveKey = null;
+    this.userArrows = [];
+    this.userHighlights = new Set();
+    this.rightClickStartSquare = null;
 
     this.render();
   }
@@ -2985,6 +3014,10 @@ class Chessboard {
           sqDiv.classList.add(isDark ? 'last-move-dark' : 'last-move-light');
         } else {
           sqDiv.style.backgroundColor = squareColor;
+        }
+
+        if (this.userHighlights.has(square)) {
+          sqDiv.style.boxShadow = 'inset 0 0 0 4px rgba(245, 158, 11, 0.85)';
         }
 
         // Square coordinates on edges
@@ -3102,8 +3135,57 @@ class Chessboard {
     if (this.threatMove && this.threatMove.from && this.threatMove.to) {
       this.drawArrow(svgLayer, this.threatMove.from, this.threatMove.to, '#ef4444', true, 'threat-move', 3.5);
     }
+    // User custom arrows (drawn via right-click drag)
+    this.userArrows.forEach((arr, idx) => {
+      this.drawArrow(svgLayer, arr.from, arr.to, '#f59e0b', false, `user-${idx}`, 3.8);
+    });
 
     boardWrapper.appendChild(svgLayer);
+
+    boardWrapper.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+
+    boardWrapper.addEventListener('mousedown', (e) => {
+      if (e.button === 0) {
+        if (this.userArrows.length > 0 || this.userHighlights.size > 0) {
+          this.userArrows = [];
+          this.userHighlights.clear();
+          this.render();
+        }
+      } else if (e.button === 2) {
+        const sqEl = e.target.closest('[data-square]');
+        this.rightClickStartSquare = sqEl ? sqEl.dataset.square : null;
+      }
+    });
+
+    boardWrapper.addEventListener('mouseup', (e) => {
+      if (e.button === 2) {
+        const sqEl = e.target.closest('[data-square]');
+        const endSq = sqEl ? sqEl.dataset.square : null;
+        if (this.rightClickStartSquare && endSq) {
+          if (this.rightClickStartSquare === endSq) {
+            if (this.userHighlights.has(endSq)) {
+              this.userHighlights.delete(endSq);
+            } else {
+              this.userHighlights.add(endSq);
+            }
+          } else {
+            const existingIdx = this.userArrows.findIndex(
+              (a) => a.from === this.rightClickStartSquare && a.to === endSq
+            );
+            if (existingIdx !== -1) {
+              this.userArrows.splice(existingIdx, 1);
+            } else {
+              this.userArrows.push({ from: this.rightClickStartSquare, to: endSq });
+            }
+          }
+          this.render();
+        }
+        this.rightClickStartSquare = null;
+      }
+    });
+
     this.container.appendChild(boardWrapper);
   }
 
@@ -3268,7 +3350,7 @@ class BotArena {
 
     // Evaluate position before move to detect quality
     const prevFen = this.chess.fen();
-    const prevEval = evaluatePositionLocally(prevFen, 3);
+    const prevEval = evaluatePositionLocally(prevFen);
 
     try {
       const move = this.chess.move({ from, to, promotion: 'q' });
@@ -3281,8 +3363,8 @@ class BotArena {
       }
 
       // Check quality of user move
-      const postEval = evaluatePositionLocally(this.chess.fen(), 3);
-      const evalDiff = this.userColor === 'w' ? postEval.score - prevEval.score : prevEval.score - postEval.score;
+      const postEval = evaluatePositionLocally(this.chess.fen());
+      const evalDiff = this.userColor === 'w' ? postEval.cp - prevEval.cp : prevEval.cp - postEval.cp;
 
       const shouldSpeak = Math.random() < 0.18;
       if (evalDiff <= -250) {
@@ -3334,21 +3416,17 @@ class BotArena {
       if (willMakeRandomMistake && legalMoves.length > 1) {
         chosenMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
       } else {
-        // Find best move via local alpha-beta search
-        let bestScore = -Infinity;
-        chosenMove = legalMoves[0];
-
-        for (const m of legalMoves) {
-          this.chess.move(m);
-          const ev = evaluatePositionLocally(this.chess.fen(), this.selectedBot.depth);
-          // Score relative to bot
-          const score = this.userColor === 'w' ? -ev.score : ev.score;
-          this.chess.undo();
-
-          if (score > bestScore) {
-            bestScore = score;
-            chosenMove = m;
-          }
+        const botSearchDepth = Math.max(1, Math.min(3, this.selectedBot.depth || 2));
+        const searchResult = findBestMoveLocal(this.chess.fen(), botSearchDepth);
+        if (searchResult && searchResult.bestMoveUci) {
+          const from = searchResult.bestMoveUci.slice(0, 2);
+          const to = searchResult.bestMoveUci.slice(2, 4);
+          const promo = searchResult.bestMoveUci[4];
+          const matched = legalMoves.find((m) => m.from === from && m.to === to && (!promo || m.promotion === promo));
+          if (matched) chosenMove = matched;
+        }
+        if (!chosenMove) {
+          chosenMove = legalMoves[0];
         }
       }
 
@@ -3514,6 +3592,25 @@ class BotArena {
     });
   }
 
+  getBotRecords() {
+    try {
+      return JSON.parse(localStorage.getItem('chess_iq_bot_records') || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  recordBotResult(botId, result) {
+    try {
+      const records = this.getBotRecords();
+      if (!records[botId]) records[botId] = { wins: 0, losses: 0, draws: 0 };
+      if (result === 'win') records[botId].wins = (records[botId].wins || 0) + 1;
+      else if (result === 'loss') records[botId].losses = (records[botId].losses || 0) + 1;
+      else if (result === 'draw') records[botId].draws = (records[botId].draws || 0) + 1;
+      localStorage.setItem('chess_iq_bot_records', JSON.stringify(records));
+    } catch {}
+  }
+
   checkGameOver() {
     let reason = '';
     const isMate = typeof this.chess.isCheckmate === 'function'
@@ -3545,6 +3642,7 @@ class BotArena {
     }
 
     if (this.gameResult) {
+      this.recordBotResult(this.selectedBot.id, this.gameResult);
       this.updateControls();
       this.updateStatusText();
       setTimeout(() => this.showGameOverModal(reason), 350);
@@ -3699,17 +3797,23 @@ class BotArena {
 
           <!-- Tier Collectible Bots Carousel -->
           <div class="d-flex gap-2.5 overflow-x-auto py-2" id="tier-bots-row" style="scrollbar-width: thin;">
-            ${BOTS_33.filter((b) => b.tier === this.activeTier)
-              .map(
-                (b) => `
-                <div class="arcade-bot-card flex-shrink-0 ${b.id === this.selectedBot.id ? 'active' : ''}" data-bot-id="${b.id}">
-                  <span class="arcade-bot-avatar">${b.avatar}</span>
-                  <span class="arcade-bot-name">${b.name}</span>
-                  <span class="arcade-bot-elo">${b.elo}</span>
-                </div>
-              `
-              )
-              .join('')}
+            ${(() => {
+              const records = this.getBotRecords();
+              return BOTS_33.filter((b) => b.tier === this.activeTier)
+                .map(
+                  (b) => `
+                  <div class="arcade-bot-card flex-shrink-0 ${b.id === this.selectedBot.id ? 'active' : ''}" data-bot-id="${b.id}">
+                    <span class="arcade-bot-avatar">${b.avatar}</span>
+                    <span class="arcade-bot-name">${b.name}</span>
+                    <span class="arcade-bot-elo d-flex align-items-center justify-content-center gap-1">
+                      ${b.elo}
+                      ${records[b.id]?.wins ? `<span class="badge bg-warning text-dark py-0 px-1" title="Defeated ${records[b.id].wins} time(s)">🏆 ${records[b.id].wins}</span>` : ''}
+                    </span>
+                  </div>
+                `
+                )
+                .join('');
+            })()}
           </div>
         </div>
 
@@ -3838,8 +3942,39 @@ class ReviewDashboard {
     this.analysisStartTime = null;
     this.advantagePoints = [];
     this.advantageMidY = 42;
+    this.isRetryingMistake = false;
+    this.retryHintActive = false;
 
+    this.initKeyboardNavigation();
     this.render();
+  }
+
+  initKeyboardNavigation() {
+    this.handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      if (!this.game || this.isRetryingMistake) return;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        this.goToPly(this.currentPly - 1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        this.goToPly(this.currentPly + 1);
+      } else if (e.key === 'ArrowUp' || e.key === 'Home') {
+        e.preventDefault();
+        this.goToPly(0);
+      } else if (e.key === 'ArrowDown' || e.key === 'End') {
+        e.preventDefault();
+        this.goToPly(this.game.plies.length);
+      } else if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        this.nextKeyMoment();
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        this.orientation = this.orientation === 'w' ? 'b' : 'w';
+        this.updateBoardAndControls();
+      }
+    };
+    window.addEventListener('keydown', this.handleKeyDown);
   }
 
   showLoading(current = 0, total = 0) {
@@ -3919,6 +4054,9 @@ class ReviewDashboard {
 
   goToPly(ply) {
     if (!this.game) return;
+    if (this.isRetryingMistake) {
+      this.stopRetryMistake();
+    }
     this.currentPly = Math.max(0, Math.min(this.game.plies.length, ply));
     this.stopPvPlayback();
 
@@ -3932,6 +4070,121 @@ class ReviewDashboard {
       else if (p.classification === 'brilliant') soundService.playBrilliant();
     }
 
+    this.updateBoardAndControls();
+  }
+
+  startRetryMistake() {
+    const cur = this.getCurrentEval();
+    if (!cur || !cur.bestMoveUci || !cur.fenBefore) return;
+
+    this.isRetryingMistake = true;
+    this.retryHintActive = false;
+    this.stopPvPlayback();
+
+    const banner = this.container.querySelector('#pv-banner-area');
+    if (banner) {
+      const turnName = cur.color === 'w' ? 'White' : 'Black';
+      banner.classList.remove('d-none');
+      banner.innerHTML = `
+        <div class="alert alert-warning comic-card-sm d-flex align-items-center justify-content-between p-2.5 mb-2 rounded-3">
+          <div class="d-flex align-items-center gap-2">
+            <span class="spinner-grow spinner-grow-sm text-warning"></span>
+            <span class="small fw-bold">Retry Mistake · <strong>${turnName}</strong> to find the best move</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-outline-dark fw-bold comic-btn" id="retry-hint-btn">Hint</button>
+            <button type="button" class="btn btn-sm btn-light fw-bold comic-btn" id="retry-exit-btn">Exit</button>
+          </div>
+        </div>
+      `;
+
+      banner.querySelector('#retry-hint-btn')?.addEventListener('click', () => {
+        this.retryHintActive = true;
+        const fromSq = cur.bestMoveUci.slice(0, 2);
+        const hintEl = banner.querySelector('strong');
+        if (hintEl) hintEl.textContent = `Hint: piece starts on ${fromSq}`;
+        if (this.board) {
+          this.board.setProps({
+            bestMove: { from: fromSq, to: fromSq }
+          });
+        }
+      });
+
+      banner.querySelector('#retry-exit-btn')?.addEventListener('click', () => {
+        this.stopRetryMistake();
+      });
+    }
+
+    if (this.board) {
+      const testChess = new Chess(cur.fenBefore);
+      this.board.setProps({
+        fen: cur.fenBefore,
+        orientation: this.orientation,
+        interactive: true,
+        lastMove: null,
+        bestMove: null,
+        secondBestMove: null,
+        threatMove: null,
+        badge: null,
+        legalMovesFrom: (sq) => {
+          const moves = testChess.moves({ square: sq, verbose: true });
+          return moves.map((m) => m.to);
+        },
+        onMove: (from, to) => {
+          const promo = (to.endsWith('8') || to.endsWith('1')) ? 'q' : undefined;
+          const playedUci = `${from}${to}${promo || ''}`;
+          const isCorrect = playedUci.startsWith(cur.bestMoveUci.slice(0, 4));
+
+          if (isCorrect) {
+            soundService.playSuccess();
+            try {
+              if (typeof window.confetti === 'function') {
+                window.confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+              }
+            } catch {}
+
+            const bannerAlert = banner?.querySelector('.alert');
+            if (bannerAlert) {
+              bannerAlert.className = 'alert alert-success comic-card-sm d-flex align-items-center justify-content-between p-2.5 mb-2 rounded-3';
+              bannerAlert.innerHTML = `
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                  <span class="small fw-bold">Solved! That's the best move: <strong>${cur.bestMoveSan || cur.bestMoveUci}</strong></span>
+                </div>
+              `;
+            }
+
+            testChess.move({ from, to, promotion: promo });
+            this.board?.setProps({
+              fen: testChess.fen(),
+              interactive: false,
+              lastMove: { from, to }
+            });
+
+            setTimeout(() => {
+              this.stopRetryMistake();
+            }, 1800);
+          } else {
+            soundService.playBlunder();
+            const bannerStrong = banner?.querySelector('strong');
+            if (bannerStrong) {
+              bannerStrong.textContent = `Not quite. Try another move!`;
+            }
+            this.board?.setProps({ fen: cur.fenBefore, interactive: true });
+          }
+        }
+      });
+    }
+  }
+
+  stopRetryMistake() {
+    this.isRetryingMistake = false;
+    this.retryHintActive = false;
+    const banner = this.container.querySelector('#pv-banner-area');
+    if (banner) {
+      banner.innerHTML = '';
+      banner.classList.add('d-none');
+    }
     this.updateBoardAndControls();
   }
 
@@ -4165,6 +4418,11 @@ class ReviewDashboard {
             ` : ''}
           </div>
           <div class="d-flex align-items-center gap-2">
+            ${['inaccuracy', 'mistake', 'blunder'].includes(cur.classification) ? `
+              <button type="button" class="btn btn-sm btn-warning fw-bold comic-btn" id="btn-retry-mistake" title="Practice finding the best move">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Retry
+              </button>
+            ` : ''}
             ${cur.tacticalContinuation && cur.tacticalContinuation.length > 0 ? `
               <button type="button" class="btn btn-sm btn-outline-primary fw-bold comic-btn" id="btn-show-why">
                 <i class="bi bi-play-fill me-1"></i>Show Why
@@ -4172,6 +4430,7 @@ class ReviewDashboard {
             ` : ''}
           </div>
         `;
+        stripEl.querySelector('#btn-retry-mistake')?.addEventListener('click', () => this.startRetryMistake());
         stripEl.querySelector('#btn-show-why')?.addEventListener('click', () => this.startShowWhy());
       } else {
         stripEl.innerHTML = `
@@ -4585,9 +4844,14 @@ class ReviewDashboard {
                   ${this.game.ecoName || this.game.ecoCode || 'Chess Match'} · ${this.game.date || ''}
                 </div>
               </div>
-              <span class="badge ${this.game.result === '1-0' ? 'bg-success' : this.game.result === '0-1' ? 'bg-danger' : 'bg-secondary'} font-monospace px-2.5 py-1.5 fs-6">
-                ${this.game.result}
-              </span>
+              <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-2 py-1" id="btn-share-review" title="Copy Review Summary to Clipboard">
+                  <i class="bi bi-share me-1"></i>Share
+                </button>
+                <span class="badge ${this.game.result === '1-0' ? 'bg-success' : this.game.result === '0-1' ? 'bg-danger' : 'bg-secondary'} font-monospace px-2.5 py-1.5 fs-6">
+                  ${this.game.result}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -4735,6 +4999,24 @@ class ReviewDashboard {
     this.container.querySelector('#btn-flip')?.addEventListener('click', () => {
       this.orientation = this.orientation === 'w' ? 'b' : 'w';
       this.updateBoardAndControls();
+    });
+
+    this.container.querySelector('#btn-share-review')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      const text = `⚡ Chess IQ Game Review
+${this.game.white} (${userAcc}%) vs ${this.game.black} (${oppAcc}%)
+Opening: ${this.game.ecoName || this.game.ecoCode || 'Standard'}
+Total Moves: ${Math.ceil((this.game.plies?.length || 0) / 2)} moves
+Result: ${this.game.result || '*'}`;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+          if (btn) {
+            const orig = btn.innerHTML;
+            btn.innerHTML = `<i class="bi bi-check2 me-1"></i>Copied!`;
+            setTimeout(() => { btn.innerHTML = orig; }, 2000);
+          }
+        });
+      }
     });
 
     // Bind Move rows click
@@ -5435,6 +5717,13 @@ class App {
     }
   }
 
+  updateSoundIcon() {
+    const icon = document.getElementById('sound-toggle-icon');
+    if (icon) {
+      icon.className = soundService.isMuted ? 'bi bi-volume-mute-fill text-danger' : 'bi bi-volume-up-fill';
+    }
+  }
+
   switchMode(mode) {
     this.appMode = mode;
 
@@ -5457,10 +5746,15 @@ class App {
   }
 
   bindHeader() {
+    this.updateSoundIcon();
     document.getElementById('nav-mode-review')?.addEventListener('click', () => this.switchMode('review'));
     document.getElementById('nav-mode-bot')?.addEventListener('click', () => this.switchMode('bot'));
     document.getElementById('nav-btn-import')?.addEventListener('click', () => this.importModal?.show());
     document.getElementById('nav-btn-theme')?.addEventListener('click', () => this.toggleTheme());
+    document.getElementById('nav-btn-sound')?.addEventListener('click', () => {
+      soundService.toggleMute();
+      this.updateSoundIcon();
+    });
 
     // Theme selector dropdown/menu
     const menuToggle = document.querySelector('[data-bs-toggle="menu"], [data-bs-toggle="dropdown"]');

@@ -1,10 +1,26 @@
 class SoundService {
   constructor() {
     this.ctx = null;
+    this.isMuted = typeof localStorage !== 'undefined' ? localStorage.getItem('chess_iq_muted') === 'true' : false;
+  }
+
+  toggleMute() {
+    this.isMuted = !this.isMuted;
+    try {
+      localStorage.setItem('chess_iq_muted', String(this.isMuted));
+    } catch {}
+    return this.isMuted;
+  }
+
+  setMuted(muted) {
+    this.isMuted = !!muted;
+    try {
+      localStorage.setItem('chess_iq_muted', String(this.isMuted));
+    } catch {}
   }
 
   getContext() {
-    if (typeof window === 'undefined') return null;
+    if (typeof window === 'undefined' || this.isMuted) return null;
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) {

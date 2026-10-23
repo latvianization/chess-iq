@@ -8,7 +8,7 @@ import { Chess } from 'chess.js';
 import { BOTS_33, TIER_CONFIG } from '../data/botsData.js';
 import { Chessboard } from './board.js';
 import { soundService } from '../services/sound.js';
-import { evaluatePositionLocally } from '../services/engine.js';
+import { evaluatePositionLocally, findBestMoveLocal } from '../services/engine.js';
 import confetti from 'canvas-confetti';
 
 export class BotArena {
@@ -86,7 +86,7 @@ export class BotArena {
 
     // Evaluate position before move to detect quality
     const prevFen = this.chess.fen();
-    const prevEval = evaluatePositionLocally(prevFen, 3);
+    const prevEval = evaluatePositionLocally(prevFen);
 
     try {
       const move = this.chess.move({ from, to, promotion: 'q' });
@@ -99,8 +99,8 @@ export class BotArena {
       }
 
       // Check quality of user move
-      const postEval = evaluatePositionLocally(this.chess.fen(), 3);
-      const evalDiff = this.userColor === 'w' ? postEval.score - prevEval.score : prevEval.score - postEval.score;
+      const postEval = evaluatePositionLocally(this.chess.fen());
+      const evalDiff = this.userColor === 'w' ? postEval.cp - prevEval.cp : prevEval.cp - postEval.cp;
 
       const shouldSpeak = Math.random() < 0.18;
       if (evalDiff <= -250) {
@@ -152,21 +152,17 @@ export class BotArena {
       if (willMakeRandomMistake && legalMoves.length > 1) {
         chosenMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
       } else {
-        // Find best move via local alpha-beta search
-        let bestScore = -Infinity;
-        chosenMove = legalMoves[0];
-
-        for (const m of legalMoves) {
-          this.chess.move(m);
-          const ev = evaluatePositionLocally(this.chess.fen(), this.selectedBot.depth);
-          // Score relative to bot
-          const score = this.userColor === 'w' ? -ev.score : ev.score;
-          this.chess.undo();
-
-          if (score > bestScore) {
-            bestScore = score;
-            chosenMove = m;
-          }
+        const botSearchDepth = Math.max(1, Math.min(3, this.selectedBot.depth || 2));
+        const searchResult = findBestMoveLocal(this.chess.fen(), botSearchDepth);
+        if (searchResult && searchResult.bestMoveUci) {
+          const from = searchResult.bestMoveUci.slice(0, 2);
+          const to = searchResult.bestMoveUci.slice(2, 4);
+          const promo = searchResult.bestMoveUci[4];
+          const matched = legalMoves.find((m) => m.from === from && m.to === to && (!promo || m.promotion === promo));
+          if (matched) chosenMove = matched;
+        }
+        if (!chosenMove) {
+          chosenMove = legalMoves[0];
         }
       }
 
@@ -332,6 +328,25 @@ export class BotArena {
     });
   }
 
+  getBotRecords() {
+    try {
+      return JSON.parse(localStorage.getItem('chess_iq_bot_records') || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  recordBotResult(botId, result) {
+    try {
+      const records = this.getBotRecords();
+      if (!records[botId]) records[botId] = { wins: 0, losses: 0, draws: 0 };
+      if (result === 'win') records[botId].wins = (records[botId].wins || 0) + 1;
+      else if (result === 'loss') records[botId].losses = (records[botId].losses || 0) + 1;
+      else if (result === 'draw') records[botId].draws = (records[botId].draws || 0) + 1;
+      localStorage.setItem('chess_iq_bot_records', JSON.stringify(records));
+    } catch {}
+  }
+
   checkGameOver() {
     let reason = '';
     const isMate = typeof this.chess.isCheckmate === 'function'
@@ -363,6 +378,7 @@ export class BotArena {
     }
 
     if (this.gameResult) {
+      this.recordBotResult(this.selectedBot.id, this.gameResult);
       this.updateControls();
       this.updateStatusText();
       setTimeout(() => this.showGameOverModal(reason), 350);
@@ -517,17 +533,23 @@ export class BotArena {
 
           <!-- Tier Collectible Bots Carousel -->
           <div class="d-flex gap-2.5 overflow-x-auto py-2" id="tier-bots-row" style="scrollbar-width: thin;">
-            ${BOTS_33.filter((b) => b.tier === this.activeTier)
-              .map(
-                (b) => `
-                <div class="arcade-bot-card flex-shrink-0 ${b.id === this.selectedBot.id ? 'active' : ''}" data-bot-id="${b.id}">
-                  <span class="arcade-bot-avatar">${b.avatar}</span>
-                  <span class="arcade-bot-name">${b.name}</span>
-                  <span class="arcade-bot-elo">${b.elo}</span>
-                </div>
-              `
-              )
-              .join('')}
+            ${(() => {
+              const records = this.getBotRecords();
+              return BOTS_33.filter((b) => b.tier === this.activeTier)
+                .map(
+                  (b) => `
+                  <div class="arcade-bot-card flex-shrink-0 ${b.id === this.selectedBot.id ? 'active' : ''}" data-bot-id="${b.id}">
+                    <span class="arcade-bot-avatar">${b.avatar}</span>
+                    <span class="arcade-bot-name">${b.name}</span>
+                    <span class="arcade-bot-elo d-flex align-items-center justify-content-center gap-1">
+                      ${b.elo}
+                      ${records[b.id]?.wins ? `<span class="badge bg-warning text-dark py-0 px-1" title="Defeated ${records[b.id].wins} time(s)">🏆 ${records[b.id].wins}</span>` : ''}
+                    </span>
+                  </div>
+                `
+                )
+                .join('');
+            })()}
           </div>
         </div>
 

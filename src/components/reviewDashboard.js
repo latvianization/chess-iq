@@ -52,8 +52,39 @@ export class ReviewDashboard {
     this.analysisStartTime = null;
     this.advantagePoints = [];
     this.advantageMidY = 42;
+    this.isRetryingMistake = false;
+    this.retryHintActive = false;
 
+    this.initKeyboardNavigation();
     this.render();
+  }
+
+  initKeyboardNavigation() {
+    this.handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      if (!this.game || this.isRetryingMistake) return;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        this.goToPly(this.currentPly - 1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        this.goToPly(this.currentPly + 1);
+      } else if (e.key === 'ArrowUp' || e.key === 'Home') {
+        e.preventDefault();
+        this.goToPly(0);
+      } else if (e.key === 'ArrowDown' || e.key === 'End') {
+        e.preventDefault();
+        this.goToPly(this.game.plies.length);
+      } else if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        this.nextKeyMoment();
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        this.orientation = this.orientation === 'w' ? 'b' : 'w';
+        this.updateBoardAndControls();
+      }
+    };
+    window.addEventListener('keydown', this.handleKeyDown);
   }
 
   showLoading(current = 0, total = 0) {
@@ -133,6 +164,9 @@ export class ReviewDashboard {
 
   goToPly(ply) {
     if (!this.game) return;
+    if (this.isRetryingMistake) {
+      this.stopRetryMistake();
+    }
     this.currentPly = Math.max(0, Math.min(this.game.plies.length, ply));
     this.stopPvPlayback();
 
@@ -146,6 +180,121 @@ export class ReviewDashboard {
       else if (p.classification === 'brilliant') soundService.playBrilliant();
     }
 
+    this.updateBoardAndControls();
+  }
+
+  startRetryMistake() {
+    const cur = this.getCurrentEval();
+    if (!cur || !cur.bestMoveUci || !cur.fenBefore) return;
+
+    this.isRetryingMistake = true;
+    this.retryHintActive = false;
+    this.stopPvPlayback();
+
+    const banner = this.container.querySelector('#pv-banner-area');
+    if (banner) {
+      const turnName = cur.color === 'w' ? 'White' : 'Black';
+      banner.classList.remove('d-none');
+      banner.innerHTML = `
+        <div class="alert alert-warning comic-card-sm d-flex align-items-center justify-content-between p-2.5 mb-2 rounded-3">
+          <div class="d-flex align-items-center gap-2">
+            <span class="spinner-grow spinner-grow-sm text-warning"></span>
+            <span class="small fw-bold">Retry Mistake · <strong>${turnName}</strong> to find the best move</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-outline-dark fw-bold comic-btn" id="retry-hint-btn">Hint</button>
+            <button type="button" class="btn btn-sm btn-light fw-bold comic-btn" id="retry-exit-btn">Exit</button>
+          </div>
+        </div>
+      `;
+
+      banner.querySelector('#retry-hint-btn')?.addEventListener('click', () => {
+        this.retryHintActive = true;
+        const fromSq = cur.bestMoveUci.slice(0, 2);
+        const hintEl = banner.querySelector('strong');
+        if (hintEl) hintEl.textContent = `Hint: piece starts on ${fromSq}`;
+        if (this.board) {
+          this.board.setProps({
+            bestMove: { from: fromSq, to: fromSq }
+          });
+        }
+      });
+
+      banner.querySelector('#retry-exit-btn')?.addEventListener('click', () => {
+        this.stopRetryMistake();
+      });
+    }
+
+    if (this.board) {
+      const testChess = new Chess(cur.fenBefore);
+      this.board.setProps({
+        fen: cur.fenBefore,
+        orientation: this.orientation,
+        interactive: true,
+        lastMove: null,
+        bestMove: null,
+        secondBestMove: null,
+        threatMove: null,
+        badge: null,
+        legalMovesFrom: (sq) => {
+          const moves = testChess.moves({ square: sq, verbose: true });
+          return moves.map((m) => m.to);
+        },
+        onMove: (from, to) => {
+          const promo = (to.endsWith('8') || to.endsWith('1')) ? 'q' : undefined;
+          const playedUci = `${from}${to}${promo || ''}`;
+          const isCorrect = playedUci.startsWith(cur.bestMoveUci.slice(0, 4));
+
+          if (isCorrect) {
+            soundService.playSuccess();
+            try {
+              if (typeof window.confetti === 'function') {
+                window.confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+              }
+            } catch {}
+
+            const bannerAlert = banner?.querySelector('.alert');
+            if (bannerAlert) {
+              bannerAlert.className = 'alert alert-success comic-card-sm d-flex align-items-center justify-content-between p-2.5 mb-2 rounded-3';
+              bannerAlert.innerHTML = `
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                  <span class="small fw-bold">Solved! That's the best move: <strong>${cur.bestMoveSan || cur.bestMoveUci}</strong></span>
+                </div>
+              `;
+            }
+
+            testChess.move({ from, to, promotion: promo });
+            this.board?.setProps({
+              fen: testChess.fen(),
+              interactive: false,
+              lastMove: { from, to }
+            });
+
+            setTimeout(() => {
+              this.stopRetryMistake();
+            }, 1800);
+          } else {
+            soundService.playBlunder();
+            const bannerStrong = banner?.querySelector('strong');
+            if (bannerStrong) {
+              bannerStrong.textContent = `Not quite. Try another move!`;
+            }
+            this.board?.setProps({ fen: cur.fenBefore, interactive: true });
+          }
+        }
+      });
+    }
+  }
+
+  stopRetryMistake() {
+    this.isRetryingMistake = false;
+    this.retryHintActive = false;
+    const banner = this.container.querySelector('#pv-banner-area');
+    if (banner) {
+      banner.innerHTML = '';
+      banner.classList.add('d-none');
+    }
     this.updateBoardAndControls();
   }
 
@@ -379,6 +528,11 @@ export class ReviewDashboard {
             ` : ''}
           </div>
           <div class="d-flex align-items-center gap-2">
+            ${['inaccuracy', 'mistake', 'blunder'].includes(cur.classification) ? `
+              <button type="button" class="btn btn-sm btn-warning fw-bold comic-btn" id="btn-retry-mistake" title="Practice finding the best move">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Retry
+              </button>
+            ` : ''}
             ${cur.tacticalContinuation && cur.tacticalContinuation.length > 0 ? `
               <button type="button" class="btn btn-sm btn-outline-primary fw-bold comic-btn" id="btn-show-why">
                 <i class="bi bi-play-fill me-1"></i>Show Why
@@ -386,6 +540,7 @@ export class ReviewDashboard {
             ` : ''}
           </div>
         `;
+        stripEl.querySelector('#btn-retry-mistake')?.addEventListener('click', () => this.startRetryMistake());
         stripEl.querySelector('#btn-show-why')?.addEventListener('click', () => this.startShowWhy());
       } else {
         stripEl.innerHTML = `
@@ -799,9 +954,14 @@ export class ReviewDashboard {
                   ${this.game.ecoName || this.game.ecoCode || 'Chess Match'} · ${this.game.date || ''}
                 </div>
               </div>
-              <span class="badge ${this.game.result === '1-0' ? 'bg-success' : this.game.result === '0-1' ? 'bg-danger' : 'bg-secondary'} font-monospace px-2.5 py-1.5 fs-6">
-                ${this.game.result}
-              </span>
+              <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-2 py-1" id="btn-share-review" title="Copy Review Summary to Clipboard">
+                  <i class="bi bi-share me-1"></i>Share
+                </button>
+                <span class="badge ${this.game.result === '1-0' ? 'bg-success' : this.game.result === '0-1' ? 'bg-danger' : 'bg-secondary'} font-monospace px-2.5 py-1.5 fs-6">
+                  ${this.game.result}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -949,6 +1109,24 @@ export class ReviewDashboard {
     this.container.querySelector('#btn-flip')?.addEventListener('click', () => {
       this.orientation = this.orientation === 'w' ? 'b' : 'w';
       this.updateBoardAndControls();
+    });
+
+    this.container.querySelector('#btn-share-review')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      const text = `⚡ Chess IQ Game Review
+${this.game.white} (${userAcc}%) vs ${this.game.black} (${oppAcc}%)
+Opening: ${this.game.ecoName || this.game.ecoCode || 'Standard'}
+Total Moves: ${Math.ceil((this.game.plies?.length || 0) / 2)} moves
+Result: ${this.game.result || '*'}`;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+          if (btn) {
+            const orig = btn.innerHTML;
+            btn.innerHTML = `<i class="bi bi-check2 me-1"></i>Copied!`;
+            setTimeout(() => { btn.innerHTML = orig; }, 2000);
+          }
+        });
+      }
     });
 
     // Bind Move rows click

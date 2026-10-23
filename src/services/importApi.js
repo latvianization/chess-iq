@@ -179,7 +179,10 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
       };
       prevEngine = { scoreCp: 20, mate: null, pv: [playedUci2] };
     } else {
-      const engineBefore = prevEngine;
+      let engineBefore = prevEngine;
+      if (!engineBefore || !engineBefore.bestMoveUci || (i > 0 && precomputed[i - 1].isBook)) {
+        engineBefore = await evaluateFenHybrid(item.fenBefore, isDeep);
+      }
       const engineAfter = await evaluateFenHybrid(item.fenAfter, isDeep);
       prevEngine = engineAfter;
 

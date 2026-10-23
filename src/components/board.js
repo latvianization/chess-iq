@@ -34,6 +34,9 @@ export class Chessboard {
     this.selectedSquare = null;
     this.possibleDests = [];
     this.lastAnimatedMoveKey = null;
+    this.userArrows = [];
+    this.userHighlights = new Set();
+    this.rightClickStartSquare = null;
 
     this.render();
   }
@@ -147,6 +150,10 @@ export class Chessboard {
           sqDiv.classList.add(isDark ? 'last-move-dark' : 'last-move-light');
         } else {
           sqDiv.style.backgroundColor = squareColor;
+        }
+
+        if (this.userHighlights.has(square)) {
+          sqDiv.style.boxShadow = 'inset 0 0 0 4px rgba(245, 158, 11, 0.85)';
         }
 
         // Square coordinates on edges
@@ -264,8 +271,57 @@ export class Chessboard {
     if (this.threatMove && this.threatMove.from && this.threatMove.to) {
       this.drawArrow(svgLayer, this.threatMove.from, this.threatMove.to, '#ef4444', true, 'threat-move', 3.5);
     }
+    // User custom arrows (drawn via right-click drag)
+    this.userArrows.forEach((arr, idx) => {
+      this.drawArrow(svgLayer, arr.from, arr.to, '#f59e0b', false, `user-${idx}`, 3.8);
+    });
 
     boardWrapper.appendChild(svgLayer);
+
+    boardWrapper.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+
+    boardWrapper.addEventListener('mousedown', (e) => {
+      if (e.button === 0) {
+        if (this.userArrows.length > 0 || this.userHighlights.size > 0) {
+          this.userArrows = [];
+          this.userHighlights.clear();
+          this.render();
+        }
+      } else if (e.button === 2) {
+        const sqEl = e.target.closest('[data-square]');
+        this.rightClickStartSquare = sqEl ? sqEl.dataset.square : null;
+      }
+    });
+
+    boardWrapper.addEventListener('mouseup', (e) => {
+      if (e.button === 2) {
+        const sqEl = e.target.closest('[data-square]');
+        const endSq = sqEl ? sqEl.dataset.square : null;
+        if (this.rightClickStartSquare && endSq) {
+          if (this.rightClickStartSquare === endSq) {
+            if (this.userHighlights.has(endSq)) {
+              this.userHighlights.delete(endSq);
+            } else {
+              this.userHighlights.add(endSq);
+            }
+          } else {
+            const existingIdx = this.userArrows.findIndex(
+              (a) => a.from === this.rightClickStartSquare && a.to === endSq
+            );
+            if (existingIdx !== -1) {
+              this.userArrows.splice(existingIdx, 1);
+            } else {
+              this.userArrows.push({ from: this.rightClickStartSquare, to: endSq });
+            }
+          }
+          this.render();
+        }
+        this.rightClickStartSquare = null;
+      }
+    });
+
     this.container.appendChild(boardWrapper);
   }
 

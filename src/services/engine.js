@@ -766,8 +766,15 @@ async function fetchSyzygyTablebase(fen) {
   }
   return null;
 }
+export function normalizeFenKey(fen) {
+  if (!fen) return "";
+  const parts = fen.trim().split(/\s+/);
+  return parts.slice(0, 4).join(" ");
+}
+
 export async function evaluateFenHybrid(fen, isDeep = false) {
-  const cached = FEN_EVAL_CACHE.get(fen);
+  const cacheKey = `${normalizeFenKey(fen)}_${isDeep ? "deep" : "fast"}`;
+  const cached = FEN_EVAL_CACHE.get(cacheKey);
   if (cached) return cached;
 
   if (!isDeep) {
@@ -781,7 +788,7 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
       multiPv2ScoreCp: localSearch.multiPv2Cp,
       source: "local"
     };
-    FEN_EVAL_CACHE.set(fen, localResult);
+    FEN_EVAL_CACHE.set(cacheKey, localResult);
     return localResult;
   }
 
@@ -797,7 +804,7 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
         const fallback = findBestMoveLocal(fen, 1);
         tablebase.secondBestMoveUci = fallback.secondBestMoveUci;
       }
-      FEN_EVAL_CACHE.set(fen, tablebase);
+      FEN_EVAL_CACHE.set(cacheKey, tablebase);
       return tablebase;
     }
   }
@@ -815,7 +822,7 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
       multiPv2ScoreCp: sfEval.multiPv2ScoreCp,
       source: "stockfish"
     };
-    FEN_EVAL_CACHE.set(fen, sfResult);
+    FEN_EVAL_CACHE.set(cacheKey, sfResult);
     return sfResult;
   }
 
@@ -829,7 +836,7 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
     multiPv2ScoreCp: localSearch.multiPv2Cp,
     source: "local"
   };
-  FEN_EVAL_CACHE.set(fen, localResult);
+  FEN_EVAL_CACHE.set(cacheKey, localResult);
   return localResult;
 }
 export async function detectThreat(fen) {

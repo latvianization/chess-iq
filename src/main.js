@@ -114,6 +114,13 @@ class App {
     }
   }
 
+  updateSoundIcon() {
+    const icon = document.getElementById('sound-toggle-icon');
+    if (icon) {
+      icon.className = soundService.isMuted ? 'bi bi-volume-mute-fill text-danger' : 'bi bi-volume-up-fill';
+    }
+  }
+
   switchMode(mode) {
     this.appMode = mode;
 
@@ -136,10 +143,15 @@ class App {
   }
 
   bindHeader() {
+    this.updateSoundIcon();
     document.getElementById('nav-mode-review')?.addEventListener('click', () => this.switchMode('review'));
     document.getElementById('nav-mode-bot')?.addEventListener('click', () => this.switchMode('bot'));
     document.getElementById('nav-btn-import')?.addEventListener('click', () => this.importModal?.show());
     document.getElementById('nav-btn-theme')?.addEventListener('click', () => this.toggleTheme());
+    document.getElementById('nav-btn-sound')?.addEventListener('click', () => {
+      soundService.toggleMute();
+      this.updateSoundIcon();
+    });
 
     // Theme selector dropdown/menu
     const menuToggle = document.querySelector('[data-bs-toggle="menu"], [data-bs-toggle="dropdown"]');
