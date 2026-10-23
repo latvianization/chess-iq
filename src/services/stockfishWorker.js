@@ -33,9 +33,13 @@ class StockfishWorkerService {
         this.handleMessage(event.data);
       };
       this.worker.onerror = (err) => {
-        console.error(`[StockfishPool][${this.id}] Worker error:`, err);
+        const msg = (err && err.message) || (err && err.type ? `Event (${err.type})` : "Worker error");
+        console.warn(`[StockfishPool][${this.id}] Worker error (${msg}), taking offline`);
         this.isAvailable = false;
         this.drainQueue();
+        try {
+          this.worker.terminate();
+        } catch {}
       };
       this.worker.postMessage("uci");
     } catch (err) {
@@ -44,6 +48,19 @@ class StockfishWorkerService {
     }
   }
   drainQueue() {
+    if (this.evaluationTimeoutId) {
+      clearTimeout(this.evaluationTimeoutId);
+      this.evaluationTimeoutId = null;
+    }
+    if (this.hardTimeoutId) {
+      clearTimeout(this.hardTimeoutId);
+      this.hardTimeoutId = null;
+    }
+    if (this.pendingResolve) {
+      const resolve = this.pendingResolve;
+      this.pendingResolve = null;
+      resolve(null);
+    }
     while (this.queue.length > 0) {
       const item = this.queue.shift();
       if (item && item.resolve) item.resolve(null);
@@ -204,15 +221,19 @@ class StockfishWorkerService {
     return this.isAvailable && this.isInitialized;
   }
 }
-const POOL_MAX_WORKERS = 8;
+const POOL_MAX_WORKERS = 4;
 
 class StockfishPool {
   constructor() {
     const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
-    this.targetSize = Math.min(POOL_MAX_WORKERS, Math.max(2, cores - 1));
+    this.targetSize = Math.min(POOL_MAX_WORKERS, Math.max(1, cores - 1));
     this.workers = [new StockfishWorkerService()];
   }
+  cleanDeadWorkers() {
+    this.workers = this.workers.filter((w) => w.isAvailable);
+  }
   warmUp() {
+    this.cleanDeadWorkers();
     while (this.workers.length < this.targetSize) {
       this.workers.push(new StockfishWorkerService());
     }
@@ -227,6 +248,10 @@ class StockfishPool {
     return this.workers.some((w) => w.isEngineReady());
   }
   evaluate(fen, depth = 14, maxWaitMs = 1000) {
+    this.cleanDeadWorkers();
+    if (this.workers.length === 0) {
+      this.workers.push(new StockfishWorkerService());
+    }
     if (this.workers.length < this.targetSize) {
       this.warmUp();
     }
