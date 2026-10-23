@@ -7,7 +7,8 @@ import {
   cpToWinProb,
   detectPhase,
   detectThreat,
-  evaluateFenHybrid
+  evaluateFenHybrid,
+  prefetchEvaluations
 } from "./engine.js";
 import { prepareMoveExplanation } from "./engineRefutations.js";
 import { findMatchingEco, isBookMove } from "./ecoDictionary.js";
@@ -58,7 +59,7 @@ export function extractMovesAndClocks(pgn) {
   }
   return { moves, clocks };
 }
-export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) {
+export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, skipExtras = false) {
   const chess = new Chess();
   try {
     if (typeof chess.loadPgn === "function") {
@@ -143,6 +144,16 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     onProgress(0, totalPlies);
     await new Promise((resolve) => setTimeout(resolve, 35));
   }
+
+  const fensToEvaluate = [];
+  if (totalPlies > 0) fensToEvaluate.push(precomputed[0].fenBefore);
+  precomputed.forEach((item, idx) => {
+    const nextIsEngineMove = idx + 1 < totalPlies && !precomputed[idx + 1].isBook;
+    if (!item.isBook || nextIsEngineMove) fensToEvaluate.push(item.fenAfter);
+  });
+  await prefetchEvaluations(fensToEvaluate, isDeep, (done, total) => {
+    if (onProgress) return onProgress(Math.round((done / total) * totalPlies), totalPlies);
+  });
 
   let prevEngine = precomputed.length > 0
     ? await evaluateFenHybrid(precomputed[0].fenBefore, isDeep)
@@ -251,10 +262,10 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
       const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
       let threat = null;
       let explanation = null;
-      if (classification === "blunder" || winProbLoss > 0.15) {
+      if (!skipExtras && (classification === "blunder" || winProbLoss > 0.15)) {
         threat = await detectThreat(item.fenAfter);
       }
-      if (classification === "blunder" || classification === "mistake" || classification === "inaccuracy") {
+      if (!skipExtras && (classification === "blunder" || classification === "mistake" || classification === "inaccuracy")) {
         explanation = await prepareMoveExplanation({
           fen: item.fenAfter,
           fenBefore: item.fenBefore,
@@ -309,10 +320,7 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
         phase: item.phase
       };
     }
-    if (onProgress && (i % 2 === 0 || i === totalPlies - 1)) {
-      await onProgress(i + 1, totalPlies);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    if (i % 8 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
   }
   const createEmptyCounts = () => ({
     brilliant: 0,
@@ -481,7 +489,32 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     phaseAcpl: userPhaseAcpl
   };
 }
-export async function fetchChessComGames(username) {
+const CHESSCOM_DRAW_RESULTS = ["agreed", "repetition", "stalemate", "insufficient", "50move", "timevsinsufficient"];
+
+function mapChessComGame(g, idx) {
+  const whiteName = g.white?.username || "White";
+  const blackName = g.black?.username || "Black";
+  let res = "*";
+  if (g.white?.result === "win") res = "1-0";
+  else if (g.black?.result === "win") res = "0-1";
+  else if (CHESSCOM_DRAW_RESULTS.includes(g.white?.result)) res = "1/2-1/2";
+  return {
+    id: `chesscom_${g.url ? g.url.split("/").pop() : idx}`,
+    platform: "chesscom",
+    white: whiteName,
+    black: blackName,
+    whiteElo: g.white?.rating || 1500,
+    blackElo: g.black?.rating || 1500,
+    result: res,
+    date: g.end_time ? new Date(g.end_time * 1e3).toISOString().split("T")[0] : "Recent",
+    endTime: g.end_time ? g.end_time * 1e3 : 0,
+    timeControl: g.time_control || "Rapid",
+    eco: g.eco || "C50",
+    pgn: g.pgn || ""
+  };
+}
+
+export async function fetchChessComGames(username, limit = 15) {
   const cleanUsername = username.trim().toLowerCase();
   const archivesUrl = `https://api.chess.com/pub/player/${cleanUsername}/games/archives`;
   const archRes = await fetch(archivesUrl);
@@ -493,37 +526,22 @@ export async function fetchChessComGames(username) {
   }
   const archData = await archRes.json();
   const archives = archData.archives || [];
-  if (archives.length === 0) return [];
-  const latestMonthUrl = archives[archives.length - 1];
-  const gamesRes = await fetch(latestMonthUrl);
-  if (!gamesRes.ok) throw new Error("Failed to fetch monthly games from Chess.com");
-  const monthData = await gamesRes.json();
-  const games = monthData.games || [];
-  return games.slice(-15).reverse().map((g, idx) => {
-    const whiteName = g.white?.username || "White";
-    const blackName = g.black?.username || "Black";
-    let res = "*";
-    if (g.white?.result === "win") res = "1-0";
-    else if (g.black?.result === "win") res = "0-1";
-    else if (g.white?.result === "agreed" || g.white?.result === "repetition" || g.white?.result === "stalemate") res = "1/2-1/2";
-    return {
-      id: `chesscom_${g.url ? g.url.split("/").pop() : idx}`,
-      platform: "chesscom",
-      white: whiteName,
-      black: blackName,
-      whiteElo: g.white?.rating || 1500,
-      blackElo: g.black?.rating || 1500,
-      result: res,
-      date: g.end_time ? new Date(g.end_time * 1e3).toISOString().split("T")[0] : "Recent",
-      timeControl: g.time_control || "Rapid",
-      eco: g.eco || "C50",
-      pgn: g.pgn || ""
-    };
-  });
+  const collected = [];
+  for (let i = archives.length - 1; i >= 0 && collected.length < limit; i--) {
+    const gamesRes = await fetch(archives[i]);
+    if (!gamesRes.ok) {
+      if (collected.length === 0) throw new Error("Failed to fetch monthly games from Chess.com");
+      break;
+    }
+    const monthData = await gamesRes.json();
+    const standardGames = (monthData.games || []).filter((g) => g.rules === "chess" && g.pgn);
+    collected.push(...standardGames.reverse());
+  }
+  return collected.slice(0, limit).map(mapChessComGame);
 }
-export async function fetchLichessGames(username) {
+export async function fetchLichessGames(username, limit = 15) {
   const cleanUsername = username.trim().toLowerCase();
-  const url = `https://lichess.org/api/games/user/${cleanUsername}?max=15&clocks=true&evals=true&opening=true`;
+  const url = `https://lichess.org/api/games/user/${cleanUsername}?max=${limit}&clocks=true&opening=true&pgnInJson=true&perfType=ultraBullet,bullet,blitz,rapid,classical`;
   const res = await fetch(url, {
     headers: {
       "Accept": "application/x-ndjson"
@@ -550,6 +568,7 @@ export async function fetchLichessGames(username) {
         blackElo: g.players?.black?.rating || 1500,
         result: res2,
         date: g.createdAt ? new Date(g.createdAt).toISOString().split("T")[0] : "Recent",
+        endTime: g.lastMoveAt || g.createdAt || 0,
         timeControl: `${g.clock?.initial || 180}+${g.clock?.increment || 0}`,
         eco: g.opening?.eco || "B00",
         pgn: g.pgn || ""

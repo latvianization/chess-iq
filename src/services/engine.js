@@ -396,62 +396,24 @@ export function normalizeFenKey(fen) {
   return parts.slice(0, 4).join(" ");
 }
 
-export async function evaluateFenHybrid(fen, isDeep = false) {
-  const cacheKey = `${normalizeFenKey(fen)}_${isDeep ? "deep" : "fast"}`;
-  const cached = FEN_EVAL_CACHE.get(cacheKey);
-  if (cached) return cached;
+const ENGINE_PROFILES = {
+  fast: { depth: 5, maxWaitMs: 2000 },
+  deep: { depth: 10, maxWaitMs: 3000 }
+};
 
-  if (!isDeep) {
-    const localSearch = findBestMoveLocal(fen, 1);
-    const localResult = {
-      scoreCp: localSearch.evalCp,
-      mate: null,
-      pv: localSearch.pv,
-      bestMoveUci: localSearch.bestMoveUci,
-      secondBestMoveUci: localSearch.secondBestMoveUci,
-      multiPv2ScoreCp: localSearch.multiPv2Cp,
-      source: "local"
-    };
-    FEN_EVAL_CACHE.set(cacheKey, localResult);
-    return localResult;
-  }
+function toWhitePerspective(result, fen) {
+  if (fen.split(" ")[1] !== "b") return result;
+  return {
+    ...result,
+    scoreCp: -result.scoreCp,
+    mate: result.mate === null || result.mate === void 0 ? result.mate : -result.mate,
+    multiPv2ScoreCp: result.multiPv2ScoreCp === void 0 ? void 0 : -result.multiPv2ScoreCp
+  };
+}
 
-  const chess = new Chess(fen);
-  const totalPieces = countTotalPieces(chess);
-  if (totalPieces <= 7) {
-    const tablebase = await fetchSyzygyTablebase(fen);
-    if (tablebase) {
-      if (!tablebase.bestMoveUci && tablebase.pv && tablebase.pv[0]) {
-        tablebase.bestMoveUci = tablebase.pv[0];
-      }
-      if (!tablebase.secondBestMoveUci) {
-        const fallback = findBestMoveLocal(fen, 1);
-        tablebase.secondBestMoveUci = fallback.secondBestMoveUci;
-      }
-      FEN_EVAL_CACHE.set(cacheKey, tablebase);
-      return tablebase;
-    }
-  }
-
-  const targetDepth = 14;
-  const sfEval = await stockfishService.evaluate(fen, targetDepth, 800);
-  if (sfEval && sfEval.bestMoveUci) {
-    const fallback = findBestMoveLocal(fen, 1);
-    const sfResult = {
-      scoreCp: sfEval.scoreCp,
-      mate: sfEval.mate,
-      pv: sfEval.pv,
-      bestMoveUci: sfEval.bestMoveUci,
-      secondBestMoveUci: fallback.secondBestMoveUci,
-      multiPv2ScoreCp: sfEval.multiPv2ScoreCp ?? fallback.multiPv2Cp,
-      source: "stockfish"
-    };
-    FEN_EVAL_CACHE.set(cacheKey, sfResult);
-    return sfResult;
-  }
-
-  const localSearch = findBestMoveLocal(fen, 3);
-  const localResult = {
+function localEvaluation(fen, depth) {
+  const localSearch = findBestMoveLocal(fen, depth);
+  return {
     scoreCp: localSearch.evalCp,
     mate: null,
     pv: localSearch.pv,
@@ -460,8 +422,68 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
     multiPv2ScoreCp: localSearch.multiPv2Cp,
     source: "local"
   };
+}
+
+export async function evaluateFenHybrid(fen, isDeep = false) {
+  const cacheKey = `${normalizeFenKey(fen)}_${isDeep ? "deep" : "fast"}`;
+  const cached = FEN_EVAL_CACHE.get(cacheKey);
+  if (cached) return cached;
+
+  if (isDeep && countTotalPieces(new Chess(fen)) <= 7) {
+    const tablebase = await fetchSyzygyTablebase(fen);
+    if (tablebase) {
+      tablebase.bestMoveUci = tablebase.bestMoveUci || (tablebase.pv && tablebase.pv[0]) || "";
+      tablebase.secondBestMoveUci = tablebase.secondBestMoveUci || findBestMoveLocal(fen, 1).secondBestMoveUci;
+      const whiteResult = toWhitePerspective(tablebase, fen);
+      FEN_EVAL_CACHE.set(cacheKey, whiteResult);
+      return whiteResult;
+    }
+  }
+
+  const profile = isDeep ? ENGINE_PROFILES.deep : ENGINE_PROFILES.fast;
+  const sfEval = await stockfishService.evaluate(fen, profile.depth, profile.maxWaitMs);
+  if (sfEval && sfEval.bestMoveUci) {
+    const fallback = sfEval.secondBestMoveUci && sfEval.multiPv2ScoreCp !== void 0 ? null : findBestMoveLocal(fen, 1);
+    const sfResult = toWhitePerspective({
+      scoreCp: sfEval.scoreCp,
+      mate: sfEval.mate,
+      pv: sfEval.pv,
+      bestMoveUci: sfEval.bestMoveUci,
+      secondBestMoveUci: sfEval.secondBestMoveUci || fallback?.secondBestMoveUci || "",
+      multiPv2ScoreCp: sfEval.multiPv2ScoreCp ?? fallback?.multiPv2Cp,
+      source: "stockfish"
+    }, fen);
+    FEN_EVAL_CACHE.set(cacheKey, sfResult);
+    return sfResult;
+  }
+
+  const localResult = localEvaluation(fen, isDeep ? 3 : 2);
   FEN_EVAL_CACHE.set(cacheKey, localResult);
   return localResult;
+}
+
+export async function prefetchEvaluations(fens, isDeep, onEach) {
+  const unique = [...new Set(fens)];
+  stockfishService.warmUp();
+  const feederCount = Math.max(1, stockfishService.size);
+  let next = 0;
+  let done = 0;
+  let failure = null;
+
+  const feeders = Array.from({ length: feederCount }, async () => {
+    while (!failure && next < unique.length) {
+      const fen = unique[next++];
+      try {
+        await evaluateFenHybrid(fen, isDeep);
+        done++;
+        if (onEach) await onEach(done, unique.length);
+      } catch (err) {
+        failure = err;
+      }
+    }
+  });
+  await Promise.all(feeders);
+  if (failure) throw failure;
 }
 
 export function isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci = null) {

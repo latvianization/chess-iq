@@ -12,7 +12,9 @@ const files = [
   'src/services/engineRefutations.js',
   'src/services/gameCacheService.js',
   'src/services/importApi.js',
+  'src/services/insightsAggregate.js',
   'src/services/backgroundAnalysisQueue.js',
+  'src/services/insightsService.js',
   'src/components/board.js',
   'src/components/botGameOverModal.js',
   'src/components/botArena.js',
@@ -20,6 +22,8 @@ const files = [
   'src/components/reviewRetryMistake.js',
   'src/components/reviewWhyModal.js',
   'src/components/reviewDashboard.js',
+  'src/components/insightsCharts.js',
+  'src/components/insightsModal.js',
   'src/components/importModal.js',
   'src/main.js'
 ];

@@ -1246,6 +1246,7 @@ class StockfishWorkerService {
     this.currentPv = [];
     this.currentDepth = 0;
     this.secondBestCp = void 0;
+    this.secondBestMove = "";
     this.evaluationTimeoutId = null;
     this.initWorker();
   }
@@ -1282,6 +1283,7 @@ class StockfishWorkerService {
     if (line === "uciok") {
       this.isInitialized = true;
       if (this.worker) {
+        this.worker.postMessage("setoption name MultiPV value 2");
         this.worker.postMessage("isready");
       }
       return;
@@ -1312,10 +1314,15 @@ class StockfishWorkerService {
         }
       }
       const pvMatch = line.match(/pv\s+(.+)$/);
-      if (pvMatch && !isMultiPv2) {
-        this.currentPv = pvMatch[1].trim().split(/\s+/);
-        if (this.currentPv.length > 0) {
-          this.currentBestMove = this.currentPv[0];
+      if (pvMatch) {
+        const pvMoves = pvMatch[1].trim().split(/\s+/);
+        if (isMultiPv2) {
+          this.secondBestMove = pvMoves[0] || "";
+        } else {
+          this.currentPv = pvMoves;
+          if (pvMoves.length > 0) {
+            this.currentBestMove = pvMoves[0];
+          }
         }
       }
     }
@@ -1332,7 +1339,8 @@ class StockfishWorkerService {
         mate: this.currentMate,
         pv: this.currentPv.length > 0 ? this.currentPv : [bestMove],
         depth: this.currentDepth,
-        multiPv2ScoreCp: this.secondBestCp
+        multiPv2ScoreCp: this.secondBestCp,
+        secondBestMoveUci: this.secondBestMove
       };
       const resolve = this.pendingResolve;
       this.pendingResolve = null;
@@ -1355,6 +1363,7 @@ class StockfishWorkerService {
     this.currentPv = [];
     this.currentDepth = 0;
     this.secondBestCp = void 0;
+    this.secondBestMove = "";
     this.pendingResolve = item.resolve;
 
     this.evaluationTimeoutId = setTimeout(() => {
@@ -1390,7 +1399,37 @@ class StockfishWorkerService {
     return this.isAvailable && this.isInitialized;
   }
 }
-const stockfishService = new StockfishWorkerService();
+const POOL_MAX_WORKERS = 8;
+
+class StockfishPool {
+  constructor() {
+    const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
+    this.targetSize = Math.min(POOL_MAX_WORKERS, Math.max(2, cores - 2));
+    this.workers = [new StockfishWorkerService()];
+  }
+  warmUp() {
+    while (this.workers.length < this.targetSize) {
+      this.workers.push(new StockfishWorkerService());
+    }
+  }
+  get size() {
+    return this.workers.filter((w) => w.isAvailable).length;
+  }
+  get isAvailable() {
+    return this.workers.some((w) => w.isAvailable);
+  }
+  isEngineReady() {
+    return this.workers.some((w) => w.isEngineReady());
+  }
+  evaluate(fen, depth = 14, maxWaitMs = 1000) {
+    const available = this.workers.filter((w) => w.isAvailable && w.worker);
+    if (available.length === 0) return Promise.resolve(null);
+    const load = (w) => w.queue.length + (w.isProcessing ? 1 : 0);
+    const leastBusy = available.reduce((best, w) => (load(w) < load(best) ? w : best));
+    return leastBusy.evaluate(fen, depth, maxWaitMs);
+  }
+}
+const stockfishService = new StockfishPool();
 
 /* --- src/services/engineEvaluationTables.js --- */
 const PIECE_VALUES = {
@@ -1837,62 +1876,24 @@ function normalizeFenKey(fen) {
   return parts.slice(0, 4).join(" ");
 }
 
-async function evaluateFenHybrid(fen, isDeep = false) {
-  const cacheKey = `${normalizeFenKey(fen)}_${isDeep ? "deep" : "fast"}`;
-  const cached = FEN_EVAL_CACHE.get(cacheKey);
-  if (cached) return cached;
+const ENGINE_PROFILES = {
+  fast: { depth: 5, maxWaitMs: 2000 },
+  deep: { depth: 10, maxWaitMs: 3000 }
+};
 
-  if (!isDeep) {
-    const localSearch = findBestMoveLocal(fen, 1);
-    const localResult = {
-      scoreCp: localSearch.evalCp,
-      mate: null,
-      pv: localSearch.pv,
-      bestMoveUci: localSearch.bestMoveUci,
-      secondBestMoveUci: localSearch.secondBestMoveUci,
-      multiPv2ScoreCp: localSearch.multiPv2Cp,
-      source: "local"
-    };
-    FEN_EVAL_CACHE.set(cacheKey, localResult);
-    return localResult;
-  }
+function toWhitePerspective(result, fen) {
+  if (fen.split(" ")[1] !== "b") return result;
+  return {
+    ...result,
+    scoreCp: -result.scoreCp,
+    mate: result.mate === null || result.mate === void 0 ? result.mate : -result.mate,
+    multiPv2ScoreCp: result.multiPv2ScoreCp === void 0 ? void 0 : -result.multiPv2ScoreCp
+  };
+}
 
-  const chess = new Chess(fen);
-  const totalPieces = countTotalPieces(chess);
-  if (totalPieces <= 7) {
-    const tablebase = await fetchSyzygyTablebase(fen);
-    if (tablebase) {
-      if (!tablebase.bestMoveUci && tablebase.pv && tablebase.pv[0]) {
-        tablebase.bestMoveUci = tablebase.pv[0];
-      }
-      if (!tablebase.secondBestMoveUci) {
-        const fallback = findBestMoveLocal(fen, 1);
-        tablebase.secondBestMoveUci = fallback.secondBestMoveUci;
-      }
-      FEN_EVAL_CACHE.set(cacheKey, tablebase);
-      return tablebase;
-    }
-  }
-
-  const targetDepth = 14;
-  const sfEval = await stockfishService.evaluate(fen, targetDepth, 800);
-  if (sfEval && sfEval.bestMoveUci) {
-    const fallback = findBestMoveLocal(fen, 1);
-    const sfResult = {
-      scoreCp: sfEval.scoreCp,
-      mate: sfEval.mate,
-      pv: sfEval.pv,
-      bestMoveUci: sfEval.bestMoveUci,
-      secondBestMoveUci: fallback.secondBestMoveUci,
-      multiPv2ScoreCp: sfEval.multiPv2ScoreCp ?? fallback.multiPv2Cp,
-      source: "stockfish"
-    };
-    FEN_EVAL_CACHE.set(cacheKey, sfResult);
-    return sfResult;
-  }
-
-  const localSearch = findBestMoveLocal(fen, 3);
-  const localResult = {
+function localEvaluation(fen, depth) {
+  const localSearch = findBestMoveLocal(fen, depth);
+  return {
     scoreCp: localSearch.evalCp,
     mate: null,
     pv: localSearch.pv,
@@ -1901,8 +1902,68 @@ async function evaluateFenHybrid(fen, isDeep = false) {
     multiPv2ScoreCp: localSearch.multiPv2Cp,
     source: "local"
   };
+}
+
+async function evaluateFenHybrid(fen, isDeep = false) {
+  const cacheKey = `${normalizeFenKey(fen)}_${isDeep ? "deep" : "fast"}`;
+  const cached = FEN_EVAL_CACHE.get(cacheKey);
+  if (cached) return cached;
+
+  if (isDeep && countTotalPieces(new Chess(fen)) <= 7) {
+    const tablebase = await fetchSyzygyTablebase(fen);
+    if (tablebase) {
+      tablebase.bestMoveUci = tablebase.bestMoveUci || (tablebase.pv && tablebase.pv[0]) || "";
+      tablebase.secondBestMoveUci = tablebase.secondBestMoveUci || findBestMoveLocal(fen, 1).secondBestMoveUci;
+      const whiteResult = toWhitePerspective(tablebase, fen);
+      FEN_EVAL_CACHE.set(cacheKey, whiteResult);
+      return whiteResult;
+    }
+  }
+
+  const profile = isDeep ? ENGINE_PROFILES.deep : ENGINE_PROFILES.fast;
+  const sfEval = await stockfishService.evaluate(fen, profile.depth, profile.maxWaitMs);
+  if (sfEval && sfEval.bestMoveUci) {
+    const fallback = sfEval.secondBestMoveUci && sfEval.multiPv2ScoreCp !== void 0 ? null : findBestMoveLocal(fen, 1);
+    const sfResult = toWhitePerspective({
+      scoreCp: sfEval.scoreCp,
+      mate: sfEval.mate,
+      pv: sfEval.pv,
+      bestMoveUci: sfEval.bestMoveUci,
+      secondBestMoveUci: sfEval.secondBestMoveUci || fallback?.secondBestMoveUci || "",
+      multiPv2ScoreCp: sfEval.multiPv2ScoreCp ?? fallback?.multiPv2Cp,
+      source: "stockfish"
+    }, fen);
+    FEN_EVAL_CACHE.set(cacheKey, sfResult);
+    return sfResult;
+  }
+
+  const localResult = localEvaluation(fen, isDeep ? 3 : 2);
   FEN_EVAL_CACHE.set(cacheKey, localResult);
   return localResult;
+}
+
+async function prefetchEvaluations(fens, isDeep, onEach) {
+  const unique = [...new Set(fens)];
+  stockfishService.warmUp();
+  const feederCount = Math.max(1, stockfishService.size);
+  let next = 0;
+  let done = 0;
+  let failure = null;
+
+  const feeders = Array.from({ length: feederCount }, async () => {
+    while (!failure && next < unique.length) {
+      const fen = unique[next++];
+      try {
+        await evaluateFenHybrid(fen, isDeep);
+        done++;
+        if (onEach) await onEach(done, unique.length);
+      } catch (err) {
+        failure = err;
+      }
+    }
+  });
+  await Promise.all(feeders);
+  if (failure) throw failure;
 }
 
 function isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci = null) {
@@ -2080,7 +2141,7 @@ async function getDeepContinuation(fen, maxPlies = 10) {
 
     if (stockfishService && stockfishService.isAvailable) {
       try {
-        const sf = await stockfishService.evaluate(fen, 12, 500);
+        const sf = await stockfishService.evaluate(fen, 14, 1000);
         if (sf && sf.pv && sf.pv.length > 0) {
           pvMoves = sf.pv;
         }
@@ -2199,6 +2260,17 @@ function replayPv(fen, pvMoves, maxPlies = 10) {
   return steps;
 }
 
+const MIN_CONTINUATION_PLIES = 6;
+
+async function extendContinuation(startFen, steps, maxPlies = 10) {
+  if (steps.length >= MIN_CONTINUATION_PLIES) return steps;
+  const lastFen = steps.length > 0 ? steps[steps.length - 1].fen : startFen;
+  const extra = await getDeepContinuation(lastFen, maxPlies - steps.length);
+  const merged = [...steps];
+  extra.forEach((step) => merged.push({ ...step, ply: merged.length + 1 }));
+  return merged;
+}
+
 async function prepareMoveExplanation(cur) {
   if (!cur) return null;
   try {
@@ -2209,9 +2281,6 @@ async function prepareMoveExplanation(cur) {
     let deepPunish = [];
     if (cur.punishmentPv && cur.punishmentPv.length > 0) {
       deepPunish = replayPv(cur.fen, cur.punishmentPv, 10);
-    }
-    if (deepPunish.length === 0) {
-      deepPunish = await getDeepContinuation(cur.fen, 10);
     }
     punishmentSteps.push(...deepPunish);
 
@@ -2227,27 +2296,7 @@ async function prepareMoveExplanation(cur) {
       deepBest = replayPv(cur.fenBefore, cur.bestPv, 10);
     }
     if (deepBest.length === 0) {
-      const cBest = new Chess(cur.fenBefore);
-      const bUci = cur.bestMoveUci;
-      if (bUci && bUci.length >= 4) {
-        const from = bUci.slice(0, 2);
-        const to = bUci.slice(2, 4);
-        const promotion = bUci.length > 4 ? bUci[4] : void 0;
-        const m = cBest.move({ from, to, promotion });
-        if (m) {
-          deepBest.push({
-            ply: 1,
-            san: m.san,
-            uci: bUci,
-            from: m.from,
-            to: m.to,
-            fen: cBest.fen(),
-            color: m.color
-          });
-          const further = await getDeepContinuation(cBest.fen(), 9);
-          deepBest.push(...further);
-        }
-      }
+      deepBest = replayPv(cur.fenBefore, [cur.bestMoveUci], 1);
     }
     bestSteps.push(...deepBest);
 
@@ -2271,9 +2320,17 @@ async function prepareMoveExplanation(cur) {
 }
 
 /* --- src/services/gameCacheService.js --- */
-const INDEX_KEY = 'chess_iq_analyzed_index_v1';
-const GAME_PREFIX = 'chess_iq_game_v1_';
+const INDEX_KEY = 'chess_iq_analyzed_index_v2';
+const GAME_PREFIX = 'chess_iq_game_v2_';
 const MAX_CACHED_GAMES = 30;
+
+(function removeLegacyCache() {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('chess_iq_game_v1_') || k === 'chess_iq_analyzed_index_v1')
+      .forEach((k) => localStorage.removeItem(k));
+  } catch {}
+})();
 
 function hashString(str) {
   let hash = 0;
@@ -2443,7 +2500,7 @@ function extractMovesAndClocks(pgn) {
   }
   return { moves, clocks };
 }
-async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) {
+async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, skipExtras = false) {
   const chess = new Chess();
   try {
     if (typeof chess.loadPgn === "function") {
@@ -2528,6 +2585,16 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     onProgress(0, totalPlies);
     await new Promise((resolve) => setTimeout(resolve, 35));
   }
+
+  const fensToEvaluate = [];
+  if (totalPlies > 0) fensToEvaluate.push(precomputed[0].fenBefore);
+  precomputed.forEach((item, idx) => {
+    const nextIsEngineMove = idx + 1 < totalPlies && !precomputed[idx + 1].isBook;
+    if (!item.isBook || nextIsEngineMove) fensToEvaluate.push(item.fenAfter);
+  });
+  await prefetchEvaluations(fensToEvaluate, isDeep, (done, total) => {
+    if (onProgress) return onProgress(Math.round((done / total) * totalPlies), totalPlies);
+  });
 
   let prevEngine = precomputed.length > 0
     ? await evaluateFenHybrid(precomputed[0].fenBefore, isDeep)
@@ -2636,10 +2703,10 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
       const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
       let threat = null;
       let explanation = null;
-      if (classification === "blunder" || winProbLoss > 0.15) {
+      if (!skipExtras && (classification === "blunder" || winProbLoss > 0.15)) {
         threat = await detectThreat(item.fenAfter);
       }
-      if (classification === "blunder" || classification === "mistake" || classification === "inaccuracy") {
+      if (!skipExtras && (classification === "blunder" || classification === "mistake" || classification === "inaccuracy")) {
         explanation = await prepareMoveExplanation({
           fen: item.fenAfter,
           fenBefore: item.fenBefore,
@@ -2694,10 +2761,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         phase: item.phase
       };
     }
-    if (onProgress && (i % 2 === 0 || i === totalPlies - 1)) {
-      await onProgress(i + 1, totalPlies);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    if (i % 8 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
   }
   const createEmptyCounts = () => ({
     brilliant: 0,
@@ -2866,7 +2930,32 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     phaseAcpl: userPhaseAcpl
   };
 }
-async function fetchChessComGames(username) {
+const CHESSCOM_DRAW_RESULTS = ["agreed", "repetition", "stalemate", "insufficient", "50move", "timevsinsufficient"];
+
+function mapChessComGame(g, idx) {
+  const whiteName = g.white?.username || "White";
+  const blackName = g.black?.username || "Black";
+  let res = "*";
+  if (g.white?.result === "win") res = "1-0";
+  else if (g.black?.result === "win") res = "0-1";
+  else if (CHESSCOM_DRAW_RESULTS.includes(g.white?.result)) res = "1/2-1/2";
+  return {
+    id: `chesscom_${g.url ? g.url.split("/").pop() : idx}`,
+    platform: "chesscom",
+    white: whiteName,
+    black: blackName,
+    whiteElo: g.white?.rating || 1500,
+    blackElo: g.black?.rating || 1500,
+    result: res,
+    date: g.end_time ? new Date(g.end_time * 1e3).toISOString().split("T")[0] : "Recent",
+    endTime: g.end_time ? g.end_time * 1e3 : 0,
+    timeControl: g.time_control || "Rapid",
+    eco: g.eco || "C50",
+    pgn: g.pgn || ""
+  };
+}
+
+async function fetchChessComGames(username, limit = 15) {
   const cleanUsername = username.trim().toLowerCase();
   const archivesUrl = `https://api.chess.com/pub/player/${cleanUsername}/games/archives`;
   const archRes = await fetch(archivesUrl);
@@ -2878,37 +2967,22 @@ async function fetchChessComGames(username) {
   }
   const archData = await archRes.json();
   const archives = archData.archives || [];
-  if (archives.length === 0) return [];
-  const latestMonthUrl = archives[archives.length - 1];
-  const gamesRes = await fetch(latestMonthUrl);
-  if (!gamesRes.ok) throw new Error("Failed to fetch monthly games from Chess.com");
-  const monthData = await gamesRes.json();
-  const games = monthData.games || [];
-  return games.slice(-15).reverse().map((g, idx) => {
-    const whiteName = g.white?.username || "White";
-    const blackName = g.black?.username || "Black";
-    let res = "*";
-    if (g.white?.result === "win") res = "1-0";
-    else if (g.black?.result === "win") res = "0-1";
-    else if (g.white?.result === "agreed" || g.white?.result === "repetition" || g.white?.result === "stalemate") res = "1/2-1/2";
-    return {
-      id: `chesscom_${g.url ? g.url.split("/").pop() : idx}`,
-      platform: "chesscom",
-      white: whiteName,
-      black: blackName,
-      whiteElo: g.white?.rating || 1500,
-      blackElo: g.black?.rating || 1500,
-      result: res,
-      date: g.end_time ? new Date(g.end_time * 1e3).toISOString().split("T")[0] : "Recent",
-      timeControl: g.time_control || "Rapid",
-      eco: g.eco || "C50",
-      pgn: g.pgn || ""
-    };
-  });
+  const collected = [];
+  for (let i = archives.length - 1; i >= 0 && collected.length < limit; i--) {
+    const gamesRes = await fetch(archives[i]);
+    if (!gamesRes.ok) {
+      if (collected.length === 0) throw new Error("Failed to fetch monthly games from Chess.com");
+      break;
+    }
+    const monthData = await gamesRes.json();
+    const standardGames = (monthData.games || []).filter((g) => g.rules === "chess" && g.pgn);
+    collected.push(...standardGames.reverse());
+  }
+  return collected.slice(0, limit).map(mapChessComGame);
 }
-async function fetchLichessGames(username) {
+async function fetchLichessGames(username, limit = 15) {
   const cleanUsername = username.trim().toLowerCase();
-  const url = `https://lichess.org/api/games/user/${cleanUsername}?max=15&clocks=true&evals=true&opening=true`;
+  const url = `https://lichess.org/api/games/user/${cleanUsername}?max=${limit}&clocks=true&opening=true&pgnInJson=true&perfType=ultraBullet,bullet,blitz,rapid,classical`;
   const res = await fetch(url, {
     headers: {
       "Accept": "application/x-ndjson"
@@ -2935,6 +3009,7 @@ async function fetchLichessGames(username) {
         blackElo: g.players?.black?.rating || 1500,
         result: res2,
         date: g.createdAt ? new Date(g.createdAt).toISOString().split("T")[0] : "Recent",
+        endTime: g.lastMoveAt || g.createdAt || 0,
         timeControl: `${g.clock?.initial || 180}+${g.clock?.increment || 0}`,
         eco: g.opening?.eco || "B00",
         pgn: g.pgn || ""
@@ -2943,6 +3018,298 @@ async function fetchLichessGames(username) {
       return null;
     }
   }).filter(Boolean);
+}
+
+/* --- src/services/insightsAggregate.js --- */
+const INS_PHASES = ['opening', 'middlegame', 'endgame'];
+const INS_PHASE_LABELS = { opening: 'Opening', middlegame: 'Middlegame', endgame: 'Endgame' };
+const INS_EMPTY_RECORD = () => ({ w: 0, d: 0, l: 0 });
+
+function insAverage(values) {
+  const valid = values.filter((v) => typeof v === 'number' && !isNaN(v));
+  return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
+}
+
+function insRound(value, digits = 1) {
+  if (value === null || value === undefined) return null;
+  const factor = Math.pow(10, digits);
+  return Math.round(value * factor) / factor;
+}
+
+function insScore(record) {
+  const total = record.w + record.d + record.l;
+  return total ? ((record.w + record.d * 0.5) / total) * 100 : null;
+}
+
+function insAddResult(record, result) {
+  record[result] += 1;
+}
+
+function insGroupBy(summaries, keyFn) {
+  const groups = new Map();
+  summaries.forEach((s) => {
+    const key = keyFn(s);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(s);
+  });
+  return groups;
+}
+
+function insGroupStats(list) {
+  const record = INS_EMPTY_RECORD();
+  list.forEach((s) => insAddResult(record, s.result));
+  return {
+    games: list.length,
+    record,
+    score: insRound(insScore(record)),
+    accuracy: insRound(insAverage(list.map((s) => s.acc)))
+  };
+}
+
+function insStreaks(summaries) {
+  let bestWin = 0;
+  let worstLoss = 0;
+  let win = 0;
+  let loss = 0;
+  summaries.forEach((s) => {
+    win = s.result === 'w' ? win + 1 : 0;
+    loss = s.result === 'l' ? loss + 1 : 0;
+    bestWin = Math.max(bestWin, win);
+    worstLoss = Math.max(worstLoss, loss);
+  });
+  return { bestWin, worstLoss };
+}
+
+function insHighlight(s) {
+  return {
+    id: s.id,
+    pgn: s.pgn,
+    color: s.color,
+    oppName: s.oppName,
+    oppElo: s.oppElo,
+    ownElo: s.ownElo,
+    acc: s.acc,
+    date: s.date
+  };
+}
+
+function insBuildNotes(report) {
+  const notes = [];
+  const phaseAcc = report.phaseAccuracy;
+  const ranked = INS_PHASES.filter((p) => phaseAcc[p] !== null).sort((a, b) => phaseAcc[b] - phaseAcc[a]);
+  if (ranked.length >= 2) {
+    const best = ranked[0];
+    const worst = ranked[ranked.length - 1];
+    notes.push({ type: 'strength', text: `${INS_PHASE_LABELS[best]} is your strongest phase (${phaseAcc[best]}% accuracy).` });
+    if (phaseAcc[best] - phaseAcc[worst] >= 3) {
+      notes.push({ type: 'weakness', text: `${INS_PHASE_LABELS[worst]} is your weakest phase (${phaseAcc[worst]}% vs ${phaseAcc[best]}% in the ${INS_PHASE_LABELS[best].toLowerCase()}).` });
+    }
+  }
+
+  const white = report.byColor.w;
+  const black = report.byColor.b;
+  if (white.games >= 5 && black.games >= 5 && white.score !== null && black.score !== null && Math.abs(white.score - black.score) >= 10) {
+    const strong = white.score > black.score ? 'White' : 'Black';
+    const weak = strong === 'White' ? 'Black' : 'White';
+    const strongScore = Math.max(white.score, black.score);
+    const weakScore = Math.min(white.score, black.score);
+    notes.push({ type: 'strength', text: `You score ${strongScore}% as ${strong}.` });
+    notes.push({ type: 'weakness', text: `You score only ${weakScore}% as ${weak}.` });
+  }
+
+  const { stronger, weaker } = report.byOpponentStrength;
+  if (stronger.games >= 5 && stronger.score !== null && stronger.score >= 40) {
+    notes.push({ type: 'strength', text: `You hold your own against stronger opponents (${stronger.score}% score).` });
+  }
+  if (weaker.games >= 5 && weaker.score !== null && weaker.score < 70) {
+    notes.push({ type: 'weakness', text: `You only score ${weaker.score}% against weaker opponents. Convert winning positions more carefully.` });
+  }
+
+  if (report.moves.blunderRate !== null) {
+    notes.push({
+      type: report.moves.blunderRate <= 1.5 ? 'strength' : 'weakness',
+      text: `You make ${report.moves.blunderRate} blunders and ${report.moves.mistakeRate} mistakes per 100 moves.`
+    });
+  }
+
+  if (report.timeTrouble.blunders >= 3) {
+    notes.push({ type: 'weakness', text: `${report.timeTrouble.blunders} of your blunders and mistakes came with under 20 seconds on the clock. Manage your time earlier.` });
+  }
+  if (report.timeTrouble.impulsive >= 3) {
+    notes.push({ type: 'weakness', text: `${report.timeTrouble.impulsive} blunders and mistakes were played in under 2 seconds. Slow down in critical positions.` });
+  }
+
+  if (report.moves.brilliantPerGame >= 0.2) {
+    notes.push({ type: 'strength', text: `You find ${report.moves.brilliantPerGame} brilliant moves per game.` });
+  }
+
+  const timeControls = report.byTimeControl.filter((t) => t.games >= 5 && t.score !== null).sort((a, b) => b.score - a.score);
+  if (timeControls.length >= 2) {
+    const best = timeControls[0];
+    const worst = timeControls[timeControls.length - 1];
+    if (best.score - worst.score >= 10) {
+      notes.push({ type: 'strength', text: `${best.label} is your best time control (${best.score}% score).` });
+      notes.push({ type: 'weakness', text: `${worst.label} is your weakest time control (${worst.score}% score).` });
+    }
+  }
+
+  const openings = report.openings.filter((o) => o.games >= 3 && o.score !== null);
+  if (openings.length >= 2) {
+    const sorted = [...openings].sort((a, b) => b.score - a.score);
+    notes.push({ type: 'strength', text: `Best opening: ${sorted[0].name} (${sorted[0].score}% score in ${sorted[0].games} games).` });
+    const worst = sorted[sorted.length - 1];
+    if (worst.score < 45) {
+      notes.push({ type: 'weakness', text: `Struggling opening: ${worst.name} (${worst.score}% score in ${worst.games} games).` });
+    }
+  }
+
+  return notes;
+}
+
+function insClassifyOpponent(s) {
+  const diff = s.oppElo - s.ownElo;
+  if (diff > 50) return 'stronger';
+  if (diff < -50) return 'weaker';
+  return 'equal';
+}
+
+function insMoveStats(summaries) {
+  const totals = {};
+  let totalMoves = 0;
+  summaries.forEach((s) => {
+    Object.keys(s.counts || {}).forEach((k) => {
+      totals[k] = (totals[k] || 0) + s.counts[k];
+      totalMoves += s.counts[k];
+    });
+  });
+  const perHundred = (key) => (totalMoves ? insRound(((totals[key] || 0) / totalMoves) * 100) : null);
+  const perGame = (key) => (summaries.length ? insRound((totals[key] || 0) / summaries.length, 2) : 0);
+  return {
+    totals,
+    totalMoves,
+    blunderRate: perHundred('blunder'),
+    mistakeRate: perHundred('mistake'),
+    brilliantPerGame: perGame('brilliant'),
+    greatPerGame: perGame('great')
+  };
+}
+
+function insPhaseStats(summaries) {
+  const accuracy = {};
+  const errorsPerGame = {};
+  const errorsPer100 = {};
+  INS_PHASES.forEach((phase) => {
+    accuracy[phase] = insRound(insAverage(summaries.map((s) => s.phaseAcc?.[phase])));
+    const errors = summaries.reduce((sum, s) => sum + (s.phaseErr?.[phase] || 0), 0);
+    const moves = summaries.reduce((sum, s) => sum + (s.phaseMoves?.[phase] || 0), 0);
+    errorsPerGame[phase] = summaries.length ? insRound(errors / summaries.length, 2) : 0;
+    errorsPer100[phase] = moves ? insRound((errors / moves) * 100) : null;
+  });
+  return { accuracy, errorsPerGame, errorsPer100 };
+}
+
+function insOpeningStats(summaries) {
+  const groups = insGroupBy(summaries, (s) => s.ecoName || s.eco || 'Unknown');
+  return [...groups.entries()]
+    .map(([name, list]) => ({ name, eco: list[0].eco, ...insGroupStats(list) }))
+    .sort((a, b) => b.games - a.games)
+    .slice(0, 8);
+}
+
+function insTimeControlStats(summaries) {
+  const order = ['Bullet', 'Blitz', 'Rapid', 'Classical', 'Daily'];
+  const groups = insGroupBy(summaries, (s) => s.tc);
+  return order
+    .filter((label) => groups.has(label))
+    .map((label) => ({ label, ...insGroupStats(groups.get(label)) }));
+}
+
+function insAccuracyHistogram(summaries) {
+  const buckets = [
+    { label: '<60', min: 0, max: 60 },
+    { label: '60s', min: 60, max: 70 },
+    { label: '70s', min: 70, max: 80 },
+    { label: '80s', min: 80, max: 90 },
+    { label: '90+', min: 90, max: 101 }
+  ];
+  return buckets.map((b) => ({
+    label: b.label,
+    value: summaries.filter((s) => s.acc >= b.min && s.acc < b.max).length
+  }));
+}
+
+function computeInsights(summaryList) {
+  const summaries = [...summaryList].sort((a, b) => a.ts - b.ts);
+  if (summaries.length === 0) return null;
+
+  const record = INS_EMPTY_RECORD();
+  summaries.forEach((s) => insAddResult(record, s.result));
+
+  const byColor = {
+    w: insGroupStats(summaries.filter((s) => s.color === 'w')),
+    b: insGroupStats(summaries.filter((s) => s.color === 'b'))
+  };
+
+  const opponentGroups = { stronger: [], equal: [], weaker: [] };
+  summaries.forEach((s) => opponentGroups[insClassifyOpponent(s)].push(s));
+  const byOpponentStrength = {
+    stronger: insGroupStats(opponentGroups.stronger),
+    equal: insGroupStats(opponentGroups.equal),
+    weaker: insGroupStats(opponentGroups.weaker)
+  };
+
+  const wins = summaries.filter((s) => s.result === 'w').sort((a, b) => b.oppElo - a.oppElo);
+  const losses = summaries.filter((s) => s.result === 'l').sort((a, b) => a.oppElo - b.oppElo);
+  const phase = insPhaseStats(summaries);
+  const moves = insMoveStats(summaries);
+
+  const report = {
+    games: summaries.length,
+    record,
+    winRate: insRound((record.w / summaries.length) * 100),
+    score: insRound(insScore(record)),
+    avgAccuracy: insRound(insAverage(summaries.map((s) => s.acc))),
+    avgOpponentAccuracy: insRound(insAverage(summaries.map((s) => s.oppAcc))),
+    avgOwnElo: Math.round(insAverage(summaries.map((s) => s.ownElo))),
+    avgOpponentElo: Math.round(insAverage(summaries.map((s) => s.oppElo))),
+    avgPerformanceElo: Math.round(insAverage(summaries.map((s) => s.perf))),
+    avgGameLength: Math.round(insAverage(summaries.map((s) => s.plies / 2))),
+    currentElo: summaries[summaries.length - 1].ownElo,
+    startElo: summaries[0].ownElo,
+    peakElo: Math.max(...summaries.map((s) => s.ownElo)),
+    lowestElo: Math.min(...summaries.map((s) => s.ownElo)),
+    firstDate: summaries[0].date,
+    lastDate: summaries[summaries.length - 1].date,
+    streaks: insStreaks(summaries),
+    byColor,
+    byOpponentStrength,
+    phaseAccuracy: phase.accuracy,
+    phaseErrorsPerGame: phase.errorsPerGame,
+    phaseErrorsPer100: phase.errorsPer100,
+    moves,
+    timeTrouble: {
+      blunders: summaries.reduce((sum, s) => sum + (s.ttBlunders || 0), 0),
+      impulsive: summaries.reduce((sum, s) => sum + (s.impBlunders || 0), 0)
+    },
+    openings: insOpeningStats(summaries),
+    byTimeControl: insTimeControlStats(summaries),
+    accuracyHistogram: insAccuracyHistogram(summaries),
+    timeline: summaries.map((s) => ({
+      date: s.date,
+      ownElo: s.ownElo,
+      oppElo: s.oppElo,
+      acc: s.acc,
+      perf: s.perf,
+      result: s.result
+    })),
+    bestWins: wins.slice(0, 3).map(insHighlight),
+    worstLosses: losses.slice(0, 3).map(insHighlight),
+    bestAccuracyGame: insHighlight([...summaries].sort((a, b) => b.acc - a.acc)[0]),
+    worstAccuracyGame: insHighlight([...summaries].sort((a, b) => a.acc - b.acc)[0])
+  };
+
+  report.notes = insBuildNotes(report);
+  return report;
 }
 
 /* --- src/services/backgroundAnalysisQueue.js --- */
@@ -3072,6 +3439,175 @@ class BackgroundAnalysisQueue {
 }
 
 const backgroundAnalysisQueue = new BackgroundAnalysisQueue();
+
+/* --- src/services/insightsService.js --- */
+const INSIGHTS_KEY_PREFIX = 'chess_iq_insights_v1_';
+const INSIGHTS_GAME_LIMIT = 100;
+const INSIGHTS_MIN_PLIES = 20;
+const INSIGHTS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const INSIGHTS_CANCELLED = 'insights_cancelled';
+
+function insStorageKey(platform, username) {
+  return `${INSIGHTS_KEY_PREFIX}${platform}_${username.trim().toLowerCase()}`;
+}
+
+function insTimeControlLabel(timeControl) {
+  const text = String(timeControl || '');
+  if (text.includes('/')) return 'Daily';
+  const [base, increment] = text.split('+').map((n) => parseInt(n, 10));
+  if (isNaN(base)) return 'Rapid';
+  const estimated = base + 40 * (increment || 0);
+  if (estimated < 180) return 'Bullet';
+  if (estimated < 480) return 'Blitz';
+  if (estimated <= 1500) return 'Rapid';
+  return 'Classical';
+}
+
+function insUserColor(game, username) {
+  const name = username.trim().toLowerCase();
+  if (game.white.toLowerCase() === name) return 'w';
+  if (game.black.toLowerCase() === name) return 'b';
+  return null;
+}
+
+function insUserResult(game, color) {
+  if (game.result === '1/2-1/2') return 'd';
+  if (game.result === '1-0') return color === 'w' ? 'w' : 'l';
+  if (game.result === '0-1') return color === 'b' ? 'w' : 'l';
+  return null;
+}
+
+function insSummarize(game, analyzed, color) {
+  const result = insUserResult(game, color);
+  if (!result || !analyzed || analyzed.plies.length < INSIGHTS_MIN_PLIES) return null;
+
+  const phaseErr = { opening: 0, middlegame: 0, endgame: 0 };
+  const phaseMoves = { opening: 0, middlegame: 0, endgame: 0 };
+  analyzed.plies.forEach((p) => {
+    if (!p || p.color !== color || phaseMoves[p.phase] === undefined) return;
+    phaseMoves[p.phase] += 1;
+    if (p.classification === 'mistake' || p.classification === 'blunder') phaseErr[p.phase] += 1;
+  });
+
+  const isWhite = color === 'w';
+  return {
+    id: game.id,
+    ts: game.endTime || Date.parse(game.date) || 0,
+    date: game.date,
+    color,
+    result,
+    ownElo: isWhite ? game.whiteElo : game.blackElo,
+    oppElo: isWhite ? game.blackElo : game.whiteElo,
+    oppName: isWhite ? game.black : game.white,
+    acc: analyzed.userAccuracy,
+    oppAcc: analyzed.opponentAccuracy,
+    perf: analyzed.overallGameElo,
+    phaseAcc: analyzed.userPhaseAccuracy,
+    phaseErr,
+    phaseMoves,
+    counts: analyzed.userCounts,
+    plies: analyzed.plies.length,
+    eco: game.eco,
+    ecoName: analyzed.ecoName,
+    tc: insTimeControlLabel(game.timeControl),
+    ttBlunders: analyzed.timeTroubleBlunders || 0,
+    impBlunders: analyzed.impulsiveBlunders || 0,
+    pgn: game.pgn
+  };
+}
+
+function insFetchGames(platform, username) {
+  if (platform === 'chesscom') return fetchChessComGames(username, INSIGHTS_GAME_LIMIT);
+  return fetchLichessGames(username, INSIGHTS_GAME_LIMIT);
+}
+
+function loadInsights(platform, username) {
+  try {
+    const raw = localStorage.getItem(insStorageKey(platform, username));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function insSave(platform, username, entry) {
+  try {
+    localStorage.setItem(insStorageKey(platform, username), JSON.stringify(entry));
+  } catch {}
+}
+
+function isInsightsFresh(entry) {
+  return Boolean(entry && entry.report && entry.generatedAt && Date.now() - entry.generatedAt < INSIGHTS_MAX_AGE_MS);
+}
+
+function clearInsights(platform, username) {
+  try {
+    localStorage.removeItem(insStorageKey(platform, username));
+  } catch {}
+}
+
+async function runInsights({ platform, username, force = false, onStatus, shouldCancel }) {
+  const previous = loadInsights(platform, username);
+  if (!force && isInsightsFresh(previous)) return { entry: previous, cancelled: false };
+
+  backgroundAnalysisQueue.pause();
+  onStatus({ stage: 'fetching' });
+
+  const fetched = await insFetchGames(platform, username);
+  const games = fetched.filter((g) => g.pgn && insUserColor(g, username));
+  const gameIds = new Set(games.map((g) => g.id));
+
+  const entry = {
+    generatedAt: 0,
+    report: previous?.report || null,
+    skipped: (previous?.skipped || []).filter((id) => gameIds.has(id)),
+    summaries: {}
+  };
+  Object.values(previous?.summaries || {}).forEach((s) => {
+    if (gameIds.has(s.id)) entry.summaries[s.id] = s;
+  });
+
+  const pending = games.filter((g) => !entry.summaries[g.id] && !entry.skipped.includes(g.id));
+  const startedAt = Date.now();
+  let cancelled = false;
+
+  for (let i = 0; i < pending.length; i++) {
+    if (shouldCancel()) {
+      cancelled = true;
+      break;
+    }
+    const game = pending[i];
+    const color = insUserColor(game, username);
+    const elapsed = Date.now() - startedAt;
+    const etaMs = i > 0 ? (elapsed / i) * (pending.length - i) : null;
+    onStatus({ stage: 'analyzing', done: i, total: pending.length, game, etaMs });
+
+    try {
+      let analyzed = getCachedGame(game.id || game.pgn, color);
+      if (!analyzed) {
+        analyzed = await analyzeFullPgn(game.pgn, color, true, (current, total) => {
+          if (shouldCancel()) throw new Error(INSIGHTS_CANCELLED);
+          onStatus({ stage: 'analyzing', done: i, total: pending.length, game, etaMs, ply: current, plyTotal: total });
+        }, true);
+      }
+      const summary = insSummarize(game, analyzed, color);
+      if (summary) entry.summaries[game.id] = summary;
+      else entry.skipped.push(game.id);
+    } catch (err) {
+      if (err && err.message === INSIGHTS_CANCELLED) {
+        cancelled = true;
+        break;
+      }
+      entry.skipped.push(game.id);
+    }
+    insSave(platform, username, entry);
+  }
+
+  entry.report = computeInsights(Object.values(entry.summaries)) || entry.report;
+  entry.generatedAt = cancelled ? 0 : Date.now();
+  insSave(platform, username, entry);
+  return { entry, cancelled };
+}
 
 /* --- src/components/board.js --- */
 /**
@@ -4703,10 +5239,10 @@ async function openWhyModal(dashboard, targetEval = null) {
 
       <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
         <div class="arcade-mode-pills" role="group">
-          <button type="button" class="arcade-pill active" id="why-tab-punishment">
+          <button type="button" class="arcade-pill active" id="why-tab-punishment" disabled>
             <i class="bi bi-lightning-charge-fill me-1 text-danger"></i>Opponent's Punishment
           </button>
-          <button type="button" class="arcade-pill" id="why-tab-best">
+          <button type="button" class="arcade-pill" id="why-tab-best" disabled>
             <i class="bi bi-star-fill me-1 text-success"></i>Best Alternative (${cur.bestMoveSan || 'Top Move'})
           </button>
         </div>
@@ -4744,7 +5280,7 @@ async function openWhyModal(dashboard, targetEval = null) {
               <div class="d-flex align-items-start gap-2">
                 <i class="bi bi-shield-exclamation text-danger fs-5 lh-1 mt-0.5"></i>
                 <div>
-                  <span class="fw-bold small d-block text-body" id="why-summary-text">Calculating continuation...</span>
+                  <span class="fw-bold small d-block text-body" id="why-summary-text"><span class="spinner-border spinner-border-sm text-danger me-2" role="status"></span>Calculating what happens next...</span>
                 </div>
               </div>
             </div>
@@ -4752,26 +5288,26 @@ async function openWhyModal(dashboard, targetEval = null) {
             <div class="p-2 mb-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border); border-radius: 0.75rem; max-height: 140px; overflow-y: auto;">
               <div class="small fw-bold text-secondary mb-1.5" style="font-size: 11px;">Tactical Continuation (10 Plies):</div>
               <div class="d-flex flex-wrap gap-1.5" id="why-pills-container">
-                <span class="text-secondary small fst-italic">Loading line...</span>
+                <span class="text-secondary small"><span class="spinner-border spinner-border-sm me-2" role="status"></span>Loading line...</span>
               </div>
             </div>
           </div>
 
           <div>
             <div class="d-flex align-items-center justify-content-center gap-2 py-1">
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-first" title="Start">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-first" disabled title="Start">
                 <i class="bi bi-chevron-bar-left"></i>
               </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-prev" title="Previous Move">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-prev" disabled title="Previous Move">
                 <i class="bi bi-chevron-left"></i>
               </button>
-              <button type="button" class="btn btn-sm btn-primary px-3 fw-bold" id="why-btn-play" title="Play / Pause">
+              <button type="button" class="btn btn-sm btn-primary px-3 fw-bold" id="why-btn-play" disabled title="Play / Pause">
                 <i class="bi bi-play-fill" id="why-play-icon"></i>
               </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-next" title="Next Move">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-next" disabled title="Next Move">
                 <i class="bi bi-chevron-right"></i>
               </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-last" title="End">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-last" disabled title="End">
                 <i class="bi bi-chevron-bar-right"></i>
               </button>
             </div>
@@ -4793,6 +5329,32 @@ async function openWhyModal(dashboard, targetEval = null) {
     theme: dashboard.theme,
     interactive: false,
   });
+
+  modal.querySelector('#why-btn-close')?.addEventListener('click', () => closeWhyModal(dashboard));
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeWhyModal(dashboard);
+  });
+
+  dashboard.whyKeyHandler = (e) => {
+    if (e.key === 'Escape') {
+      closeWhyModal(dashboard);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      modal.querySelector('#why-btn-prev')?.click();
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      modal.querySelector('#why-btn-next')?.click();
+    } else if (e.key === ' ') {
+      e.preventDefault();
+      modal.querySelector('#why-btn-play')?.click();
+    }
+  };
+  window.addEventListener('keydown', dashboard.whyKeyHandler);
+
+  if (!cur.explanation) {
+    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    if (!document.body.contains(modal)) return;
+  }
 
   let punishmentSteps = cur.explanation?.punishmentSteps;
   let punishmentSummary = cur.explanation?.punishmentSummary;
@@ -4841,6 +5403,9 @@ async function openWhyModal(dashboard, targetEval = null) {
 
     cur.explanation = { punishmentSteps, punishmentSummary, bestSteps, bestSummary };
   }
+
+  if (!document.body.contains(modal)) return;
+  modal.querySelectorAll('button[disabled]').forEach((btn) => btn.removeAttribute('disabled'));
 
   let activeTab = 'punishment';
   let currentSteps = punishmentSteps;
@@ -5006,28 +5571,23 @@ async function openWhyModal(dashboard, targetEval = null) {
     startAutoplay();
   });
 
-  modal.querySelector('#why-btn-close')?.addEventListener('click', () => closeWhyModal(dashboard));
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeWhyModal(dashboard);
-  });
 
-  dashboard.whyKeyHandler = (e) => {
-    if (e.key === 'Escape') {
-      closeWhyModal(dashboard);
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      modal.querySelector('#why-btn-prev')?.click();
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      modal.querySelector('#why-btn-next')?.click();
-    } else if (e.key === ' ') {
-      e.preventDefault();
-      modal.querySelector('#why-btn-play')?.click();
-    }
-  };
-  window.addEventListener('keydown', dashboard.whyKeyHandler);
 
   setTab('punishment');
+
+  const needsLongerLines = punishmentSteps.length - 1 < MIN_CONTINUATION_PLIES || bestSteps.length - 1 < MIN_CONTINUATION_PLIES;
+  if (needsLongerLines) {
+    modal.querySelector('#why-pills-container')?.insertAdjacentHTML('beforeend', '<span class="spinner-border spinner-border-sm text-secondary align-self-center" role="status"></span>');
+    const [punishTail, bestTail] = await Promise.all([
+      extendContinuation(cur.fen, punishmentSteps.slice(1)),
+      extendContinuation(cur.fenBefore, bestSteps.slice(1))
+    ]);
+    if (!document.body.contains(modal)) return;
+    punishmentSteps.splice(1, punishmentSteps.length - 1, ...punishTail);
+    bestSteps.splice(1, bestSteps.length - 1, ...bestTail);
+    updatePills();
+    renderActiveStep();
+  }
 }
 
 /* --- src/components/reviewDashboard.js --- */
@@ -6026,12 +6586,452 @@ Result: ${this.game.result || '*'}`;
   }
 }
 
+/* --- src/components/insightsCharts.js --- */
+const INS_COLORS = {
+  win: '#10b981',
+  draw: '#94a3b8',
+  loss: '#f43f5e',
+  accent: '#fbbf24',
+  blue: '#3b82f6',
+  purple: '#8b5cf6'
+};
+
+function insEscape(text) {
+  return String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function insScale(value, min, max, outMin, outMax) {
+  if (max === min) return (outMin + outMax) / 2;
+  return outMin + ((value - min) / (max - min)) * (outMax - outMin);
+}
+
+function insLineChart(series, { height = 160, yFormat = (v) => Math.round(v), xLabels = [] } = {}) {
+  const width = 400;
+  const pad = { left: 38, right: 10, top: 10, bottom: 22 };
+  const allValues = series.flatMap((s) => s.values).filter((v) => typeof v === 'number');
+  if (allValues.length < 2) return '<div class="text-secondary small">Not enough data.</div>';
+
+  const rawMin = Math.min(...allValues);
+  const rawMax = Math.max(...allValues);
+  const margin = Math.max((rawMax - rawMin) * 0.1, 1);
+  const yMin = rawMin - margin;
+  const yMax = rawMax + margin;
+  const count = Math.max(...series.map((s) => s.values.length));
+  const xAt = (i) => insScale(i, 0, count - 1, pad.left, width - pad.right);
+  const yAt = (v) => insScale(v, yMin, yMax, height - pad.bottom, pad.top);
+
+  const grid = [0, 0.5, 1].map((t) => {
+    const value = yMin + (yMax - yMin) * t;
+    const y = yAt(value);
+    return `<line x1="${pad.left}" x2="${width - pad.right}" y1="${y}" y2="${y}" stroke="currentColor" stroke-opacity="0.12"/>
+      <text x="${pad.left - 5}" y="${y + 3}" text-anchor="end" font-size="9" fill="currentColor" fill-opacity="0.6">${yFormat(value)}</text>`;
+  }).join('');
+
+  const lines = series.map((s) => {
+    const points = s.values.map((v, i) => (typeof v === 'number' ? `${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}` : null)).filter(Boolean);
+    return `<polyline points="${points.join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }).join('');
+
+  const labels = xLabels.length === 2
+    ? `<text x="${pad.left}" y="${height - 6}" font-size="9" fill="currentColor" fill-opacity="0.6">${insEscape(xLabels[0])}</text>
+       <text x="${width - pad.right}" y="${height - 6}" text-anchor="end" font-size="9" fill="currentColor" fill-opacity="0.6">${insEscape(xLabels[1])}</text>`
+    : '';
+
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" role="img">${grid}${lines}${labels}</svg>`;
+}
+
+function insBarChart(items, { height = 150, max = null, unit = '', color = INS_COLORS.accent } = {}) {
+  if (items.length === 0) return '<div class="text-secondary small">Not enough data.</div>';
+  const width = 400;
+  const pad = { left: 10, right: 10, top: 18, bottom: 24 };
+  const peak = max ?? Math.max(...items.map((i) => i.value ?? 0), 1);
+  const slot = (width - pad.left - pad.right) / items.length;
+  const barWidth = Math.min(46, slot * 0.6);
+
+  const bars = items.map((item, idx) => {
+    const value = item.value ?? 0;
+    const barHeight = insScale(value, 0, peak, 0, height - pad.top - pad.bottom);
+    const x = pad.left + slot * idx + (slot - barWidth) / 2;
+    const y = height - pad.bottom - barHeight;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${Math.max(barHeight, 1).toFixed(1)}" rx="4" fill="${item.color || color}"/>
+      <text x="${(x + barWidth / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="currentColor">${item.value === null || item.value === undefined ? '—' : `${item.value}${unit}`}</text>
+      <text x="${(x + barWidth / 2).toFixed(1)}" y="${height - 8}" text-anchor="middle" font-size="9" fill="currentColor" fill-opacity="0.7">${insEscape(item.label)}</text>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" role="img">${bars}</svg>`;
+}
+
+function insDonut(slices, centerLabel = '', centerSub = '') {
+  const total = slices.reduce((sum, s) => sum + s.value, 0);
+  if (total === 0) return '<div class="text-secondary small">Not enough data.</div>';
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+
+  const arcs = slices.filter((s) => s.value > 0).map((s) => {
+    const length = (s.value / total) * circumference;
+    const arc = `<circle cx="60" cy="60" r="${radius}" fill="none" stroke="${s.color}" stroke-width="16"
+      stroke-dasharray="${length.toFixed(2)} ${(circumference - length).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 60 60)"/>`;
+    offset += length;
+    return arc;
+  }).join('');
+
+  return `<svg viewBox="0 0 120 120" width="100%" style="max-width:150px" role="img">${arcs}
+    <text x="60" y="60" text-anchor="middle" font-size="16" font-weight="800" fill="currentColor">${insEscape(centerLabel)}</text>
+    <text x="60" y="74" text-anchor="middle" font-size="8" fill="currentColor" fill-opacity="0.65">${insEscape(centerSub)}</text></svg>`;
+}
+
+function insScatter(points, { height = 170, xLabel = '', yLabel = '' } = {}) {
+  if (points.length < 2) return '<div class="text-secondary small">Not enough data.</div>';
+  const width = 400;
+  const pad = { left: 38, right: 10, top: 10, bottom: 26 };
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const xMin = Math.min(...xs) - 20;
+  const xMax = Math.max(...xs) + 20;
+  const yMin = Math.max(0, Math.min(...ys) - 5);
+  const yMax = Math.min(100, Math.max(...ys) + 5);
+
+  const dots = points.map((p) => {
+    const cx = insScale(p.x, xMin, xMax, pad.left, width - pad.right);
+    const cy = insScale(p.y, yMin, yMax, height - pad.bottom, pad.top);
+    return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="${p.color}" fill-opacity="0.8"/>`;
+  }).join('');
+
+  const axis = `<line x1="${pad.left}" x2="${width - pad.right}" y1="${height - pad.bottom}" y2="${height - pad.bottom}" stroke="currentColor" stroke-opacity="0.25"/>
+    <line x1="${pad.left}" x2="${pad.left}" y1="${pad.top}" y2="${height - pad.bottom}" stroke="currentColor" stroke-opacity="0.25"/>
+    <text x="${pad.left}" y="${height - 14}" font-size="9" fill="currentColor" fill-opacity="0.6">${Math.round(xMin)}</text>
+    <text x="${width - pad.right}" y="${height - 14}" text-anchor="end" font-size="9" fill="currentColor" fill-opacity="0.6">${Math.round(xMax)}</text>
+    <text x="${(pad.left + width - pad.right) / 2}" y="${height - 3}" text-anchor="middle" font-size="9" fill="currentColor" fill-opacity="0.7">${insEscape(xLabel)}</text>
+    <text x="${pad.left - 5}" y="${pad.top + 8}" text-anchor="end" font-size="9" fill="currentColor" fill-opacity="0.6">${Math.round(yMax)}</text>
+    <text x="${pad.left - 5}" y="${height - pad.bottom}" text-anchor="end" font-size="9" fill="currentColor" fill-opacity="0.6">${Math.round(yMin)}</text>
+    <text x="4" y="${height / 2}" font-size="9" fill="currentColor" fill-opacity="0.7" transform="rotate(-90 4 ${height / 2})">${insEscape(yLabel)}</text>`;
+
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" role="img">${axis}${dots}</svg>`;
+}
+
+function insStackedBar(record) {
+  const total = record.w + record.d + record.l;
+  if (total === 0) return '<div class="text-secondary small">—</div>';
+  const part = (value, color) => (value > 0
+    ? `<div style="width:${(value / total) * 100}%;background:${color}" title="${value}"></div>`
+    : '');
+  return `<div class="d-flex rounded-pill overflow-hidden" style="height:10px;background:rgba(128,128,128,0.15)">
+    ${part(record.w, INS_COLORS.win)}${part(record.d, INS_COLORS.draw)}${part(record.l, INS_COLORS.loss)}</div>`;
+}
+
+/* --- src/components/insightsModal.js --- */
+const INSIGHTS_MODAL_ID = 'insights-modal';
+const INSIGHTS_MOVE_CLASSES = ['brilliant', 'great', 'best', 'excellent', 'good', 'inaccuracy', 'mistake', 'blunder', 'missed_win'];
+const INSIGHTS_CARD_STYLE = 'background: var(--arcade-card-hover); border: 1px solid var(--arcade-border); border-radius: 0.75rem;';
+
+function insFormatDuration(ms) {
+  if (ms === null || ms === undefined) return 'estimating...';
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 1) return 'less than a minute';
+  if (minutes < 90) return `~${minutes} min`;
+  return `~${(minutes / 60).toFixed(1)} h`;
+}
+
+function insFormatValue(value, suffix = '') {
+  return value === null || value === undefined ? '—' : `${value}${suffix}`;
+}
+
+function insKpi(label, value, sub = '') {
+  return `<div class="col-6 col-md-3">
+    <div class="p-2 h-100" style="${INSIGHTS_CARD_STYLE}">
+      <div class="text-secondary text-uppercase fw-bold" style="font-size: 10px; letter-spacing: 0.5px;">${label}</div>
+      <div class="fw-black fs-4 font-monospace lh-1 my-1">${value}</div>
+      <div class="text-secondary" style="font-size: 11px;">${sub}</div>
+    </div>
+  </div>`;
+}
+
+function insCard(title, body, columns = 'col-12 col-md-6') {
+  return `<div class="${columns}">
+    <div class="p-3 h-100" style="${INSIGHTS_CARD_STYLE}">
+      <div class="fw-black small mb-2">${title}</div>
+      ${body}
+    </div>
+  </div>`;
+}
+
+function insRecordRow(label, stats) {
+  return `<div class="mb-2">
+    <div class="d-flex justify-content-between small mb-1">
+      <span class="fw-bold">${label}</span>
+      <span class="text-secondary font-monospace">${stats.record.w}W ${stats.record.d}D ${stats.record.l}L · ${insFormatValue(stats.score, '%')}</span>
+    </div>
+    ${insStackedBar(stats.record)}
+  </div>`;
+}
+
+function insHighlightList(items, emptyText) {
+  if (items.length === 0) return `<div class="text-secondary small">${emptyText}</div>`;
+  return items.map((h, idx) => `
+    <div class="d-flex align-items-center justify-content-between gap-2 py-1 border-bottom" style="border-color: var(--arcade-border) !important;">
+      <div class="min-w-0">
+        <div class="fw-bold small text-truncate">vs ${insEscape(h.oppName)} <span class="text-secondary font-monospace">(${h.oppElo})</span></div>
+        <div class="text-secondary" style="font-size: 11px;">${insEscape(h.date)} · ${h.color === 'w' ? 'White' : 'Black'} · ${h.acc}% accuracy</div>
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-warning fw-bold py-0 px-2" data-highlight="${idx}">Review</button>
+    </div>`).join('');
+}
+
+function insNotesList(notes, type, emptyText) {
+  const items = notes.filter((n) => n.type === type);
+  if (items.length === 0) return `<div class="text-secondary small">${emptyText}</div>`;
+  const icon = type === 'strength' ? 'bi-check-circle-fill text-success' : 'bi-exclamation-triangle-fill text-danger';
+  return items.map((n) => `<div class="d-flex gap-2 small mb-2"><i class="bi ${icon} mt-1"></i><span>${insEscape(n.text)}</span></div>`).join('');
+}
+
+function insOpeningsTable(openings) {
+  if (openings.length === 0) return '<div class="text-secondary small">Not enough data.</div>';
+  const rows = openings.map((o) => `<tr>
+    <td class="text-truncate" style="max-width: 190px;">${insEscape(o.name)}</td>
+    <td class="text-end font-monospace">${o.games}</td>
+    <td class="text-end font-monospace">${o.record.w}/${o.record.d}/${o.record.l}</td>
+    <td class="text-end font-monospace">${insFormatValue(o.score, '%')}</td>
+    <td class="text-end font-monospace">${insFormatValue(o.accuracy, '%')}</td>
+  </tr>`).join('');
+  return `<table class="table table-sm align-middle mb-0" style="font-size: 12px;">
+    <thead><tr><th>Opening</th><th class="text-end">Games</th><th class="text-end">W/D/L</th><th class="text-end">Score</th><th class="text-end">Acc</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function insTimeControlTable(rows) {
+  if (rows.length === 0) return '<div class="text-secondary small">Not enough data.</div>';
+  return rows.map((t) => insRecordRow(`${t.label} · ${t.games} games · ${insFormatValue(t.accuracy, '% acc')}`, t)).join('');
+}
+
+function insMoveQualityChart(report) {
+  const items = INSIGHTS_MOVE_CLASSES.map((cls) => ({
+    label: COMIC_DICTIONARY[cls]?.words[0].split(' ')[0] || cls,
+    value: report.moves.totals[cls] || 0,
+    color: COMIC_DICTIONARY[cls]?.bg
+  }));
+  return insBarChart(items, { height: 170 });
+}
+
+function insReportHtml(entry, username, partial) {
+  const r = entry.report;
+  const eloDiff = r.avgOpponentElo - r.avgOwnElo;
+  const eloTrend = r.currentElo - r.startElo;
+  const range = [r.firstDate, r.lastDate];
+
+  const kpis = [
+    insKpi('Games', r.games, `${insEscape(r.firstDate)} → ${insEscape(r.lastDate)}`),
+    insKpi('Record', `${r.record.w}-${r.record.d}-${r.record.l}`, `${r.winRate}% wins · ${r.score}% score`),
+    insKpi('Accuracy', `${r.avgAccuracy}%`, `Opponents: ${insFormatValue(r.avgOpponentAccuracy, '%')}`),
+    insKpi('Performance', r.avgPerformanceElo, 'Avg game performance Elo'),
+    insKpi('Avg rating', r.avgOwnElo, `Now ${r.currentElo} (${eloTrend >= 0 ? '+' : ''}${eloTrend}) · Peak ${r.peakElo}`),
+    insKpi('Avg opponent', r.avgOpponentElo, `${eloDiff >= 0 ? '+' : ''}${eloDiff} vs your average`),
+    insKpi('Game length', `${r.avgGameLength}`, 'Average moves per game'),
+    insKpi('Streaks', `${r.streaks.bestWin}W / ${r.streaks.worstLoss}L`, 'Best win / worst loss streak')
+  ].join('');
+
+  const resultSlices = [
+    { label: 'Wins', value: r.record.w, color: INS_COLORS.win },
+    { label: 'Draws', value: r.record.d, color: INS_COLORS.draw },
+    { label: 'Losses', value: r.record.l, color: INS_COLORS.loss }
+  ];
+
+  const phaseItems = ['opening', 'middlegame', 'endgame'].map((p) => ({
+    label: p[0].toUpperCase() + p.slice(1),
+    value: r.phaseAccuracy[p],
+    color: p === 'opening' ? INS_COLORS.blue : p === 'middlegame' ? INS_COLORS.accent : INS_COLORS.win
+  }));
+  const phaseErrorItems = ['opening', 'middlegame', 'endgame'].map((p) => ({
+    label: p[0].toUpperCase() + p.slice(1),
+    value: r.phaseErrorsPer100[p],
+    color: INS_COLORS.loss
+  }));
+
+  const resultColor = { w: INS_COLORS.win, d: INS_COLORS.draw, l: INS_COLORS.loss };
+  const scatterPoints = r.timeline.map((t) => ({ x: t.oppElo, y: t.acc, color: resultColor[t.result] }));
+
+  const charts = [
+    insCard('Rating over time', `${insLineChart([
+      { values: r.timeline.map((t) => t.ownElo), color: INS_COLORS.accent },
+      { values: r.timeline.map((t) => t.oppElo), color: INS_COLORS.draw },
+      { values: r.timeline.map((t) => t.perf), color: INS_COLORS.purple }
+    ], { xLabels: range })}
+      <div class="small text-secondary mt-1"><span style="color:${INS_COLORS.accent}">■</span> You <span style="color:${INS_COLORS.draw}">■</span> Opponent <span style="color:${INS_COLORS.purple}">■</span> Performance</div>`),
+    insCard('Accuracy over time', insLineChart([
+      { values: r.timeline.map((t) => t.acc), color: INS_COLORS.win }
+    ], { xLabels: range, yFormat: (v) => `${Math.round(v)}%` })),
+    insCard('Results', `<div class="d-flex align-items-center gap-3">
+        ${insDonut(resultSlices, `${r.winRate}%`, 'win rate')}
+        <div class="flex-grow-1">
+          ${insRecordRow('As White', r.byColor.w)}
+          ${insRecordRow('As Black', r.byColor.b)}
+        </div>
+      </div>`),
+    insCard('Results vs opponent strength', `
+      ${insRecordRow(`Stronger opponents (+50) · ${r.byOpponentStrength.stronger.games} games`, r.byOpponentStrength.stronger)}
+      ${insRecordRow(`Similar rating · ${r.byOpponentStrength.equal.games} games`, r.byOpponentStrength.equal)}
+      ${insRecordRow(`Weaker opponents (-50) · ${r.byOpponentStrength.weaker.games} games`, r.byOpponentStrength.weaker)}`),
+    insCard('Accuracy by phase', insBarChart(phaseItems, { max: 100, unit: '%' })),
+    insCard('Mistakes + blunders per 100 moves, by phase', insBarChart(phaseErrorItems)),
+    insCard('Move quality totals', `${insMoveQualityChart(r)}
+      <div class="small text-secondary mt-1">${r.moves.brilliantPerGame} brilliant and ${r.moves.greatPerGame} great moves per game · ${r.moves.blunderRate}% blunders · ${r.moves.mistakeRate}% mistakes</div>`),
+    insCard('Accuracy vs opponent rating', `${insScatter(scatterPoints, { xLabel: 'Opponent rating', yLabel: 'Accuracy %' })}
+      <div class="small text-secondary mt-1"><span style="color:${INS_COLORS.win}">●</span> Win <span style="color:${INS_COLORS.draw}">●</span> Draw <span style="color:${INS_COLORS.loss}">●</span> Loss</div>`),
+    insCard('Accuracy distribution (games)', insBarChart(r.accuracyHistogram, { color: INS_COLORS.blue })),
+    insCard('Time controls', insTimeControlTable(r.byTimeControl)),
+    insCard('Most played openings', insOpeningsTable(r.openings), 'col-12')
+  ].join('');
+
+  return `
+    <div class="d-flex align-items-start justify-content-between gap-2 mb-3">
+      <div>
+        <h5 class="fw-black mb-0"><i class="bi bi-graph-up-arrow text-warning me-1"></i>In-depth Insights · ${insEscape(username)}</h5>
+        <div class="text-secondary small">${partial ? 'Partial report (analysis stopped early)' : `Updated ${new Date(entry.generatedAt).toLocaleString()}`} · ${r.games} games analyzed at deep engine depth</div>
+      </div>
+      <div class="d-flex gap-2 flex-shrink-0">
+        <button type="button" class="btn btn-sm btn-outline-warning fw-bold" id="insights-refresh"><i class="bi bi-arrow-repeat me-1"></i>${partial ? 'Continue' : 'Refresh'}</button>
+        <button type="button" class="btn btn-sm btn-outline-danger fw-bold" id="insights-clear"><i class="bi bi-trash3 me-1"></i>Clear</button>
+        <button type="button" class="btn-close" id="insights-close" aria-label="Close"></button>
+      </div>
+    </div>
+    <div class="row g-2 mb-3">${kpis}</div>
+    <div class="row g-3 mb-3">
+      ${insCard('<i class="bi bi-check-circle-fill text-success me-1"></i>Strengths', insNotesList(r.notes, 'strength', 'Play more games to reveal strengths.'))}
+      ${insCard('<i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>Weaknesses', insNotesList(r.notes, 'weakness', 'No clear weaknesses found.'))}
+    </div>
+    <div class="row g-3 mb-3">${charts}</div>
+    <div class="row g-3">
+      ${insCard('<i class="bi bi-trophy-fill text-warning me-1"></i>Best wins (highest-rated opponents)', `<div data-list="wins">${insHighlightList(r.bestWins, 'No wins yet.')}</div>`)}
+      ${insCard('<i class="bi bi-emoji-frown-fill text-danger me-1"></i>Worst losses (lowest-rated opponents)', `<div data-list="losses">${insHighlightList(r.worstLosses, 'No losses. Impressive!')}</div>`)}
+      ${insCard('Most accurate game', `<div data-list="best">${insHighlightList([r.bestAccuracyGame], '')}</div>`)}
+      ${insCard('Least accurate game', `<div data-list="worst">${insHighlightList([r.worstAccuracyGame], '')}</div>`)}
+    </div>`;
+}
+
+function insProgressHtml(username, hasReport) {
+  return `
+    <div class="text-center py-5 px-3">
+      <div class="spinner-border text-warning mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
+      <h5 class="fw-black mb-1">Analyzing last 100 games for ${insEscape(username)}</h5>
+      <p class="text-secondary small mb-3" id="insights-status">Fetching games...</p>
+      <div class="progress mx-auto mb-2" style="max-width: 420px; height: 12px;">
+        <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" id="insights-bar" style="width: 3%"></div>
+      </div>
+      <div class="small font-monospace text-secondary mb-3" id="insights-eta"></div>
+      <p class="text-secondary small mx-auto" style="max-width: 440px;">Deep analysis takes a while. Finished games are saved as they complete, so you can stop and continue later.</p>
+      <button type="button" class="btn btn-outline-secondary fw-bold" id="insights-stop">${hasReport ? 'Stop and view report' : 'Stop'}</button>
+    </div>`;
+}
+
+function closeInsights() {
+  document.getElementById(INSIGHTS_MODAL_ID)?.remove();
+}
+
+async function openInsights({ platform, username, onSelectGame }) {
+  closeInsights();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'why-modal-backdrop';
+  overlay.id = INSIGHTS_MODAL_ID;
+  overlay.innerHTML = '<div class="why-dialog p-3 p-md-4 shadow-lg" id="insights-dialog" style="max-width: 1040px; width: 100%; max-height: 94vh; overflow-y: auto; border-radius: 1.25rem; background: var(--arcade-card); border: 1px solid var(--arcade-border);"></div>';
+  document.body.appendChild(overlay);
+  const dialog = overlay.querySelector('#insights-dialog');
+
+  let cancelRequested = false;
+  let activeEntry = null;
+
+  const bindReport = (entry, partial) => {
+    activeEntry = entry;
+    dialog.innerHTML = insReportHtml(entry, username, partial);
+    dialog.querySelector('#insights-close')?.addEventListener('click', closeInsights);
+    dialog.querySelector('#insights-refresh')?.addEventListener('click', () => startRun(true));
+    dialog.querySelector('#insights-clear')?.addEventListener('click', () => {
+      clearInsights(platform, username);
+      closeInsights();
+    });
+
+    const groups = {
+      wins: entry.report.bestWins,
+      losses: entry.report.worstLosses,
+      best: [entry.report.bestAccuracyGame],
+      worst: [entry.report.worstAccuracyGame]
+    };
+    dialog.querySelectorAll('[data-list]').forEach((listEl) => {
+      listEl.querySelectorAll('[data-highlight]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const item = groups[listEl.dataset.list][Number(btn.dataset.highlight)];
+          closeInsights();
+          if (item && onSelectGame) onSelectGame(item.pgn, item.color);
+        });
+      });
+    });
+  };
+
+  const showMessage = (html) => {
+    dialog.innerHTML = `<div class="text-center py-5">${html}
+      <div class="mt-3"><button type="button" class="btn btn-outline-secondary fw-bold" id="insights-close">Close</button></div></div>`;
+    dialog.querySelector('#insights-close')?.addEventListener('click', closeInsights);
+  };
+
+  const updateStatus = (status) => {
+    const statusEl = dialog.querySelector('#insights-status');
+    const barEl = dialog.querySelector('#insights-bar');
+    const etaEl = dialog.querySelector('#insights-eta');
+    if (!statusEl || status.stage === 'fetching') return;
+    const done = status.done;
+    const plyFraction = status.plyTotal ? status.ply / status.plyTotal : 0;
+    const progress = status.total ? ((done + plyFraction) / status.total) * 100 : 0;
+    statusEl.textContent = `Game ${done + 1} of ${status.total}: vs ${status.game.white.toLowerCase() === username.trim().toLowerCase() ? status.game.black : status.game.white}${status.plyTotal ? ` · move ${Math.ceil(status.ply / 2)}/${Math.ceil(status.plyTotal / 2)}` : ''}`;
+    if (barEl) barEl.style.width = `${Math.max(3, progress)}%`;
+    if (etaEl) etaEl.textContent = `Time remaining: ${insFormatDuration(status.etaMs)}`;
+  };
+
+  const startRun = async (force) => {
+    cancelRequested = false;
+    dialog.innerHTML = insProgressHtml(username, Boolean(activeEntry?.report));
+    dialog.querySelector('#insights-stop')?.addEventListener('click', () => {
+      cancelRequested = true;
+      const stopBtn = dialog.querySelector('#insights-stop');
+      if (stopBtn) stopBtn.disabled = true;
+    });
+
+    try {
+      const { entry, cancelled } = await runInsights({
+        platform,
+        username,
+        force,
+        onStatus: updateStatus,
+        shouldCancel: () => cancelRequested || !document.getElementById(INSIGHTS_MODAL_ID)
+      });
+      if (!document.getElementById(INSIGHTS_MODAL_ID)) return;
+      if (entry.report) bindReport(entry, cancelled);
+      else showMessage('<i class="bi bi-info-circle fs-1 text-secondary"></i><p class="mt-2 mb-0">No analyzable rated games were found for this player.</p>');
+    } catch (err) {
+      if (!document.getElementById(INSIGHTS_MODAL_ID)) return;
+      showMessage(`<i class="bi bi-exclamation-octagon fs-1 text-danger"></i><p class="mt-2 mb-0">${insEscape(err.message || 'Failed to build insights.')}</p>`);
+    }
+  };
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay && !dialog.querySelector('#insights-stop')) closeInsights();
+  });
+
+  const cached = loadInsights(platform, username);
+  if (isInsightsFresh(cached)) {
+    bindReport(cached, false);
+  } else {
+    activeEntry = cached;
+    startRun(false);
+  }
+}
+
 /* --- src/components/importModal.js --- */
 /**
  * Vanilla JS Import Modal Component
  * Bootstrap 5 modal supporting Chess.com, Lichess, and custom PGN imports.
  * Only analyzes user-imported games with live Stockfish progress.
  */
+
 
 
 
@@ -6278,11 +7278,16 @@ class ImportModal {
             <div class="d-flex flex-column gap-2 mt-1 w-100">
               <div class="d-flex align-items-center justify-content-between">
                 <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
-                ${getCacheStats().count > 0 ? `
-                  <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-clear-game-cache" style="font-size: 11px;">
-                    <i class="bi bi-trash3 me-1"></i>Clear Cache (${getCacheStats().count})
+                <div class="d-flex align-items-center gap-2">
+                  <button type="button" class="btn btn-warning btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-open-insights" style="font-size: 11px;">
+                    <i class="bi bi-graph-up-arrow me-1"></i>In-depth Insights (100 games)
                   </button>
-                ` : ''}
+                  ${getCacheStats().count > 0 ? `
+                    <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-clear-game-cache" style="font-size: 11px;">
+                      <i class="bi bi-trash3 me-1"></i>Clear Cache (${getCacheStats().count})
+                    </button>
+                  ` : ''}
+                </div>
               </div>
               <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden pe-1 w-100" style="max-height: 280px; scrollbar-width: thin;">
                 ${this.fetchedGames.map((g) => {
@@ -6385,6 +7390,15 @@ class ImportModal {
       input?.addEventListener('input', (e) => { this.username = e.target.value; });
       input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.handleFetch(); });
       container.querySelector('#btn-fetch-platform')?.addEventListener('click', () => this.handleFetch());
+
+      container.querySelector('#btn-open-insights')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openInsights({
+          platform: this.activeTab,
+          username: this.username,
+          onSelectGame: (pgn, userColor) => this.onSelectPgn && this.onSelectPgn(pgn, userColor)
+        });
+      });
 
       container.querySelector('#btn-clear-game-cache')?.addEventListener('click', (e) => {
         e.stopPropagation();

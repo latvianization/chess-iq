@@ -12,6 +12,7 @@ class StockfishWorkerService {
     this.currentPv = [];
     this.currentDepth = 0;
     this.secondBestCp = void 0;
+    this.secondBestMove = "";
     this.evaluationTimeoutId = null;
     this.initWorker();
   }
@@ -48,6 +49,7 @@ class StockfishWorkerService {
     if (line === "uciok") {
       this.isInitialized = true;
       if (this.worker) {
+        this.worker.postMessage("setoption name MultiPV value 2");
         this.worker.postMessage("isready");
       }
       return;
@@ -78,10 +80,15 @@ class StockfishWorkerService {
         }
       }
       const pvMatch = line.match(/pv\s+(.+)$/);
-      if (pvMatch && !isMultiPv2) {
-        this.currentPv = pvMatch[1].trim().split(/\s+/);
-        if (this.currentPv.length > 0) {
-          this.currentBestMove = this.currentPv[0];
+      if (pvMatch) {
+        const pvMoves = pvMatch[1].trim().split(/\s+/);
+        if (isMultiPv2) {
+          this.secondBestMove = pvMoves[0] || "";
+        } else {
+          this.currentPv = pvMoves;
+          if (pvMoves.length > 0) {
+            this.currentBestMove = pvMoves[0];
+          }
         }
       }
     }
@@ -98,7 +105,8 @@ class StockfishWorkerService {
         mate: this.currentMate,
         pv: this.currentPv.length > 0 ? this.currentPv : [bestMove],
         depth: this.currentDepth,
-        multiPv2ScoreCp: this.secondBestCp
+        multiPv2ScoreCp: this.secondBestCp,
+        secondBestMoveUci: this.secondBestMove
       };
       const resolve = this.pendingResolve;
       this.pendingResolve = null;
@@ -121,6 +129,7 @@ class StockfishWorkerService {
     this.currentPv = [];
     this.currentDepth = 0;
     this.secondBestCp = void 0;
+    this.secondBestMove = "";
     this.pendingResolve = item.resolve;
 
     this.evaluationTimeoutId = setTimeout(() => {
@@ -156,4 +165,34 @@ class StockfishWorkerService {
     return this.isAvailable && this.isInitialized;
   }
 }
-export const stockfishService = new StockfishWorkerService();
+const POOL_MAX_WORKERS = 8;
+
+class StockfishPool {
+  constructor() {
+    const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
+    this.targetSize = Math.min(POOL_MAX_WORKERS, Math.max(2, cores - 2));
+    this.workers = [new StockfishWorkerService()];
+  }
+  warmUp() {
+    while (this.workers.length < this.targetSize) {
+      this.workers.push(new StockfishWorkerService());
+    }
+  }
+  get size() {
+    return this.workers.filter((w) => w.isAvailable).length;
+  }
+  get isAvailable() {
+    return this.workers.some((w) => w.isAvailable);
+  }
+  isEngineReady() {
+    return this.workers.some((w) => w.isEngineReady());
+  }
+  evaluate(fen, depth = 14, maxWaitMs = 1000) {
+    const available = this.workers.filter((w) => w.isAvailable && w.worker);
+    if (available.length === 0) return Promise.resolve(null);
+    const load = (w) => w.queue.length + (w.isProcessing ? 1 : 0);
+    const leastBusy = available.reduce((best, w) => (load(w) < load(best) ? w : best));
+    return leastBusy.evaluate(fen, depth, maxWaitMs);
+  }
+}
+export const stockfishService = new StockfishPool();

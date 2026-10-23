@@ -3,6 +3,7 @@ import { Chessboard } from './board.js';
 import { soundService } from '../services/sound.js';
 import { getComicBadge } from '../services/comicBadges.js';
 import { getDeepContinuation, summarizePunishment } from '../services/engine.js';
+import { MIN_CONTINUATION_PLIES, extendContinuation } from '../services/engineRefutations.js';
 
 export function closeWhyModal(dashboard) {
   if (dashboard.whyTimer) {
@@ -54,10 +55,10 @@ export async function openWhyModal(dashboard, targetEval = null) {
 
       <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
         <div class="arcade-mode-pills" role="group">
-          <button type="button" class="arcade-pill active" id="why-tab-punishment">
+          <button type="button" class="arcade-pill active" id="why-tab-punishment" disabled>
             <i class="bi bi-lightning-charge-fill me-1 text-danger"></i>Opponent's Punishment
           </button>
-          <button type="button" class="arcade-pill" id="why-tab-best">
+          <button type="button" class="arcade-pill" id="why-tab-best" disabled>
             <i class="bi bi-star-fill me-1 text-success"></i>Best Alternative (${cur.bestMoveSan || 'Top Move'})
           </button>
         </div>
@@ -95,7 +96,7 @@ export async function openWhyModal(dashboard, targetEval = null) {
               <div class="d-flex align-items-start gap-2">
                 <i class="bi bi-shield-exclamation text-danger fs-5 lh-1 mt-0.5"></i>
                 <div>
-                  <span class="fw-bold small d-block text-body" id="why-summary-text">Calculating continuation...</span>
+                  <span class="fw-bold small d-block text-body" id="why-summary-text"><span class="spinner-border spinner-border-sm text-danger me-2" role="status"></span>Calculating what happens next...</span>
                 </div>
               </div>
             </div>
@@ -103,26 +104,26 @@ export async function openWhyModal(dashboard, targetEval = null) {
             <div class="p-2 mb-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border); border-radius: 0.75rem; max-height: 140px; overflow-y: auto;">
               <div class="small fw-bold text-secondary mb-1.5" style="font-size: 11px;">Tactical Continuation (10 Plies):</div>
               <div class="d-flex flex-wrap gap-1.5" id="why-pills-container">
-                <span class="text-secondary small fst-italic">Loading line...</span>
+                <span class="text-secondary small"><span class="spinner-border spinner-border-sm me-2" role="status"></span>Loading line...</span>
               </div>
             </div>
           </div>
 
           <div>
             <div class="d-flex align-items-center justify-content-center gap-2 py-1">
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-first" title="Start">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-first" disabled title="Start">
                 <i class="bi bi-chevron-bar-left"></i>
               </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-prev" title="Previous Move">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-prev" disabled title="Previous Move">
                 <i class="bi bi-chevron-left"></i>
               </button>
-              <button type="button" class="btn btn-sm btn-primary px-3 fw-bold" id="why-btn-play" title="Play / Pause">
+              <button type="button" class="btn btn-sm btn-primary px-3 fw-bold" id="why-btn-play" disabled title="Play / Pause">
                 <i class="bi bi-play-fill" id="why-play-icon"></i>
               </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-next" title="Next Move">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-next" disabled title="Next Move">
                 <i class="bi bi-chevron-right"></i>
               </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-last" title="End">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-last" disabled title="End">
                 <i class="bi bi-chevron-bar-right"></i>
               </button>
             </div>
@@ -144,6 +145,32 @@ export async function openWhyModal(dashboard, targetEval = null) {
     theme: dashboard.theme,
     interactive: false,
   });
+
+  modal.querySelector('#why-btn-close')?.addEventListener('click', () => closeWhyModal(dashboard));
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeWhyModal(dashboard);
+  });
+
+  dashboard.whyKeyHandler = (e) => {
+    if (e.key === 'Escape') {
+      closeWhyModal(dashboard);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      modal.querySelector('#why-btn-prev')?.click();
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      modal.querySelector('#why-btn-next')?.click();
+    } else if (e.key === ' ') {
+      e.preventDefault();
+      modal.querySelector('#why-btn-play')?.click();
+    }
+  };
+  window.addEventListener('keydown', dashboard.whyKeyHandler);
+
+  if (!cur.explanation) {
+    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    if (!document.body.contains(modal)) return;
+  }
 
   let punishmentSteps = cur.explanation?.punishmentSteps;
   let punishmentSummary = cur.explanation?.punishmentSummary;
@@ -192,6 +219,9 @@ export async function openWhyModal(dashboard, targetEval = null) {
 
     cur.explanation = { punishmentSteps, punishmentSummary, bestSteps, bestSummary };
   }
+
+  if (!document.body.contains(modal)) return;
+  modal.querySelectorAll('button[disabled]').forEach((btn) => btn.removeAttribute('disabled'));
 
   let activeTab = 'punishment';
   let currentSteps = punishmentSteps;
@@ -357,26 +387,21 @@ export async function openWhyModal(dashboard, targetEval = null) {
     startAutoplay();
   });
 
-  modal.querySelector('#why-btn-close')?.addEventListener('click', () => closeWhyModal(dashboard));
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeWhyModal(dashboard);
-  });
 
-  dashboard.whyKeyHandler = (e) => {
-    if (e.key === 'Escape') {
-      closeWhyModal(dashboard);
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      modal.querySelector('#why-btn-prev')?.click();
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      modal.querySelector('#why-btn-next')?.click();
-    } else if (e.key === ' ') {
-      e.preventDefault();
-      modal.querySelector('#why-btn-play')?.click();
-    }
-  };
-  window.addEventListener('keydown', dashboard.whyKeyHandler);
 
   setTab('punishment');
+
+  const needsLongerLines = punishmentSteps.length - 1 < MIN_CONTINUATION_PLIES || bestSteps.length - 1 < MIN_CONTINUATION_PLIES;
+  if (needsLongerLines) {
+    modal.querySelector('#why-pills-container')?.insertAdjacentHTML('beforeend', '<span class="spinner-border spinner-border-sm text-secondary align-self-center" role="status"></span>');
+    const [punishTail, bestTail] = await Promise.all([
+      extendContinuation(cur.fen, punishmentSteps.slice(1)),
+      extendContinuation(cur.fenBefore, bestSteps.slice(1))
+    ]);
+    if (!document.body.contains(modal)) return;
+    punishmentSteps.splice(1, punishmentSteps.length - 1, ...punishTail);
+    bestSteps.splice(1, bestSteps.length - 1, ...bestTail);
+    updatePills();
+    renderActiveStep();
+  }
 }

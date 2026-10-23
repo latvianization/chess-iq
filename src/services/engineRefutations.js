@@ -76,7 +76,7 @@ export async function getDeepContinuation(fen, maxPlies = 10) {
 
     if (stockfishService && stockfishService.isAvailable) {
       try {
-        const sf = await stockfishService.evaluate(fen, 12, 500);
+        const sf = await stockfishService.evaluate(fen, 14, 1000);
         if (sf && sf.pv && sf.pv.length > 0) {
           pvMoves = sf.pv;
         }
@@ -195,6 +195,17 @@ export function replayPv(fen, pvMoves, maxPlies = 10) {
   return steps;
 }
 
+export const MIN_CONTINUATION_PLIES = 6;
+
+export async function extendContinuation(startFen, steps, maxPlies = 10) {
+  if (steps.length >= MIN_CONTINUATION_PLIES) return steps;
+  const lastFen = steps.length > 0 ? steps[steps.length - 1].fen : startFen;
+  const extra = await getDeepContinuation(lastFen, maxPlies - steps.length);
+  const merged = [...steps];
+  extra.forEach((step) => merged.push({ ...step, ply: merged.length + 1 }));
+  return merged;
+}
+
 export async function prepareMoveExplanation(cur) {
   if (!cur) return null;
   try {
@@ -205,9 +216,6 @@ export async function prepareMoveExplanation(cur) {
     let deepPunish = [];
     if (cur.punishmentPv && cur.punishmentPv.length > 0) {
       deepPunish = replayPv(cur.fen, cur.punishmentPv, 10);
-    }
-    if (deepPunish.length === 0) {
-      deepPunish = await getDeepContinuation(cur.fen, 10);
     }
     punishmentSteps.push(...deepPunish);
 
@@ -223,27 +231,7 @@ export async function prepareMoveExplanation(cur) {
       deepBest = replayPv(cur.fenBefore, cur.bestPv, 10);
     }
     if (deepBest.length === 0) {
-      const cBest = new Chess(cur.fenBefore);
-      const bUci = cur.bestMoveUci;
-      if (bUci && bUci.length >= 4) {
-        const from = bUci.slice(0, 2);
-        const to = bUci.slice(2, 4);
-        const promotion = bUci.length > 4 ? bUci[4] : void 0;
-        const m = cBest.move({ from, to, promotion });
-        if (m) {
-          deepBest.push({
-            ply: 1,
-            san: m.san,
-            uci: bUci,
-            from: m.from,
-            to: m.to,
-            fen: cBest.fen(),
-            color: m.color
-          });
-          const further = await getDeepContinuation(cBest.fen(), 9);
-          deepBest.push(...further);
-        }
-      }
+      deepBest = replayPv(cur.fenBefore, [cur.bestMoveUci], 1);
     }
     bestSteps.push(...deepBest);
 

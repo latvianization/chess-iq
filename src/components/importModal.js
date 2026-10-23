@@ -7,6 +7,7 @@
 import { fetchChessComGames, fetchLichessGames } from '../services/importApi.js';
 import { getGameCacheInfo, clearGameCache, getCacheStats } from '../services/gameCacheService.js';
 import { backgroundAnalysisQueue } from '../services/backgroundAnalysisQueue.js';
+import { openInsights } from './insightsModal.js';
 
 export class ImportModal {
   constructor(modalEl, options = {}) {
@@ -249,11 +250,16 @@ export class ImportModal {
             <div class="d-flex flex-column gap-2 mt-1 w-100">
               <div class="d-flex align-items-center justify-content-between">
                 <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
-                ${getCacheStats().count > 0 ? `
-                  <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-clear-game-cache" style="font-size: 11px;">
-                    <i class="bi bi-trash3 me-1"></i>Clear Cache (${getCacheStats().count})
+                <div class="d-flex align-items-center gap-2">
+                  <button type="button" class="btn btn-warning btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-open-insights" style="font-size: 11px;">
+                    <i class="bi bi-graph-up-arrow me-1"></i>In-depth Insights (100 games)
                   </button>
-                ` : ''}
+                  ${getCacheStats().count > 0 ? `
+                    <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-clear-game-cache" style="font-size: 11px;">
+                      <i class="bi bi-trash3 me-1"></i>Clear Cache (${getCacheStats().count})
+                    </button>
+                  ` : ''}
+                </div>
               </div>
               <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden pe-1 w-100" style="max-height: 280px; scrollbar-width: thin;">
                 ${this.fetchedGames.map((g) => {
@@ -356,6 +362,15 @@ export class ImportModal {
       input?.addEventListener('input', (e) => { this.username = e.target.value; });
       input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.handleFetch(); });
       container.querySelector('#btn-fetch-platform')?.addEventListener('click', () => this.handleFetch());
+
+      container.querySelector('#btn-open-insights')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openInsights({
+          platform: this.activeTab,
+          username: this.username,
+          onSelectGame: (pgn, userColor) => this.onSelectPgn && this.onSelectPgn(pgn, userColor)
+        });
+      });
 
       container.querySelector('#btn-clear-game-cache')?.addEventListener('click', (e) => {
         e.stopPropagation();
