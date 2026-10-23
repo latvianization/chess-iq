@@ -728,11 +728,9 @@ export function classifyMove(
 ): MoveClassification {
   if (isBook) return 'book';
 
-  const isExactBest = Boolean(bestMoveUci && playedUci === bestMoveUci);
-  const isMatchingBest = isExactBest || winProbLoss <= 0.008;
+  const isExactBest = Boolean(bestMoveUci && playedUci && playedUci.toLowerCase() === bestMoveUci.toLowerCase());
 
-  // 1. If player played the top engine move, it is always Best (or Brilliant/Great)
-  if (isMatchingBest) {
+  if (isExactBest) {
     if (winProbAfter >= 0.48 && winProbBefore < 0.90) {
       if (isMaterialSacrifice(fenBefore, fenAfter, moverColor)) {
         return 'brilliant';
@@ -749,7 +747,6 @@ export function classifyMove(
     return 'best';
   }
 
-  // 2. Negative classifications ONLY evaluate when player did NOT play the best move
   if (winProbBefore >= 0.75 && winProbAfter <= 0.55) {
     return 'missed_win';
   }

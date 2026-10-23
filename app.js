@@ -2315,11 +2315,9 @@ function isMaterialSacrifice(fenBefore, fenAfter, moverColor) {
 }
 function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter, winProbLoss, isBook, multiPv1WinProb, multiPv2WinProb, fenBefore, fenAfter, moverColor) {
   if (isBook) return "book";
-  const isExactBest = Boolean(bestMoveUci && playedUci === bestMoveUci);
-  const isMatchingBest = isExactBest || winProbLoss <= 0.008;
+  const isExactBest = Boolean(bestMoveUci && playedUci && playedUci.toLowerCase() === bestMoveUci.toLowerCase());
 
-  // 1. If player played the top engine move, it is always Best (or Brilliant/Great)
-  if (isMatchingBest) {
+  if (isExactBest) {
     if (winProbAfter >= 0.48 && winProbBefore < 0.9) {
       if (isMaterialSacrifice(fenBefore, fenAfter, moverColor)) {
         return "brilliant";
@@ -2331,7 +2329,6 @@ function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter, winPr
     return "best";
   }
 
-  // 2. Negative classifications ONLY evaluate when player did NOT play the best move
   if (winProbBefore >= 0.75 && winProbAfter <= 0.55) {
     return "missed_win";
   }
@@ -4320,7 +4317,11 @@ class ReviewDashboard {
   getTopMovesForFen(fen) {
     if (!fen) return { best: null, second: null };
     try {
-      const cached = typeof FEN_EVAL_CACHE !== 'undefined' ? FEN_EVAL_CACHE.get(fen) : null;
+      const fastKey = typeof normalizeFenKey === 'function' ? `${normalizeFenKey(fen)}_fast` : fen;
+      const deepKey = typeof normalizeFenKey === 'function' ? `${normalizeFenKey(fen)}_deep` : fen;
+      const cached = typeof FEN_EVAL_CACHE !== 'undefined'
+        ? (FEN_EVAL_CACHE.get(deepKey) || FEN_EVAL_CACHE.get(fastKey) || FEN_EVAL_CACHE.get(fen))
+        : null;
       let bestUci = cached?.bestMoveUci;
       let secondUci = cached?.secondBestMoveUci;
 
@@ -4353,7 +4354,7 @@ class ReviewDashboard {
     let secondBestMove = null;
 
     if (cur) {
-      // Show available top moves for the player who made the move (from position before the move)
+      const isOptimal = ['best', 'brilliant', 'great', 'book'].includes(cur.classification);
       let bestUci = cur.bestMoveUci;
       let secondUci = cur.secondBestMoveUci;
 
@@ -4363,15 +4364,19 @@ class ReviewDashboard {
         if (!secondUci && top.second) secondUci = `${top.second.from}${top.second.to}`;
       }
 
-      bestMove = bestUci && bestUci.length >= 4
-        ? { from: bestUci.slice(0, 2), to: bestUci.slice(2, 4) }
-        : null;
+      if (isOptimal) {
+        bestMove = { from: cur.from, to: cur.to };
+        secondBestMove = null;
+      } else {
+        bestMove = bestUci && bestUci.length >= 4
+          ? { from: bestUci.slice(0, 2), to: bestUci.slice(2, 4) }
+          : null;
 
-      secondBestMove = secondUci && secondUci.length >= 4 && (secondUci.slice(0, 2) !== bestMove?.from || secondUci.slice(2, 4) !== bestMove?.to)
-        ? { from: secondUci.slice(0, 2), to: secondUci.slice(2, 4) }
-        : null;
+        secondBestMove = secondUci && secondUci.length >= 4 && (secondUci.slice(0, 2) !== bestMove?.from || secondUci.slice(2, 4) !== bestMove?.to)
+          ? { from: secondUci.slice(0, 2), to: secondUci.slice(2, 4) }
+          : null;
+      }
     } else {
-      // Starting position (ply 0): show White's options
       const top = this.getTopMovesForFen(fen);
       bestMove = top.best;
       secondBestMove = top.second;
@@ -4406,7 +4411,8 @@ class ReviewDashboard {
           ? `M${Math.abs(cur.mate)}`
           : (cur.scoreCp > 0 ? `+${(cur.scoreCp / 100).toFixed(1)}` : (cur.scoreCp / 100).toFixed(1));
 
-        const isSuboptimal = cur.classification !== 'best' && cur.classification !== 'book';
+        const isOptimal = ['best', 'brilliant', 'great', 'book'].includes(cur.classification);
+        const isSuboptimal = !isOptimal;
         const bestSan = cur.bestMoveSan || (bestMove ? `${bestMove.from}-${bestMove.to}` : '');
         const secondSan = cur.secondBestMoveSan;
 
