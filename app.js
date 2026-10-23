@@ -2869,18 +2869,18 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
 async function fetchChessComGames(username) {
   const cleanUsername = username.trim().toLowerCase();
   const archivesUrl = `https://api.chess.com/pub/player/${cleanUsername}/games/archives`;
-  const headers = {
-    "User-Agent": "ChessAnalyzerFlutterApp/1.0 (contact@example.com)"
-  };
-  const archRes = await fetch(archivesUrl, { headers });
+  const archRes = await fetch(archivesUrl);
   if (!archRes.ok) {
-    throw new Error(`Chess.com user '${username}' not found or profile is private.`);
+    if (archRes.status === 404) {
+      throw new Error(`Chess.com user '${username}' not found.`);
+    }
+    throw new Error(`Failed to fetch Chess.com player data (HTTP ${archRes.status}).`);
   }
   const archData = await archRes.json();
   const archives = archData.archives || [];
   if (archives.length === 0) return [];
   const latestMonthUrl = archives[archives.length - 1];
-  const gamesRes = await fetch(latestMonthUrl, { headers });
+  const gamesRes = await fetch(latestMonthUrl);
   if (!gamesRes.ok) throw new Error("Failed to fetch monthly games from Chess.com");
   const monthData = await gamesRes.json();
   const games = monthData.games || [];
@@ -2911,8 +2911,7 @@ async function fetchLichessGames(username) {
   const url = `https://lichess.org/api/games/user/${cleanUsername}?max=15&clocks=true&evals=true&opening=true`;
   const res = await fetch(url, {
     headers: {
-      "Accept": "application/x-ndjson",
-      "User-Agent": "ChessAnalyzerFlutterApp/1.0 (contact@example.com)"
+      "Accept": "application/x-ndjson"
     }
   });
   if (!res.ok) throw new Error(`Lichess user '${username}' not found.`);
