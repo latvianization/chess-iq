@@ -1392,7 +1392,7 @@ class StockfishWorkerService {
 }
 const stockfishService = new StockfishWorkerService();
 
-/* --- src/services/engine.js --- */
+/* --- src/services/engineEvaluationTables.js --- */
 const PIECE_VALUES = {
   p: 100,
   n: 320,
@@ -1401,402 +1401,74 @@ const PIECE_VALUES = {
   q: 900,
   k: 2e4
 };
+
 const PST_MG_PAWN = [
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  98,
-  134,
-  61,
-  95,
-  68,
-  126,
-  34,
-  -11,
-  -6,
-  7,
-  26,
-  31,
-  65,
-  56,
-  25,
-  -20,
-  -14,
-  13,
-  6,
-  21,
-  23,
-  12,
-  17,
-  -23,
-  -27,
-  -2,
-  -5,
-  12,
-  17,
-  6,
-  10,
-  -25,
-  -26,
-  -4,
-  -4,
-  -10,
-  3,
-  3,
-  33,
-  -12,
-  -35,
-  -1,
-  -20,
-  -23,
-  -15,
-  24,
-  38,
-  -22,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0
+  0, 0, 0, 0, 0, 0, 0, 0,
+  98, 134, 61, 95, 68, 126, 34, -11,
+  -6, 7, 26, 31, 65, 56, 25, -20,
+  -14, 13, 6, 21, 23, 12, 17, -23,
+  -27, -2, -5, 12, 17, 6, 10, -25,
+  -26, -4, -4, -10, 3, 3, 33, -12,
+  -35, -1, -20, -23, -15, 24, 38, -22,
+  0, 0, 0, 0, 0, 0, 0, 0
 ];
+
 const PST_MG_KNIGHT = [
-  -167,
-  -89,
-  -34,
-  -49,
-  61,
-  -97,
-  -15,
-  -107,
-  -73,
-  -41,
-  72,
-  36,
-  23,
-  62,
-  7,
-  -17,
-  -47,
-  60,
-  37,
-  65,
-  84,
-  129,
-  73,
-  44,
-  -9,
-  17,
-  19,
-  53,
-  37,
-  69,
-  18,
-  22,
-  -13,
-  4,
-  16,
-  13,
-  28,
-  19,
-  21,
-  -8,
-  -23,
-  -9,
-  12,
-  10,
-  19,
-  17,
-  25,
-  -16,
-  -29,
-  -53,
-  -12,
-  -3,
-  -1,
-  18,
-  -14,
-  -19,
-  -105,
-  -21,
-  -58,
-  -33,
-  -17,
-  -28,
-  -19,
-  -23
+  -167, -89, -34, -49, 61, -97, -15, -107,
+  -73, -41, 72, 36, 23, 62, 7, -17,
+  -47, 60, 37, 65, 84, 129, 73, 44,
+  -9, 17, 19, 53, 37, 69, 18, 22,
+  -13, 4, 16, 13, 28, 19, 21, -8,
+  -23, -9, 12, 10, 19, 17, 25, -16,
+  -29, -53, -12, -3, -1, 18, -14, -19,
+  -105, -21, -58, -33, -17, -28, -19, -23
 ];
+
 const PST_MG_BISHOP = [
-  -29,
-  4,
-  -82,
-  -37,
-  -25,
-  -42,
-  7,
-  -8,
-  -26,
-  16,
-  -18,
-  -13,
-  30,
-  59,
-  18,
-  -47,
-  -16,
-  37,
-  43,
-  40,
-  35,
-  50,
-  37,
-  -2,
-  -4,
-  5,
-  19,
-  50,
-  37,
-  37,
-  7,
-  -2,
-  -6,
-  13,
-  13,
-  26,
-  34,
-  12,
-  10,
-  4,
-  0,
-  15,
-  15,
-  15,
-  14,
-  27,
-  18,
-  10,
-  4,
-  15,
-  16,
-  0,
-  7,
-  21,
-  33,
-  1,
-  -33,
-  -3,
-  -14,
-  -21,
-  -13,
-  -12,
-  -39,
-  -21
+  -29, 4, -82, -37, -25, -42, 7, -8,
+  -26, 16, -18, -13, 30, 59, 18, -47,
+  -16, 37, 43, 40, 35, 50, 37, -2,
+  -4, 5, 19, 50, 37, 37, 7, -2,
+  -6, 13, 13, 26, 34, 12, 10, 4,
+  0, 15, 15, 15, 14, 27, 18, 10,
+  4, 15, 16, 0, 7, 21, 33, 1,
+  -33, -3, -14, -21, -13, -12, -39, -21
 ];
+
 const PST_MG_ROOK = [
-  32,
-  42,
-  32,
-  51,
-  63,
-  9,
-  31,
-  43,
-  27,
-  32,
-  58,
-  62,
-  80,
-  67,
-  26,
-  44,
-  -5,
-  19,
-  26,
-  36,
-  17,
-  45,
-  61,
-  16,
-  -24,
-  -11,
-  7,
-  26,
-  24,
-  35,
-  -8,
-  -20,
-  -36,
-  -26,
-  -12,
-  -1,
-  9,
-  -7,
-  6,
-  -23,
-  -45,
-  -25,
-  -16,
-  -17,
-  3,
-  0,
-  -5,
-  -33,
-  -44,
-  -16,
-  -20,
-  -9,
-  -1,
-  11,
-  -6,
-  -71,
-  -19,
-  -13,
-  1,
-  17,
-  16,
-  7,
-  -37,
-  -26
+  32, 42, 32, 51, 63, 9, 31, 43,
+  27, 32, 58, 62, 80, 67, 26, 44,
+  -5, 19, 26, 36, 17, 45, 61, 16,
+  -24, -11, 7, 26, 24, 35, -8, -20,
+  -36, -26, -12, -1, 9, -7, 6, -23,
+  -45, -25, -16, -17, 3, 0, -5, -33,
+  -44, -16, -20, -9, -1, 11, -6, -71,
+  -19, -13, 1, 17, 16, 7, -37, -26
 ];
+
 const PST_MG_QUEEN = [
-  -28,
-  0,
-  29,
-  12,
-  59,
-  44,
-  43,
-  45,
-  -24,
-  -39,
-  -5,
-  1,
-  -16,
-  57,
-  28,
-  54,
-  -18,
-  -15,
-  -7,
-  14,
-  4,
-  45,
-  13,
-  28,
-  -15,
-  -5,
-  -4,
-  8,
-  18,
-  34,
-  36,
-  19,
-  -7,
-  6,
-  10,
-  15,
-  24,
-  19,
-  16,
-  -2,
-  -9,
-  -7,
-  8,
-  -8,
-  -2,
-  2,
-  -8,
-  -10,
-  -14,
-  -13,
-  -11,
-  -10,
-  -9,
-  -9,
-  -4,
-  -18,
-  -18,
-  -9,
-  7,
-  -3,
-  3,
-  -18,
-  -15,
-  -22
+  -28, 0, 29, 12, 59, 44, 43, 45,
+  -24, -39, -5, 1, -16, 57, 28, 54,
+  -18, -15, -7, 14, 4, 45, 13, 28,
+  -15, -5, -4, 8, 18, 34, 36, 19,
+  -7, 6, 10, 15, 24, 19, 16, -2,
+  -9, -7, 8, -8, -2, 2, -8, -10,
+  -14, -13, -11, -10, -9, -9, -4, -18,
+  -18, -9, 7, -3, 3, -18, -15, -22
 ];
+
 const PST_MG_KING = [
-  -65,
-  23,
-  16,
-  -15,
-  -56,
-  -34,
-  2,
-  13,
-  29,
-  -1,
-  -20,
-  -7,
-  -8,
-  -4,
-  -38,
-  -29,
-  -9,
-  24,
-  2,
-  -16,
-  -20,
-  6,
-  22,
-  -22,
-  -17,
-  -20,
-  -12,
-  -27,
-  -30,
-  -25,
-  -14,
-  -36,
-  -49,
-  -1,
-  -27,
-  -39,
-  -46,
-  -44,
-  -33,
-  -51,
-  -14,
-  -14,
-  -22,
-  -46,
-  -44,
-  -30,
-  -15,
-  -27,
-  1,
-  7,
-  -8,
-  -64,
-  -43,
-  -16,
-  9,
-  8,
-  -15,
-  36,
-  12,
-  -54,
-  8,
-  -28,
-  24,
-  14
+  -65, 23, 16, -15, -56, -34, 2, 13,
+  29, -1, -20, -7, -8, -4, -38, -29,
+  -9, 24, 2, -16, -20, 6, 22, -22,
+  -17, -20, -12, -27, -30, -25, -14, -36,
+  -49, -1, -27, -39, -46, -44, -33, -51,
+  -14, -14, -22, -46, -44, -30, -15, -27,
+  1, 7, -8, -64, -43, -16, 9, 8,
+  -15, 36, 12, -54, 8, -28, 24, 14
 ];
+
+/* --- src/services/engine.js --- */
 const FEN_EVAL_CACHE = /* @__PURE__ */ new Map();
 function cpToWinProb(cp, mate) {
   if (mate !== void 0 && mate !== null) {
@@ -2231,6 +1903,70 @@ async function evaluateFenHybrid(fen, isDeep = false) {
   FEN_EVAL_CACHE.set(cacheKey, localResult);
   return localResult;
 }
+
+function isMaterialSacrifice(fenBefore, fenAfter, moverColor) {
+  const cBefore = new Chess(fenBefore);
+  const cAfter = new Chess(fenAfter);
+  let moverValBefore = 0;
+  let moverValAfter = 0;
+  cBefore.board().flat().forEach((p) => {
+    if (p && p.color === moverColor && p.type !== "k") {
+      moverValBefore += PIECE_VALUES[p.type];
+    }
+  });
+  cAfter.board().flat().forEach((p) => {
+    if (p && p.color === moverColor && p.type !== "k") {
+      moverValAfter += PIECE_VALUES[p.type];
+    }
+  });
+  return moverValAfter <= moverValBefore - 200;
+}
+function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter, winProbLoss, isBook, multiPv1WinProb, multiPv2WinProb, fenBefore, fenAfter, moverColor) {
+  if (isBook) return "book";
+  const isExactBest = Boolean(bestMoveUci && playedUci && playedUci.toLowerCase() === bestMoveUci.toLowerCase());
+
+  if (isExactBest) {
+    if (winProbAfter >= 0.48 && winProbBefore < 0.9) {
+      if (isMaterialSacrifice(fenBefore, fenAfter, moverColor)) {
+        return "brilliant";
+      }
+    }
+    if (multiPv2WinProb !== void 0 && multiPv1WinProb - multiPv2WinProb >= 0.15) {
+      return "great";
+    }
+    return "best";
+  }
+
+  if (winProbBefore >= 0.75 && winProbAfter <= 0.55) {
+    return "missed_win";
+  }
+  if (winProbLoss > 0.2) return "blunder";
+  if (winProbLoss > 0.1) return "mistake";
+  if (winProbLoss > 0.05) return "inaccuracy";
+  if (winProbLoss <= 0.02) return "excellent";
+  return "good";
+}
+function calculatePhaseElo(baseElo, acpl, movesCount, isOverall = false, result = "*", userColor = "w") {
+  if (movesCount < 3) return null;
+  const expectedAcpl = Math.max(18, 135 - baseElo * 0.05);
+  const eloDelta = (expectedAcpl - acpl) * 4.5;
+  const maxClamp = isOverall ? 320 : 220;
+  const clampedDelta = Math.min(maxClamp, Math.max(-maxClamp, eloDelta));
+  let resultBonus = 0;
+  if (isOverall) {
+    if (result === "1-0" && userColor === "w" || result === "0-1" && userColor === "b") {
+      resultBonus = 25;
+    } else if (result === "1/2-1/2") {
+      resultBonus = 0;
+    } else if (result !== "*") {
+      resultBonus = -25;
+    }
+  }
+  const estimated = Math.round(baseElo + clampedDelta + resultBonus);
+  return Math.min(3000, Math.max(400, estimated));
+}
+
+/* --- src/services/engineRefutations.js --- */
 async function detectThreat(fen) {
   try {
     const chess = new Chess(fen);
@@ -2295,67 +2031,6 @@ async function detectThreat(fen) {
   } catch {
   }
   return null;
-}
-function isMaterialSacrifice(fenBefore, fenAfter, moverColor) {
-  const cBefore = new Chess(fenBefore);
-  const cAfter = new Chess(fenAfter);
-  let moverValBefore = 0;
-  let moverValAfter = 0;
-  cBefore.board().flat().forEach((p) => {
-    if (p && p.color === moverColor && p.type !== "k") {
-      moverValBefore += PIECE_VALUES[p.type];
-    }
-  });
-  cAfter.board().flat().forEach((p) => {
-    if (p && p.color === moverColor && p.type !== "k") {
-      moverValAfter += PIECE_VALUES[p.type];
-    }
-  });
-  return moverValAfter <= moverValBefore - 200;
-}
-function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter, winProbLoss, isBook, multiPv1WinProb, multiPv2WinProb, fenBefore, fenAfter, moverColor) {
-  if (isBook) return "book";
-  const isExactBest = Boolean(bestMoveUci && playedUci && playedUci.toLowerCase() === bestMoveUci.toLowerCase());
-
-  if (isExactBest) {
-    if (winProbAfter >= 0.48 && winProbBefore < 0.9) {
-      if (isMaterialSacrifice(fenBefore, fenAfter, moverColor)) {
-        return "brilliant";
-      }
-    }
-    if (multiPv2WinProb !== void 0 && multiPv1WinProb - multiPv2WinProb >= 0.15) {
-      return "great";
-    }
-    return "best";
-  }
-
-  if (winProbBefore >= 0.75 && winProbAfter <= 0.55) {
-    return "missed_win";
-  }
-  if (winProbLoss > 0.2) return "blunder";
-  if (winProbLoss > 0.1) return "mistake";
-  if (winProbLoss > 0.05) return "inaccuracy";
-  if (winProbLoss <= 0.02) return "excellent";
-  return "good";
-}
-function calculatePhaseElo(baseElo, acpl, movesCount, isOverall = false, result = "*", userColor = "w") {
-  if (movesCount < 3) return null;
-  const expectedAcpl = Math.max(18, 135 - baseElo * 0.05);
-  const eloDelta = (expectedAcpl - acpl) * 4.5;
-  const maxClamp = isOverall ? 320 : 220;
-  const clampedDelta = Math.min(maxClamp, Math.max(-maxClamp, eloDelta));
-  let resultBonus = 0;
-  if (isOverall) {
-    if (result === "1-0" && userColor === "w" || result === "0-1" && userColor === "b") {
-      resultBonus = 25;
-    } else if (result === "1/2-1/2") {
-      resultBonus = 0;
-    } else if (result !== "*") {
-      resultBonus = -25;
-    }
-  }
-  const estimated = Math.round(baseElo + clampedDelta + resultBonus);
-  return Math.min(3000, Math.max(400, estimated));
 }
 
 async function getDeepContinuation(fen, maxPlies = 10) {
@@ -3353,6 +3028,142 @@ class Chessboard {
   }
 }
 
+/* --- src/components/botGameOverModal.js --- */
+function closeGameOverModal() {
+  const existing = document.getElementById('bot-game-over-modal');
+  if (existing) existing.remove();
+}
+
+function getBotRecords() {
+  try {
+    return JSON.parse(localStorage.getItem('chess_iq_bot_records') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function recordBotResult(botId, result) {
+  try {
+    const records = getBotRecords();
+    if (!records[botId]) records[botId] = { wins: 0, losses: 0, draws: 0 };
+    if (result === 'win') records[botId].wins = (records[botId].wins || 0) + 1;
+    else if (result === 'loss') records[botId].losses = (records[botId].losses || 0) + 1;
+    else if (result === 'draw') records[botId].draws = (records[botId].draws || 0) + 1;
+    localStorage.setItem('chess_iq_bot_records', JSON.stringify(records));
+  } catch {}
+}
+
+function showGameOverModal(arena, reason = 'Game Completed') {
+  closeGameOverModal();
+
+  const isWin = arena.gameResult === 'win';
+  const isLoss = arena.gameResult === 'loss';
+
+  let resultBadgeClass = 'bg-secondary text-white';
+  let resultTitle = 'DRAW';
+  let resultIcon = '🤝';
+  if (isWin) {
+    resultBadgeClass = 'bg-success text-white border border-light';
+    resultTitle = 'VICTORY!';
+    resultIcon = '🏆';
+  } else if (isLoss) {
+    resultBadgeClass = 'bg-danger text-white border border-light';
+    resultTitle = 'DEFEAT';
+    resultIcon = '💀';
+  }
+
+  const durationSec = Math.max(1, Math.floor((Date.now() - arena.gameStartTime) / 1000));
+  const mins = Math.floor(durationSec / 60);
+  const secs = durationSec % 60;
+  const durationStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  const moveCount = Math.ceil(arena.chess.history().length / 2);
+
+  const modal = document.createElement('div');
+  modal.className = 'game-over-modal-backdrop';
+  modal.id = 'bot-game-over-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(5,7,12,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div class="game-over-dialog comic-card p-4 text-center border-0 shadow-lg" style="max-width: 460px; width: 100%; border-radius: 1.5rem; background: var(--arcade-card); border: 1px solid var(--arcade-border);">
+      <div class="mb-3">
+        <div class="d-inline-flex align-items-center justify-content-center p-3 rounded-circle mb-2" style="background: ${isWin ? 'rgba(16,185,129,0.15)' : (isLoss ? 'rgba(239,68,68,0.15)' : 'rgba(148,163,184,0.15)')};">
+          <span style="font-size: 3rem; line-height: 1;">${resultIcon}</span>
+        </div>
+        <h2 class="fw-black mb-1 tracking-tight ${isWin ? 'text-success' : (isLoss ? 'text-danger' : 'text-body')}">${resultTitle}</h2>
+        <div class="text-secondary small fw-bold">Game Over · ${reason}</div>
+      </div>
+
+      <div class="d-flex align-items-center justify-content-center gap-3 p-3 rounded-3 mb-3" style="background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.08);">
+        <span class="fs-1">${arena.selectedBot.avatar}</span>
+        <div class="text-start">
+          <div class="fw-black fs-5">${arena.selectedBot.name}</div>
+          <div class="d-flex align-items-center gap-1.5 mt-0.5">
+            <span class="badge bg-warning text-dark fw-bold">${arena.selectedBot.elo} Elo</span>
+            <span class="badge bg-secondary">${arena.selectedBot.title}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-2 mb-4 text-center">
+        <div class="col-4">
+          <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
+            <div class="text-secondary small fw-bold">Moves</div>
+            <div class="fw-black fs-5">${moveCount}</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
+            <div class="text-secondary small fw-bold">Time</div>
+            <div class="fw-black fs-5">${durationStr}</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
+            <div class="text-secondary small fw-bold">Side</div>
+            <div class="fw-black fs-5">${arena.userColor === 'w' ? '⚪ White' : '⚫ Black'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex flex-column gap-2">
+        <button type="button" class="arcade-btn-primary py-2.5 fw-black fs-6 w-100 d-flex align-items-center justify-content-center gap-2" id="modal-btn-review">
+          <i class="bi bi-lightning-charge-fill"></i> Review Game with Stockfish ⚡
+        </button>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-light comic-btn flex-grow-1 py-2 fw-bold" id="modal-btn-rematch">
+            <i class="bi bi-arrow-repeat me-1"></i> Rematch
+          </button>
+          <button type="button" class="btn btn-outline-secondary comic-btn flex-grow-1 py-2 fw-bold" id="modal-btn-close">
+            <i class="bi bi-x-lg me-1"></i> Close
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal.querySelector('#modal-btn-review')?.addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    if (btn) {
+      btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Preparing Review...`;
+      btn.classList.add('disabled');
+    }
+    closeGameOverModal();
+    if (arena.onAnalyzeGame) {
+      arena.onAnalyzeGame(arena.getEnrichedPgn(), arena.userColor);
+    }
+  });
+
+  modal.querySelector('#modal-btn-rematch')?.addEventListener('click', () => {
+    closeGameOverModal();
+    arena.startNewGame();
+  });
+
+  modal.querySelector('#modal-btn-close')?.addEventListener('click', () => {
+    closeGameOverModal();
+  });
+}
+
 /* --- src/components/botArena.js --- */
 /**
  * Vanilla JS Bot Arena Component
@@ -3590,138 +3401,19 @@ class BotArena {
   }
 
   closeGameOverModal() {
-    const existing = document.getElementById('bot-game-over-modal');
-    if (existing) existing.remove();
+    closeGameOverModal();
   }
 
   showGameOverModal(reason = 'Game Completed') {
-    this.closeGameOverModal();
-
-    const isWin = this.gameResult === 'win';
-    const isLoss = this.gameResult === 'loss';
-
-    let resultBadgeClass = 'bg-secondary text-white';
-    let resultTitle = 'DRAW';
-    let resultIcon = '🤝';
-    if (isWin) {
-      resultBadgeClass = 'bg-success text-white border border-light';
-      resultTitle = 'VICTORY!';
-      resultIcon = '🏆';
-    } else if (isLoss) {
-      resultBadgeClass = 'bg-danger text-white border border-light';
-      resultTitle = 'DEFEAT';
-      resultIcon = '💀';
-    }
-
-    const durationSec = Math.max(1, Math.floor((Date.now() - this.gameStartTime) / 1000));
-    const mins = Math.floor(durationSec / 60);
-    const secs = durationSec % 60;
-    const durationStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-    const moveCount = Math.ceil(this.chess.history().length / 2);
-
-    const modal = document.createElement('div');
-    modal.className = 'game-over-modal-backdrop';
-    modal.id = 'bot-game-over-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(5,7,12,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;padding:1rem;';
-    modal.innerHTML = `
-      <div class="game-over-dialog comic-card p-4 text-center border-0 shadow-lg" style="max-width: 460px; width: 100%; border-radius: 1.5rem; background: var(--arcade-card); border: 1px solid var(--arcade-border);">
-        <div class="mb-3">
-          <div class="d-inline-flex align-items-center justify-content-center p-3 rounded-circle mb-2" style="background: ${isWin ? 'rgba(16,185,129,0.15)' : (isLoss ? 'rgba(239,68,68,0.15)' : 'rgba(148,163,184,0.15)')};">
-            <span style="font-size: 3rem; line-height: 1;">${resultIcon}</span>
-          </div>
-          <h2 class="fw-black mb-1 tracking-tight ${isWin ? 'text-success' : (isLoss ? 'text-danger' : 'text-body')}">${resultTitle}</h2>
-          <div class="text-secondary small fw-bold">Game Over · ${reason}</div>
-        </div>
-
-        <div class="d-flex align-items-center justify-content-center gap-3 p-3 rounded-3 mb-3" style="background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.08);">
-          <span class="fs-1">${this.selectedBot.avatar}</span>
-          <div class="text-start">
-            <div class="fw-black fs-5">${this.selectedBot.name}</div>
-            <div class="d-flex align-items-center gap-1.5 mt-0.5">
-              <span class="badge bg-warning text-dark fw-bold">${this.selectedBot.elo} Elo</span>
-              <span class="badge bg-secondary">${this.selectedBot.title}</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="row g-2 mb-4 text-center">
-          <div class="col-4">
-            <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
-              <div class="text-secondary small fw-bold">Moves</div>
-              <div class="fw-black fs-5">${moveCount}</div>
-            </div>
-          </div>
-          <div class="col-4">
-            <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
-              <div class="text-secondary small fw-bold">Time</div>
-              <div class="fw-black fs-5">${durationStr}</div>
-            </div>
-          </div>
-          <div class="col-4">
-            <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
-              <div class="text-secondary small fw-bold">Side</div>
-              <div class="fw-black fs-5">${this.userColor === 'w' ? '⚪ White' : '⚫ Black'}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="d-flex flex-column gap-2">
-          <button type="button" class="arcade-btn-primary py-2.5 fw-black fs-6 w-100 d-flex align-items-center justify-content-center gap-2" id="modal-btn-review">
-            <i class="bi bi-lightning-charge-fill"></i> Review Game with Stockfish ⚡
-          </button>
-          <div class="d-flex gap-2">
-            <button type="button" class="btn btn-light comic-btn flex-grow-1 py-2 fw-bold" id="modal-btn-rematch">
-              <i class="bi bi-arrow-repeat me-1"></i> Rematch
-            </button>
-            <button type="button" class="btn btn-outline-secondary comic-btn flex-grow-1 py-2 fw-bold" id="modal-btn-close">
-              <i class="bi bi-x-lg me-1"></i> Close
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    modal.querySelector('#modal-btn-review')?.addEventListener('click', (e) => {
-      const btn = e.currentTarget;
-      if (btn) {
-        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Preparing Review...`;
-        btn.classList.add('disabled');
-      }
-      this.closeGameOverModal();
-      if (this.onAnalyzeGame) {
-        this.onAnalyzeGame(this.getEnrichedPgn(), this.userColor);
-      }
-    });
-
-    modal.querySelector('#modal-btn-rematch')?.addEventListener('click', () => {
-      this.closeGameOverModal();
-      this.startNewGame();
-    });
-
-    modal.querySelector('#modal-btn-close')?.addEventListener('click', () => {
-      this.closeGameOverModal();
-    });
+    showGameOverModal(this, reason);
   }
 
   getBotRecords() {
-    try {
-      return JSON.parse(localStorage.getItem('chess_iq_bot_records') || '{}');
-    } catch {
-      return {};
-    }
+    return getBotRecords();
   }
 
   recordBotResult(botId, result) {
-    try {
-      const records = this.getBotRecords();
-      if (!records[botId]) records[botId] = { wins: 0, losses: 0, draws: 0 };
-      if (result === 'win') records[botId].wins = (records[botId].wins || 0) + 1;
-      else if (result === 'loss') records[botId].losses = (records[botId].losses || 0) + 1;
-      else if (result === 'draw') records[botId].draws = (records[botId].draws || 0) + 1;
-      localStorage.setItem('chess_iq_bot_records', JSON.stringify(records));
-    } catch {}
+    recordBotResult(botId, result);
   }
 
   checkGameOver() {
@@ -4000,14 +3692,7 @@ class BotArena {
   }
 }
 
-/* --- src/components/reviewDashboard.js --- */
-/**
- * Vanilla JS Game Review Dashboard Component
- * Displays Stockfish tournament analysis, interactive move history,
- * eval bar, phase ratings, comic sound effect badges, and tactical refutations.
- */
-
-
+/* --- src/components/reviewAdvantageChart.js --- */
 function createCurvedPath(points) {
   if (!points || points.length === 0) return '';
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
@@ -4030,6 +3715,654 @@ function createCurvedPath(points) {
 
   return path;
 }
+
+function updateAdvantageScrubber(dashboard) {
+  if (!dashboard || !dashboard.game || !dashboard.advantagePoints || dashboard.advantagePoints.length === 0) return;
+  const group = dashboard.container.querySelector('#advantage-scrubber-group');
+  const line = dashboard.container.querySelector('#scrubber-line');
+  const circle = dashboard.container.querySelector('#scrubber-circle');
+  if (!group || !line || !circle) return;
+
+  if (dashboard.currentPly > 0 && dashboard.currentPly <= dashboard.advantagePoints.length) {
+    const pt = dashboard.advantagePoints[dashboard.currentPly - 1];
+    group.style.display = 'inline';
+    line.setAttribute('x1', pt.x);
+    line.setAttribute('x2', pt.x);
+    circle.setAttribute('cx', pt.x);
+    circle.setAttribute('cy', pt.y);
+  } else if (dashboard.currentPly === 0 && dashboard.advantagePoints.length > 0) {
+    const pt = dashboard.advantagePoints[0];
+    group.style.display = 'inline';
+    line.setAttribute('x1', pt.x);
+    line.setAttribute('x2', pt.x);
+    circle.setAttribute('cx', pt.x);
+    circle.setAttribute('cy', dashboard.advantageMidY || 42);
+  } else {
+    group.style.display = 'none';
+  }
+}
+
+function renderAdvantageChart(dashboard) {
+  const chartArea = dashboard.container.querySelector('#advantage-chart-area');
+  if (!chartArea || !dashboard.game || !dashboard.game.plies || dashboard.game.plies.length === 0) {
+    if (chartArea) chartArea.innerHTML = '';
+    return;
+  }
+
+  const totalPlies = dashboard.game.plies.length;
+  const width = 1000;
+  const height = 84;
+  const midY = height / 2;
+  const padX = 12;
+  const padY = 10;
+
+  dashboard.advantageMidY = midY;
+  dashboard.advantagePoints = dashboard.game.plies.map((ply, i) => {
+    const x = padX + (i / (totalPlies - 1 || 1)) * (width - padX * 2);
+    const prob = typeof ply.winProb === 'number' && !isNaN(ply.winProb) ? ply.winProb : 0.5;
+    const y = padY + (1 - prob) * (height - padY * 2);
+    return { x, y, ply };
+  });
+
+  const curveD = createCurvedPath(dashboard.advantagePoints);
+  const firstX = dashboard.advantagePoints[0].x;
+  const lastX = dashboard.advantagePoints[dashboard.advantagePoints.length - 1].x;
+  const areaD = `${curveD} L ${lastX} ${midY} L ${firstX} ${midY} Z`;
+
+  const selectedPoint = (dashboard.currentPly > 0 && dashboard.currentPly <= totalPlies)
+    ? dashboard.advantagePoints[dashboard.currentPly - 1]
+    : (dashboard.advantagePoints[0] || null);
+
+  const mgPly = dashboard.game.middlegameStartPly;
+  const egPly = dashboard.game.endgameStartPly;
+
+  let phaseMarkersSvg = '';
+  if (mgPly > 1 && mgPly <= totalPlies) {
+    const mgPt = dashboard.advantagePoints[mgPly - 1];
+    phaseMarkersSvg += `
+      <line x1="${mgPt.x}" y1="6" x2="${mgPt.x}" y2="${height - 6}" stroke="#60a5fa" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.65" />
+      <text x="${mgPt.x}" y="12" fill="#93c5fd" font-size="9" font-weight="700" font-family="JetBrains Mono, monospace" text-anchor="middle">Middle</text>
+    `;
+  }
+  if (egPly > 1 && egPly <= totalPlies) {
+    const egPt = dashboard.advantagePoints[egPly - 1];
+    phaseMarkersSvg += `
+      <line x1="${egPt.x}" y1="6" x2="${egPt.x}" y2="${height - 6}" stroke="#34d399" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.65" />
+      <text x="${egPt.x}" y="12" fill="#6ee7b7" font-size="9" font-weight="700" font-family="JetBrains Mono, monospace" text-anchor="middle">Endgame</text>
+    `;
+  }
+
+  chartArea.innerHTML = `
+    <div class="d-flex align-items-center justify-content-between px-1 pb-1 mb-1 border-bottom border-secondary border-opacity-25">
+      <div class="d-flex align-items-center gap-1.5">
+        <i class="bi bi-graph-up text-primary small"></i>
+        <span class="small fw-black" style="font-size: 11px;">Advantage Timeline</span>
+      </div>
+      <div class="d-flex align-items-center gap-2 font-monospace" style="font-size: 10px;">
+        <span class="d-flex align-items-center gap-1 text-info"><span class="rounded-circle d-inline-block bg-info" style="width: 6px; height: 6px;"></span>White+</span>
+        <span class="d-flex align-items-center gap-1 text-secondary"><span class="rounded-circle d-inline-block bg-secondary" style="width: 6px; height: 6px;"></span>Black+</span>
+      </div>
+    </div>
+    <div class="advantage-chart-canvas position-relative" id="advantage-chart-canvas">
+      <svg class="w-100 h-100" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display: block;">
+        <defs>
+          <linearGradient id="advWhiteGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.3" />
+            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.02" />
+          </linearGradient>
+        </defs>
+        <!-- 50% Equality Line -->
+        <line x1="0" y1="${midY}" x2="${width}" y2="${midY}" stroke="#475569" stroke-width="1" stroke-dasharray="4,4" opacity="0.5" />
+        <!-- Gradient Area -->
+        <path d="${areaD}" fill="url(#advWhiteGrad)" />
+        <!-- Main Advantage Spline -->
+        <path d="${curveD}" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+        <!-- Phase Markers -->
+        ${phaseMarkersSvg}
+        <!-- Active Move Scrubber -->
+        <g id="advantage-scrubber-group" style="display: ${selectedPoint ? 'inline' : 'none'};">
+          <line id="scrubber-line" x1="${selectedPoint?.x || 0}" y1="0" x2="${selectedPoint?.x || 0}" y2="${height}" stroke="#fbbf24" stroke-width="1.8" opacity="0.9" />
+          <circle id="scrubber-circle" cx="${selectedPoint?.x || 0}" cy="${dashboard.currentPly === 0 ? midY : (selectedPoint?.y || midY)}" r="4" fill="#fbbf24" stroke="#0f172a" stroke-width="1.5" />
+        </g>
+      </svg>
+      <div id="advantage-chart-tooltip" class="position-absolute d-none px-2 py-1 rounded bg-dark border border-secondary shadow text-white small" style="pointer-events: none; z-index: 10; font-size: 11px;"></div>
+    </div>
+  `;
+
+  const canvas = chartArea.querySelector('#advantage-chart-canvas');
+  const tooltip = chartArea.querySelector('#advantage-chart-tooltip');
+  if (canvas) {
+    const handleInteraction = (clientX) => {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const relX = clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, relX / rect.width));
+      const targetPly = Math.max(1, Math.min(totalPlies, Math.round(ratio * (totalPlies - 1)) + 1));
+      dashboard.goToPly(targetPly);
+    };
+
+    canvas.addEventListener('click', (e) => handleInteraction(e.clientX));
+
+    let isDragging = false;
+    canvas.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      handleInteraction(e.clientX);
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (isDragging) handleInteraction(e.clientX);
+    });
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!tooltip || !dashboard.game || !dashboard.game.plies.length) return;
+      const rect = canvas.getBoundingClientRect();
+      const relX = e.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, relX / rect.width));
+      const idx = Math.max(0, Math.min(totalPlies - 1, Math.round(ratio * (totalPlies - 1))));
+      const ply = dashboard.game.plies[idx];
+      if (!ply) return;
+
+      const dict = COMIC_DICTIONARY[ply.classification] || COMIC_DICTIONARY['good'];
+      const evalStr = ply.mate !== null && typeof ply.mate !== 'undefined'
+        ? `M${Math.abs(ply.mate)}`
+        : (ply.scoreCp > 0 ? `+${(ply.scoreCp / 100).toFixed(1)}` : (ply.scoreCp / 100).toFixed(1));
+
+      tooltip.innerHTML = `
+        <div class="d-flex align-items-center gap-1.5 font-monospace">
+          <span class="badge border border-dark rounded-circle" style="background:${dict.bg}; color:${dict.text}; width:16px; height:16px; padding:0; display:inline-flex; align-items:center; justify-content:center; font-size:9px;">
+            ${dict.symbol}
+          </span>
+          <span class="fw-bold">${ply.ply}. ${ply.san}</span>
+          <span class="text-info fw-bold">(${evalStr})</span>
+        </div>
+      `;
+      tooltip.classList.remove('d-none');
+      const tipWidth = tooltip.offsetWidth || 120;
+      const leftPos = Math.max(8, Math.min(rect.width - tipWidth - 8, relX + 10));
+      tooltip.style.left = `${leftPos}px`;
+      tooltip.style.top = `6px`;
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      if (tooltip) tooltip.classList.add('d-none');
+    });
+  }
+}
+
+/* --- src/components/reviewRetryMistake.js --- */
+function startRetryMistake(dashboard) {
+  const cur = dashboard.getCurrentEval();
+  if (!cur || !cur.bestMoveUci || !cur.fenBefore) return;
+
+  dashboard.isRetryingMistake = true;
+  dashboard.retryHintActive = false;
+  dashboard.stopPvPlayback();
+
+  const banner = dashboard.container.querySelector('#pv-banner-area');
+  if (banner) {
+    const turnName = cur.color === 'w' ? 'White' : 'Black';
+    banner.classList.remove('d-none');
+    banner.innerHTML = `
+      <div class="alert alert-warning comic-card-sm d-flex align-items-center justify-content-between p-2.5 mb-2 rounded-3">
+        <div class="d-flex align-items-center gap-2">
+          <span class="spinner-grow spinner-grow-sm text-warning"></span>
+          <span class="small fw-bold">Retry Mistake · <strong>${turnName}</strong> to find the best move</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <button type="button" class="btn btn-sm btn-outline-dark fw-bold comic-btn" id="retry-hint-btn">Hint</button>
+          <button type="button" class="btn btn-sm btn-light fw-bold comic-btn" id="retry-exit-btn">Exit</button>
+        </div>
+      </div>
+    `;
+
+    banner.querySelector('#retry-hint-btn')?.addEventListener('click', () => {
+      dashboard.retryHintActive = true;
+      const fromSq = cur.bestMoveUci.slice(0, 2);
+      const hintEl = banner.querySelector('strong');
+      if (hintEl) hintEl.textContent = `Hint: piece starts on ${fromSq}`;
+      if (dashboard.board) {
+        dashboard.board.setProps({
+          bestMove: { from: fromSq, to: fromSq }
+        });
+      }
+    });
+
+    banner.querySelector('#retry-exit-btn')?.addEventListener('click', () => {
+      stopRetryMistake(dashboard);
+    });
+  }
+
+  if (dashboard.board) {
+    const testChess = new Chess(cur.fenBefore);
+    dashboard.board.setProps({
+      fen: cur.fenBefore,
+      orientation: dashboard.orientation,
+      interactive: true,
+      lastMove: null,
+      bestMove: null,
+      secondBestMove: null,
+      threatMove: null,
+      badge: null,
+      legalMovesFrom: (sq) => {
+        const moves = testChess.moves({ square: sq, verbose: true });
+        return moves.map((m) => m.to);
+      },
+      onMove: (from, to) => {
+        const promo = (to.endsWith('8') || to.endsWith('1')) ? 'q' : undefined;
+        const playedUci = `${from}${to}${promo || ''}`;
+        const isCorrect = playedUci.startsWith(cur.bestMoveUci.slice(0, 4));
+
+        if (isCorrect) {
+          soundService.playSuccess();
+          try {
+            if (typeof window.confetti === 'function') {
+              window.confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+            }
+          } catch {}
+
+          const bannerAlert = banner?.querySelector('.alert');
+          if (bannerAlert) {
+            bannerAlert.className = 'alert alert-success comic-card-sm d-flex align-items-center justify-content-between p-2.5 mb-2 rounded-3';
+            bannerAlert.innerHTML = `
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                <span class="small fw-bold">Solved! That's the best move: <strong>${cur.bestMoveSan || cur.bestMoveUci}</strong></span>
+              </div>
+            `;
+          }
+
+          testChess.move({ from, to, promotion: promo });
+          dashboard.board?.setProps({
+            fen: testChess.fen(),
+            interactive: false,
+            lastMove: { from, to }
+          });
+
+          setTimeout(() => {
+            stopRetryMistake(dashboard);
+          }, 1800);
+        } else {
+          soundService.playBlunder();
+          const bannerStrong = banner?.querySelector('strong');
+          if (bannerStrong) {
+            bannerStrong.textContent = `Not quite. Try another move!`;
+          }
+          dashboard.board?.setProps({ fen: cur.fenBefore, interactive: true });
+        }
+      }
+    });
+  }
+}
+
+function stopRetryMistake(dashboard) {
+  dashboard.isRetryingMistake = false;
+  dashboard.retryHintActive = false;
+  const banner = dashboard.container.querySelector('#pv-banner-area');
+  if (banner) {
+    banner.innerHTML = '';
+    banner.classList.add('d-none');
+  }
+  dashboard.updateBoardAndControls();
+}
+
+/* --- src/components/reviewWhyModal.js --- */
+function closeWhyModal(dashboard) {
+  if (dashboard.whyTimer) {
+    clearInterval(dashboard.whyTimer);
+    dashboard.whyTimer = null;
+  }
+  if (dashboard.whyKeyHandler) {
+    window.removeEventListener('keydown', dashboard.whyKeyHandler);
+    dashboard.whyKeyHandler = null;
+  }
+  const existing = document.getElementById('why-blunder-modal');
+  if (existing) existing.remove();
+  dashboard.whyBoard = null;
+}
+
+async function openWhyModal(dashboard, targetEval = null) {
+  const cur = targetEval || dashboard.getCurrentEval();
+  if (!cur) return;
+
+  closeWhyModal(dashboard);
+
+  const comic = getComicBadge(cur.classification, cur.san);
+  const classificationName = cur.classification.replace('_', ' ');
+
+  const modal = document.createElement('div');
+  modal.className = 'why-modal-backdrop';
+  modal.id = 'why-blunder-modal';
+  modal.innerHTML = `
+    <div class="why-dialog comic-card p-3 p-md-4 border border-3 border-dark shadow-lg" style="max-width: 780px; width: 100%; max-height: 94vh; overflow-y: auto; border-radius: 1.25rem; background: var(--bs-body-bg, #fff);">
+      <div class="d-flex align-items-center justify-content-between pb-2 mb-3 border-bottom border-2 border-dark">
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge border border-dark rounded-pill px-2.5 py-1" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 11px;">
+            ${comic.symbol} ${comic.term}
+          </span>
+          <h5 class="mb-0 fw-black font-monospace fs-6">Why was ${cur.san} a ${classificationName}?</h5>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-dark comic-btn rounded-circle px-2 py-1" id="why-btn-close" aria-label="Close">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <div class="btn-group btn-group-sm" role="group">
+          <button type="button" class="btn btn-danger active fw-bold comic-btn" id="why-tab-punishment">
+            <i class="bi bi-lightning-charge-fill me-1"></i>Opponent's Punishment
+          </button>
+          <button type="button" class="btn btn-outline-success fw-bold comic-btn" id="why-tab-best">
+            <i class="bi bi-star-fill me-1"></i>Best Alternative (${cur.bestMoveSan || 'Top Move'})
+          </button>
+        </div>
+        <span class="badge bg-body-secondary text-secondary font-monospace fw-bold px-2 py-1" id="why-step-counter">Move 0 / 0</span>
+      </div>
+
+      <div class="row g-3 align-items-stretch">
+        <div class="col-12 col-md-7 d-flex justify-content-center">
+          <div id="why-modal-board" style="width: 100%; max-width: 380px; aspect-ratio: 1/1;"></div>
+        </div>
+        <div class="col-12 col-md-5 d-flex flex-column justify-content-between">
+          <div>
+            <div class="card border border-2 border-dark mb-2 shadow-sm">
+              <div class="card-body p-2.5">
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                  <span class="text-uppercase fw-black small text-secondary" style="font-size: 11px;">Tactical Consequence</span>
+                  <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace" id="why-line-tag">Punishment</span>
+                </div>
+                <div class="fw-bold small text-body" id="why-summary-text">
+                  <span class="spinner-border spinner-border-sm me-1 text-danger"></span>Calculating continuation...
+                </div>
+              </div>
+            </div>
+
+            <div class="border border-2 border-dark rounded p-2 bg-body-tertiary mb-3" style="max-height: 140px; overflow-y: auto;">
+              <div class="small fw-black text-secondary mb-1" style="font-size: 11px;">Continuation Line (Next 10 Moves):</div>
+              <div class="d-flex flex-wrap gap-1" id="why-pills-container">
+                <span class="text-secondary small fst-italic">Loading line...</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="d-flex align-items-center justify-content-center gap-1.5 py-1">
+              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2" id="why-btn-first" title="Start">
+                <i class="bi bi-chevron-bar-left"></i>
+              </button>
+              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2.5" id="why-btn-prev" title="Previous Move">
+                <i class="bi bi-chevron-left"></i>
+              </button>
+              <button type="button" class="btn btn-primary btn-sm comic-btn px-3" id="why-btn-play" title="Play / Pause">
+                <i class="bi bi-play-fill" id="why-play-icon"></i>
+              </button>
+              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2.5" id="why-btn-next" title="Next Move">
+                <i class="bi bi-chevron-right"></i>
+              </button>
+              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2" id="why-btn-last" title="End">
+                <i class="bi bi-chevron-bar-right"></i>
+              </button>
+            </div>
+            <div class="text-center text-secondary small fw-semibold mt-1" style="font-size: 11px;">
+              <i class="bi bi-keyboard me-1"></i>Arrow keys: <kbd class="bg-body-secondary text-body px-1">←</kbd> <kbd class="bg-body-secondary text-body px-1">→</kbd> | Space: Play
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const boardMount = modal.querySelector('#why-modal-board');
+  dashboard.whyBoard = new Chessboard(boardMount, {
+    fen: cur.fen,
+    orientation: dashboard.orientation,
+    theme: dashboard.theme,
+    interactive: false,
+  });
+
+  const punishmentSteps = [
+    { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
+  ];
+
+  const deepPunish = await getDeepContinuation(cur.fen, 10);
+  punishmentSteps.push(...deepPunish);
+
+  const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
+  const punishmentSummary = summarizePunishment(cur.fen, endFen, cur.color);
+
+  const bestSteps = [
+    { ply: 0, fen: cur.fenBefore, from: null, to: null, san: 'Start' }
+  ];
+  let bestSummary = 'Maintains a solid position and prevents opponent tactical counterplay.';
+
+  try {
+    const cBest = new Chess(cur.fenBefore);
+    const bUci = cur.bestMoveUci;
+    if (bUci && bUci.length >= 4) {
+      const from = bUci.slice(0, 2);
+      const to = bUci.slice(2, 4);
+      const promotion = bUci.length > 4 ? bUci[4] : void 0;
+      const m = cBest.move({ from, to, promotion });
+      if (m) {
+        bestSteps.push({
+          ply: 1,
+          san: m.san,
+          uci: bUci,
+          from: m.from,
+          to: m.to,
+          fen: cBest.fen(),
+          color: m.color
+        });
+        const deepBest = await getDeepContinuation(cBest.fen(), 9);
+        bestSteps.push(...deepBest);
+        bestSummary = `Playing ${cur.bestMoveSan || m.san} retains full equality or advantage with no tactical loss.`;
+      }
+    }
+  } catch {
+  }
+
+  let activeTab = 'punishment';
+  let currentSteps = punishmentSteps;
+  let stepIdx = 0;
+  let isPlaying = false;
+
+  const renderActiveStep = () => {
+    const step = currentSteps[stepIdx];
+    if (!step) return;
+
+    dashboard.whyBoard?.setProps({
+      fen: step.fen,
+      lastMove: step.from ? { from: step.from, to: step.to } : null,
+    });
+
+    const counterEl = modal.querySelector('#why-step-counter');
+    if (counterEl) {
+      counterEl.textContent = `Move ${stepIdx} / ${currentSteps.length - 1}`;
+    }
+
+    const pills = modal.querySelectorAll('.why-move-pill');
+    pills.forEach((p, idx) => {
+      if (idx === stepIdx) {
+        p.classList.remove('btn-outline-dark', 'btn-outline-secondary');
+        p.classList.add('btn-primary', 'text-white');
+      } else {
+        p.classList.remove('btn-primary', 'text-white');
+        p.classList.add('btn-outline-secondary');
+      }
+    });
+  };
+
+  const updatePills = () => {
+    const pillsContainer = modal.querySelector('#why-pills-container');
+    if (!pillsContainer) return;
+    pillsContainer.innerHTML = '';
+
+    currentSteps.forEach((st, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `btn btn-sm py-0.5 px-1.5 font-monospace fw-bold rounded-pill why-move-pill ${idx === stepIdx ? 'btn-primary text-white' : 'btn-outline-secondary'}`;
+      btn.style.fontSize = '11px';
+      btn.textContent = idx === 0 ? (activeTab === 'punishment' ? `${st.san}` : 'Start') : `${st.ply}. ${st.san}`;
+      btn.addEventListener('click', () => {
+        stopAutoplay();
+        stepIdx = idx;
+        soundService.playMove();
+        renderActiveStep();
+      });
+      pillsContainer.appendChild(btn);
+    });
+  };
+
+  const setTab = (tab) => {
+    stopAutoplay();
+    activeTab = tab;
+    stepIdx = 0;
+
+    const btnPunish = modal.querySelector('#why-tab-punishment');
+    const btnBest = modal.querySelector('#why-tab-best');
+    const tagEl = modal.querySelector('#why-line-tag');
+    const summaryEl = modal.querySelector('#why-summary-text');
+
+    if (tab === 'punishment') {
+      currentSteps = punishmentSteps;
+      btnPunish?.classList.add('active', 'btn-danger');
+      btnPunish?.classList.remove('btn-outline-danger');
+      btnBest?.classList.remove('active', 'btn-success');
+      btnBest?.classList.add('btn-outline-success');
+
+      if (tagEl) {
+        tagEl.className = 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace';
+        tagEl.textContent = 'Punishment';
+      }
+      if (summaryEl) summaryEl.textContent = punishmentSummary;
+    } else {
+      currentSteps = bestSteps;
+      btnBest?.classList.add('active', 'btn-success');
+      btnBest?.classList.remove('btn-outline-success');
+      btnPunish?.classList.remove('active', 'btn-danger');
+      btnPunish?.classList.add('btn-outline-danger');
+
+      if (tagEl) {
+        tagEl.className = 'badge bg-success-subtle text-success border border-success-subtle font-monospace';
+        tagEl.textContent = 'Best Line';
+      }
+      if (summaryEl) summaryEl.textContent = bestSummary;
+    }
+
+    updatePills();
+    renderActiveStep();
+  };
+
+  const stopAutoplay = () => {
+    if (dashboard.whyTimer) {
+      clearInterval(dashboard.whyTimer);
+      dashboard.whyTimer = null;
+    }
+    isPlaying = false;
+    const icon = modal.querySelector('#why-play-icon');
+    if (icon) {
+      icon.className = 'bi bi-play-fill';
+    }
+  };
+
+  const startAutoplay = () => {
+    if (isPlaying) {
+      stopAutoplay();
+      return;
+    }
+    if (stepIdx >= currentSteps.length - 1) {
+      stepIdx = 0;
+    }
+    isPlaying = true;
+    const icon = modal.querySelector('#why-play-icon');
+    if (icon) {
+      icon.className = 'bi bi-pause-fill';
+    }
+
+    dashboard.whyTimer = setInterval(() => {
+      if (stepIdx < currentSteps.length - 1) {
+        stepIdx++;
+        soundService.playMove();
+        renderActiveStep();
+      } else {
+        stopAutoplay();
+      }
+    }, 750);
+  };
+
+  modal.querySelector('#why-tab-punishment')?.addEventListener('click', () => setTab('punishment'));
+  modal.querySelector('#why-tab-best')?.addEventListener('click', () => setTab('best'));
+
+  modal.querySelector('#why-btn-first')?.addEventListener('click', () => {
+    stopAutoplay();
+    stepIdx = 0;
+    soundService.playMove();
+    renderActiveStep();
+  });
+
+  modal.querySelector('#why-btn-prev')?.addEventListener('click', () => {
+    stopAutoplay();
+    if (stepIdx > 0) {
+      stepIdx--;
+      soundService.playMove();
+      renderActiveStep();
+    }
+  });
+
+  modal.querySelector('#why-btn-next')?.addEventListener('click', () => {
+    stopAutoplay();
+    if (stepIdx < currentSteps.length - 1) {
+      stepIdx++;
+      soundService.playMove();
+      renderActiveStep();
+    }
+  });
+
+  modal.querySelector('#why-btn-last')?.addEventListener('click', () => {
+    stopAutoplay();
+    stepIdx = currentSteps.length - 1;
+    soundService.playMove();
+    renderActiveStep();
+  });
+
+  modal.querySelector('#why-btn-play')?.addEventListener('click', () => {
+    startAutoplay();
+  });
+
+  modal.querySelector('#why-btn-close')?.addEventListener('click', () => closeWhyModal(dashboard));
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeWhyModal(dashboard);
+  });
+
+  dashboard.whyKeyHandler = (e) => {
+    if (e.key === 'Escape') {
+      closeWhyModal(dashboard);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      modal.querySelector('#why-btn-prev')?.click();
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      modal.querySelector('#why-btn-next')?.click();
+    } else if (e.key === ' ') {
+      e.preventDefault();
+      modal.querySelector('#why-btn-play')?.click();
+    }
+  };
+  window.addEventListener('keydown', dashboard.whyKeyHandler);
+
+  setTab('punishment');
+}
+
+/* --- src/components/reviewDashboard.js --- */
+/**
+ * Vanilla JS Game Review Dashboard Component
+ * Displays Stockfish tournament analysis, interactive move history,
+ * eval bar, phase ratings, comic sound effect badges, and tactical refutations.
+ */
+
 
 class ReviewDashboard {
   constructor(containerEl, options = {}) {
@@ -4182,118 +4515,11 @@ class ReviewDashboard {
   }
 
   startRetryMistake() {
-    const cur = this.getCurrentEval();
-    if (!cur || !cur.bestMoveUci || !cur.fenBefore) return;
-
-    this.isRetryingMistake = true;
-    this.retryHintActive = false;
-    this.stopPvPlayback();
-
-    const banner = this.container.querySelector('#pv-banner-area');
-    if (banner) {
-      const turnName = cur.color === 'w' ? 'White' : 'Black';
-      banner.classList.remove('d-none');
-      banner.innerHTML = `
-        <div class="alert alert-warning comic-card-sm d-flex align-items-center justify-content-between p-2.5 mb-2 rounded-3">
-          <div class="d-flex align-items-center gap-2">
-            <span class="spinner-grow spinner-grow-sm text-warning"></span>
-            <span class="small fw-bold">Retry Mistake · <strong>${turnName}</strong> to find the best move</span>
-          </div>
-          <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-sm btn-outline-dark fw-bold comic-btn" id="retry-hint-btn">Hint</button>
-            <button type="button" class="btn btn-sm btn-light fw-bold comic-btn" id="retry-exit-btn">Exit</button>
-          </div>
-        </div>
-      `;
-
-      banner.querySelector('#retry-hint-btn')?.addEventListener('click', () => {
-        this.retryHintActive = true;
-        const fromSq = cur.bestMoveUci.slice(0, 2);
-        const hintEl = banner.querySelector('strong');
-        if (hintEl) hintEl.textContent = `Hint: piece starts on ${fromSq}`;
-        if (this.board) {
-          this.board.setProps({
-            bestMove: { from: fromSq, to: fromSq }
-          });
-        }
-      });
-
-      banner.querySelector('#retry-exit-btn')?.addEventListener('click', () => {
-        this.stopRetryMistake();
-      });
-    }
-
-    if (this.board) {
-      const testChess = new Chess(cur.fenBefore);
-      this.board.setProps({
-        fen: cur.fenBefore,
-        orientation: this.orientation,
-        interactive: true,
-        lastMove: null,
-        bestMove: null,
-        secondBestMove: null,
-        threatMove: null,
-        badge: null,
-        legalMovesFrom: (sq) => {
-          const moves = testChess.moves({ square: sq, verbose: true });
-          return moves.map((m) => m.to);
-        },
-        onMove: (from, to) => {
-          const promo = (to.endsWith('8') || to.endsWith('1')) ? 'q' : undefined;
-          const playedUci = `${from}${to}${promo || ''}`;
-          const isCorrect = playedUci.startsWith(cur.bestMoveUci.slice(0, 4));
-
-          if (isCorrect) {
-            soundService.playSuccess();
-            try {
-              if (typeof window.confetti === 'function') {
-                window.confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
-              }
-            } catch {}
-
-            const bannerAlert = banner?.querySelector('.alert');
-            if (bannerAlert) {
-              bannerAlert.className = 'alert alert-success comic-card-sm d-flex align-items-center justify-content-between p-2.5 mb-2 rounded-3';
-              bannerAlert.innerHTML = `
-                <div class="d-flex align-items-center gap-2">
-                  <i class="bi bi-check-circle-fill text-success fs-5"></i>
-                  <span class="small fw-bold">Solved! That's the best move: <strong>${cur.bestMoveSan || cur.bestMoveUci}</strong></span>
-                </div>
-              `;
-            }
-
-            testChess.move({ from, to, promotion: promo });
-            this.board?.setProps({
-              fen: testChess.fen(),
-              interactive: false,
-              lastMove: { from, to }
-            });
-
-            setTimeout(() => {
-              this.stopRetryMistake();
-            }, 1800);
-          } else {
-            soundService.playBlunder();
-            const bannerStrong = banner?.querySelector('strong');
-            if (bannerStrong) {
-              bannerStrong.textContent = `Not quite. Try another move!`;
-            }
-            this.board?.setProps({ fen: cur.fenBefore, interactive: true });
-          }
-        }
-      });
-    }
+    startRetryMistake(this);
   }
 
   stopRetryMistake() {
-    this.isRetryingMistake = false;
-    this.retryHintActive = false;
-    const banner = this.container.querySelector('#pv-banner-area');
-    if (banner) {
-      banner.innerHTML = '';
-      banner.classList.add('d-none');
-    }
-    this.updateBoardAndControls();
+    stopRetryMistake(this);
   }
 
   nextKeyMoment() {
@@ -4324,351 +4550,11 @@ class ReviewDashboard {
   }
 
   closeWhyModal() {
-    if (this.whyTimer) {
-      clearInterval(this.whyTimer);
-      this.whyTimer = null;
-    }
-    if (this.whyKeyHandler) {
-      window.removeEventListener('keydown', this.whyKeyHandler);
-      this.whyKeyHandler = null;
-    }
-    const existing = document.getElementById('why-blunder-modal');
-    if (existing) existing.remove();
-    this.whyBoard = null;
+    closeWhyModal(this);
   }
 
-  async openWhyModal(targetEval = null) {
-    const cur = targetEval || this.getCurrentEval();
-    if (!cur) return;
-
-    this.closeWhyModal();
-
-    const comic = getComicBadge(cur.classification, cur.san);
-    const classificationName = cur.classification.replace('_', ' ');
-
-    const modal = document.createElement('div');
-    modal.className = 'why-modal-backdrop';
-    modal.id = 'why-blunder-modal';
-    modal.innerHTML = `
-      <div class="why-dialog comic-card p-3 p-md-4 border border-3 border-dark shadow-lg" style="max-width: 780px; width: 100%; max-height: 94vh; overflow-y: auto; border-radius: 1.25rem; background: var(--bs-body-bg, #fff);">
-        <div class="d-flex align-items-center justify-content-between pb-2 mb-3 border-bottom border-2 border-dark">
-          <div class="d-flex align-items-center gap-2">
-            <span class="badge border border-dark rounded-pill px-2.5 py-1" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 11px;">
-              ${comic.symbol} ${comic.term}
-            </span>
-            <h5 class="mb-0 fw-black font-monospace fs-6">Why was ${cur.san} a ${classificationName}?</h5>
-          </div>
-          <button type="button" class="btn btn-sm btn-outline-dark comic-btn rounded-circle px-2 py-1" id="why-btn-close" aria-label="Close">
-            <i class="bi bi-x-lg"></i>
-          </button>
-        </div>
-
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-          <div class="btn-group btn-group-sm" role="group">
-            <button type="button" class="btn btn-danger active fw-bold comic-btn" id="why-tab-punishment">
-              <i class="bi bi-lightning-charge-fill me-1"></i>Opponent's Punishment
-            </button>
-            <button type="button" class="btn btn-outline-success fw-bold comic-btn" id="why-tab-best">
-              <i class="bi bi-star-fill me-1"></i>Best Alternative (${cur.bestMoveSan || 'Top Move'})
-            </button>
-          </div>
-          <span class="badge bg-body-secondary text-secondary font-monospace fw-bold px-2 py-1" id="why-step-counter">Move 0 / 0</span>
-        </div>
-
-        <div class="row g-3 align-items-stretch">
-          <div class="col-12 col-md-7 d-flex justify-content-center">
-            <div id="why-modal-board" style="width: 100%; max-width: 380px; aspect-ratio: 1/1;"></div>
-          </div>
-          <div class="col-12 col-md-5 d-flex flex-column justify-content-between">
-            <div>
-              <div class="card border border-2 border-dark mb-2 shadow-sm">
-                <div class="card-body p-2.5">
-                  <div class="d-flex align-items-center justify-content-between mb-1">
-                    <span class="text-uppercase fw-black small text-secondary" style="font-size: 11px;">Tactical Consequence</span>
-                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace" id="why-line-tag">Punishment</span>
-                  </div>
-                  <div class="fw-bold small text-body" id="why-summary-text">
-                    <span class="spinner-border spinner-border-sm me-1 text-danger"></span>Calculating continuation...
-                  </div>
-                </div>
-              </div>
-
-              <div class="border border-2 border-dark rounded p-2 bg-body-tertiary mb-3" style="max-height: 140px; overflow-y: auto;">
-                <div class="small fw-black text-secondary mb-1" style="font-size: 11px;">Continuation Line (Next 10 Moves):</div>
-                <div class="d-flex flex-wrap gap-1" id="why-pills-container">
-                  <span class="text-secondary small fst-italic">Loading line...</span>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <div class="d-flex align-items-center justify-content-center gap-1.5 py-1">
-                <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2" id="why-btn-first" title="Start">
-                  <i class="bi bi-chevron-bar-left"></i>
-                </button>
-                <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2.5" id="why-btn-prev" title="Previous Move">
-                  <i class="bi bi-chevron-left"></i>
-                </button>
-                <button type="button" class="btn btn-primary btn-sm comic-btn px-3" id="why-btn-play" title="Play / Pause">
-                  <i class="bi bi-play-fill" id="why-play-icon"></i>
-                </button>
-                <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2.5" id="why-btn-next" title="Next Move">
-                  <i class="bi bi-chevron-right"></i>
-                </button>
-                <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2" id="why-btn-last" title="End">
-                  <i class="bi bi-chevron-bar-right"></i>
-                </button>
-              </div>
-              <div class="text-center text-secondary small fw-semibold mt-1" style="font-size: 11px;">
-                <i class="bi bi-keyboard me-1"></i>Arrow keys: <kbd class="bg-body-secondary text-body px-1">←</kbd> <kbd class="bg-body-secondary text-body px-1">→</kbd> | Space: Play
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    const boardMount = modal.querySelector('#why-modal-board');
-    this.whyBoard = new Chessboard(boardMount, {
-      fen: cur.fen,
-      orientation: this.orientation,
-      theme: this.theme,
-      interactive: false,
-    });
-
-    const punishmentSteps = [
-      { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
-    ];
-
-    const deepPunish = await getDeepContinuation(cur.fen, 10);
-    punishmentSteps.push(...deepPunish);
-
-    const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
-    const punishmentSummary = summarizePunishment(cur.fen, endFen, cur.color);
-
-    const bestSteps = [
-      { ply: 0, fen: cur.fenBefore, from: null, to: null, san: 'Start' }
-    ];
-    let bestSummary = 'Maintains a solid position and prevents opponent tactical counterplay.';
-
-    try {
-      const cBest = new Chess(cur.fenBefore);
-      const bUci = cur.bestMoveUci;
-      if (bUci && bUci.length >= 4) {
-        const from = bUci.slice(0, 2);
-        const to = bUci.slice(2, 4);
-        const promotion = bUci.length > 4 ? bUci[4] : void 0;
-        const m = cBest.move({ from, to, promotion });
-        if (m) {
-          bestSteps.push({
-            ply: 1,
-            san: m.san,
-            uci: bUci,
-            from: m.from,
-            to: m.to,
-            fen: cBest.fen(),
-            color: m.color
-          });
-          const deepBest = await getDeepContinuation(cBest.fen(), 9);
-          bestSteps.push(...deepBest);
-          bestSummary = `Playing ${cur.bestMoveSan || m.san} retains full equality or advantage with no tactical loss.`;
-        }
-      }
-    } catch {
-    }
-
-    let activeTab = 'punishment';
-    let currentSteps = punishmentSteps;
-    let stepIdx = 0;
-    let isPlaying = false;
-
-    const renderActiveStep = () => {
-      const step = currentSteps[stepIdx];
-      if (!step) return;
-
-      this.whyBoard?.setProps({
-        fen: step.fen,
-        lastMove: step.from ? { from: step.from, to: step.to } : null,
-      });
-
-      const counterEl = modal.querySelector('#why-step-counter');
-      if (counterEl) {
-        counterEl.textContent = `Move ${stepIdx} / ${currentSteps.length - 1}`;
-      }
-
-      const pills = modal.querySelectorAll('.why-move-pill');
-      pills.forEach((p, idx) => {
-        if (idx === stepIdx) {
-          p.classList.remove('btn-outline-dark', 'btn-outline-secondary');
-          p.classList.add('btn-primary', 'text-white');
-        } else {
-          p.classList.remove('btn-primary', 'text-white');
-          p.classList.add('btn-outline-secondary');
-        }
-      });
-    };
-
-    const updatePills = () => {
-      const pillsContainer = modal.querySelector('#why-pills-container');
-      if (!pillsContainer) return;
-      pillsContainer.innerHTML = '';
-
-      currentSteps.forEach((st, idx) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = `btn btn-sm py-0.5 px-1.5 font-monospace fw-bold rounded-pill why-move-pill ${idx === stepIdx ? 'btn-primary text-white' : 'btn-outline-secondary'}`;
-        btn.style.fontSize = '11px';
-        btn.textContent = idx === 0 ? (activeTab === 'punishment' ? `${st.san}` : 'Start') : `${st.ply}. ${st.san}`;
-        btn.addEventListener('click', () => {
-          stopAutoplay();
-          stepIdx = idx;
-          soundService.playMove();
-          renderActiveStep();
-        });
-        pillsContainer.appendChild(btn);
-      });
-    };
-
-    const setTab = (tab) => {
-      stopAutoplay();
-      activeTab = tab;
-      stepIdx = 0;
-
-      const btnPunish = modal.querySelector('#why-tab-punishment');
-      const btnBest = modal.querySelector('#why-tab-best');
-      const tagEl = modal.querySelector('#why-line-tag');
-      const summaryEl = modal.querySelector('#why-summary-text');
-
-      if (tab === 'punishment') {
-        currentSteps = punishmentSteps;
-        btnPunish?.classList.add('active', 'btn-danger');
-        btnPunish?.classList.remove('btn-outline-danger');
-        btnBest?.classList.remove('active', 'btn-success');
-        btnBest?.classList.add('btn-outline-success');
-
-        if (tagEl) {
-          tagEl.className = 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace';
-          tagEl.textContent = 'Punishment';
-        }
-        if (summaryEl) summaryEl.textContent = punishmentSummary;
-      } else {
-        currentSteps = bestSteps;
-        btnBest?.classList.add('active', 'btn-success');
-        btnBest?.classList.remove('btn-outline-success');
-        btnPunish?.classList.remove('active', 'btn-danger');
-        btnPunish?.classList.add('btn-outline-danger');
-
-        if (tagEl) {
-          tagEl.className = 'badge bg-success-subtle text-success border border-success-subtle font-monospace';
-          tagEl.textContent = 'Best Line';
-        }
-        if (summaryEl) summaryEl.textContent = bestSummary;
-      }
-
-      updatePills();
-      renderActiveStep();
-    };
-
-    const stopAutoplay = () => {
-      if (this.whyTimer) {
-        clearInterval(this.whyTimer);
-        this.whyTimer = null;
-      }
-      isPlaying = false;
-      const icon = modal.querySelector('#why-play-icon');
-      if (icon) {
-        icon.className = 'bi bi-play-fill';
-      }
-    };
-
-    const startAutoplay = () => {
-      if (isPlaying) {
-        stopAutoplay();
-        return;
-      }
-      if (stepIdx >= currentSteps.length - 1) {
-        stepIdx = 0;
-      }
-      isPlaying = true;
-      const icon = modal.querySelector('#why-play-icon');
-      if (icon) {
-        icon.className = 'bi bi-pause-fill';
-      }
-
-      this.whyTimer = setInterval(() => {
-        if (stepIdx < currentSteps.length - 1) {
-          stepIdx++;
-          soundService.playMove();
-          renderActiveStep();
-        } else {
-          stopAutoplay();
-        }
-      }, 750);
-    };
-
-    modal.querySelector('#why-tab-punishment')?.addEventListener('click', () => setTab('punishment'));
-    modal.querySelector('#why-tab-best')?.addEventListener('click', () => setTab('best'));
-
-    modal.querySelector('#why-btn-first')?.addEventListener('click', () => {
-      stopAutoplay();
-      stepIdx = 0;
-      soundService.playMove();
-      renderActiveStep();
-    });
-
-    modal.querySelector('#why-btn-prev')?.addEventListener('click', () => {
-      stopAutoplay();
-      if (stepIdx > 0) {
-        stepIdx--;
-        soundService.playMove();
-        renderActiveStep();
-      }
-    });
-
-    modal.querySelector('#why-btn-next')?.addEventListener('click', () => {
-      stopAutoplay();
-      if (stepIdx < currentSteps.length - 1) {
-        stepIdx++;
-        soundService.playMove();
-        renderActiveStep();
-      }
-    });
-
-    modal.querySelector('#why-btn-last')?.addEventListener('click', () => {
-      stopAutoplay();
-      stepIdx = currentSteps.length - 1;
-      soundService.playMove();
-      renderActiveStep();
-    });
-
-    modal.querySelector('#why-btn-play')?.addEventListener('click', () => {
-      startAutoplay();
-    });
-
-    modal.querySelector('#why-btn-close')?.addEventListener('click', () => this.closeWhyModal());
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) this.closeWhyModal();
-    });
-
-    this.whyKeyHandler = (e) => {
-      if (e.key === 'Escape') {
-        this.closeWhyModal();
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        modal.querySelector('#why-btn-prev')?.click();
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        modal.querySelector('#why-btn-next')?.click();
-      } else if (e.key === ' ') {
-        e.preventDefault();
-        modal.querySelector('#why-btn-play')?.click();
-      }
-    };
-    window.addEventListener('keydown', this.whyKeyHandler);
-
-    setTab('punishment');
+  openWhyModal(targetEval = null) {
+    return openWhyModal(this, targetEval);
   }
 
   stopPvPlayback() {
@@ -4941,178 +4827,11 @@ class ReviewDashboard {
   }
 
   updateAdvantageScrubber() {
-    if (!this.game || !this.advantagePoints || this.advantagePoints.length === 0) return;
-    const group = this.container.querySelector('#advantage-scrubber-group');
-    const line = this.container.querySelector('#scrubber-line');
-    const circle = this.container.querySelector('#scrubber-circle');
-    if (!group || !line || !circle) return;
-
-    if (this.currentPly > 0 && this.currentPly <= this.advantagePoints.length) {
-      const pt = this.advantagePoints[this.currentPly - 1];
-      group.style.display = 'inline';
-      line.setAttribute('x1', pt.x);
-      line.setAttribute('x2', pt.x);
-      circle.setAttribute('cx', pt.x);
-      circle.setAttribute('cy', pt.y);
-    } else if (this.currentPly === 0 && this.advantagePoints.length > 0) {
-      const pt = this.advantagePoints[0];
-      group.style.display = 'inline';
-      line.setAttribute('x1', pt.x);
-      line.setAttribute('x2', pt.x);
-      circle.setAttribute('cx', pt.x);
-      circle.setAttribute('cy', this.advantageMidY || 42);
-    } else {
-      group.style.display = 'none';
-    }
+    updateAdvantageScrubber(this);
   }
 
   renderAdvantageChart() {
-    const chartArea = this.container.querySelector('#advantage-chart-area');
-    if (!chartArea || !this.game || !this.game.plies || this.game.plies.length === 0) {
-      if (chartArea) chartArea.innerHTML = '';
-      return;
-    }
-
-    const totalPlies = this.game.plies.length;
-    const width = 1000;
-    const height = 84;
-    const midY = height / 2;
-    const padX = 12;
-    const padY = 10;
-
-    this.advantageMidY = midY;
-    this.advantagePoints = this.game.plies.map((ply, i) => {
-      const x = padX + (i / (totalPlies - 1 || 1)) * (width - padX * 2);
-      const prob = typeof ply.winProb === 'number' && !isNaN(ply.winProb) ? ply.winProb : 0.5;
-      const y = padY + (1 - prob) * (height - padY * 2);
-      return { x, y, ply };
-    });
-
-    const curveD = createCurvedPath(this.advantagePoints);
-    const firstX = this.advantagePoints[0].x;
-    const lastX = this.advantagePoints[this.advantagePoints.length - 1].x;
-    const areaD = `${curveD} L ${lastX} ${midY} L ${firstX} ${midY} Z`;
-
-    const selectedPoint = (this.currentPly > 0 && this.currentPly <= totalPlies)
-      ? this.advantagePoints[this.currentPly - 1]
-      : (this.advantagePoints[0] || null);
-
-    const mgPly = this.game.middlegameStartPly;
-    const egPly = this.game.endgameStartPly;
-
-    let phaseMarkersSvg = '';
-    if (mgPly > 1 && mgPly <= totalPlies) {
-      const mgPt = this.advantagePoints[mgPly - 1];
-      phaseMarkersSvg += `
-        <line x1="${mgPt.x}" y1="6" x2="${mgPt.x}" y2="${height - 6}" stroke="#60a5fa" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.65" />
-        <text x="${mgPt.x}" y="12" fill="#93c5fd" font-size="9" font-weight="700" font-family="JetBrains Mono, monospace" text-anchor="middle">Middle</text>
-      `;
-    }
-    if (egPly > 1 && egPly <= totalPlies) {
-      const egPt = this.advantagePoints[egPly - 1];
-      phaseMarkersSvg += `
-        <line x1="${egPt.x}" y1="6" x2="${egPt.x}" y2="${height - 6}" stroke="#34d399" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.65" />
-        <text x="${egPt.x}" y="12" fill="#6ee7b7" font-size="9" font-weight="700" font-family="JetBrains Mono, monospace" text-anchor="middle">Endgame</text>
-      `;
-    }
-
-    chartArea.innerHTML = `
-      <div class="d-flex align-items-center justify-content-between px-1 pb-1 mb-1 border-bottom border-secondary border-opacity-25">
-        <div class="d-flex align-items-center gap-1.5">
-          <i class="bi bi-graph-up text-primary small"></i>
-          <span class="small fw-black" style="font-size: 11px;">Advantage Timeline</span>
-        </div>
-        <div class="d-flex align-items-center gap-2 font-monospace" style="font-size: 10px;">
-          <span class="d-flex align-items-center gap-1 text-info"><span class="rounded-circle d-inline-block bg-info" style="width: 6px; height: 6px;"></span>White+</span>
-          <span class="d-flex align-items-center gap-1 text-secondary"><span class="rounded-circle d-inline-block bg-secondary" style="width: 6px; height: 6px;"></span>Black+</span>
-        </div>
-      </div>
-      <div class="advantage-chart-canvas position-relative" id="advantage-chart-canvas">
-        <svg class="w-100 h-100" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display: block;">
-          <defs>
-            <linearGradient id="advWhiteGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.3" />
-              <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.02" />
-            </linearGradient>
-          </defs>
-          <!-- 50% Equality Line -->
-          <line x1="0" y1="${midY}" x2="${width}" y2="${midY}" stroke="#475569" stroke-width="1" stroke-dasharray="4,4" opacity="0.5" />
-          <!-- Gradient Area -->
-          <path d="${areaD}" fill="url(#advWhiteGrad)" />
-          <!-- Main Advantage Spline -->
-          <path d="${curveD}" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-          <!-- Phase Markers -->
-          ${phaseMarkersSvg}
-          <!-- Active Move Scrubber -->
-          <g id="advantage-scrubber-group" style="display: ${selectedPoint ? 'inline' : 'none'};">
-            <line id="scrubber-line" x1="${selectedPoint?.x || 0}" y1="0" x2="${selectedPoint?.x || 0}" y2="${height}" stroke="#fbbf24" stroke-width="1.8" opacity="0.9" />
-            <circle id="scrubber-circle" cx="${selectedPoint?.x || 0}" cy="${this.currentPly === 0 ? midY : (selectedPoint?.y || midY)}" r="4" fill="#fbbf24" stroke="#0f172a" stroke-width="1.5" />
-          </g>
-        </svg>
-        <div id="advantage-chart-tooltip" class="position-absolute d-none px-2 py-1 rounded bg-dark border border-secondary shadow text-white small" style="pointer-events: none; z-index: 10; font-size: 11px;"></div>
-      </div>
-    `;
-
-    const canvas = chartArea.querySelector('#advantage-chart-canvas');
-    const tooltip = chartArea.querySelector('#advantage-chart-tooltip');
-    if (canvas) {
-      const handleInteraction = (clientX) => {
-        const rect = canvas.getBoundingClientRect();
-        if (rect.width <= 0) return;
-        const relX = clientX - rect.left;
-        const ratio = Math.max(0, Math.min(1, relX / rect.width));
-        const targetPly = Math.max(1, Math.min(totalPlies, Math.round(ratio * (totalPlies - 1)) + 1));
-        this.goToPly(targetPly);
-      };
-
-      canvas.addEventListener('click', (e) => handleInteraction(e.clientX));
-
-      let isDragging = false;
-      canvas.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        handleInteraction(e.clientX);
-      });
-      window.addEventListener('mousemove', (e) => {
-        if (isDragging) handleInteraction(e.clientX);
-      });
-      window.addEventListener('mouseup', () => {
-        isDragging = false;
-      });
-
-      canvas.addEventListener('mousemove', (e) => {
-        if (!tooltip || !this.game || !this.game.plies.length) return;
-        const rect = canvas.getBoundingClientRect();
-        const relX = e.clientX - rect.left;
-        const ratio = Math.max(0, Math.min(1, relX / rect.width));
-        const idx = Math.max(0, Math.min(totalPlies - 1, Math.round(ratio * (totalPlies - 1))));
-        const ply = this.game.plies[idx];
-        if (!ply) return;
-
-        const dict = COMIC_DICTIONARY[ply.classification] || COMIC_DICTIONARY['good'];
-        const evalStr = ply.mate !== null && typeof ply.mate !== 'undefined'
-          ? `M${Math.abs(ply.mate)}`
-          : (ply.scoreCp > 0 ? `+${(ply.scoreCp / 100).toFixed(1)}` : (ply.scoreCp / 100).toFixed(1));
-
-        tooltip.innerHTML = `
-          <div class="d-flex align-items-center gap-1.5 font-monospace">
-            <span class="badge border border-dark rounded-circle" style="background:${dict.bg}; color:${dict.text}; width:16px; height:16px; padding:0; display:inline-flex; align-items:center; justify-content:center; font-size:9px;">
-              ${dict.symbol}
-            </span>
-            <span class="fw-bold">${ply.ply}. ${ply.san}</span>
-            <span class="text-info fw-bold">(${evalStr})</span>
-          </div>
-        `;
-        tooltip.classList.remove('d-none');
-        const tipWidth = tooltip.offsetWidth || 120;
-        const leftPos = Math.max(8, Math.min(rect.width - tipWidth - 8, relX + 10));
-        tooltip.style.left = `${leftPos}px`;
-        tooltip.style.top = `6px`;
-      });
-
-      canvas.addEventListener('mouseleave', () => {
-        if (tooltip) tooltip.classList.add('d-none');
-      });
-    }
+    renderAdvantageChart(this);
   }
 
   render() {
