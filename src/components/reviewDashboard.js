@@ -330,6 +330,9 @@ export class ReviewDashboard {
       secondBestMove,
       threatMove,
       badge,
+      whiteName: this.game?.white || 'White',
+      blackName: this.game?.black || 'Black',
+      showPlayerBars: true,
     });
 
     // Update Eval Bar
@@ -846,6 +849,9 @@ export class ReviewDashboard {
       orientation: this.orientation,
       theme: this.theme,
       interactive: false,
+      showPlayerBars: true,
+      whiteName: this.game.white || 'White',
+      blackName: this.game.black || 'Black',
     });
 
     // Bind Navigation Buttons

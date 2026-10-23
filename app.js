@@ -3077,10 +3077,9 @@ const backgroundAnalysisQueue = new BackgroundAnalysisQueue();
 /**
  * Vanilla JS Chessboard Component
  * Renders an interactive 8x8 chessboard with SVG piece rendering,
- * move highlights, arrows, and comic sound effect badges.
+ * move highlights, arrows, comic sound effect badges, captured pieces,
+ * in-check King highlight, and drag-and-drop move interaction.
  */
-
-
 
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
@@ -3092,6 +3091,57 @@ const THEMES = {
   icy: { light: '#dee3e6', dark: '#587a9f' },
 };
 
+function getCapturedPiecesAndDiff(fen) {
+  const STARTING = {
+    w: { p: 8, n: 2, b: 2, r: 2, q: 1 },
+    b: { p: 8, n: 2, b: 2, r: 2, q: 1 }
+  };
+  const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+  const current = {
+    w: { p: 0, n: 0, b: 0, r: 0, q: 0 },
+    b: { p: 0, n: 0, b: 0, r: 0, q: 0 }
+  };
+
+  const placement = (fen || '').split(' ')[0] || '';
+  for (const char of placement) {
+    if (/[pnbrq]/i.test(char)) {
+      const color = char === char.toUpperCase() ? 'w' : 'b';
+      const type = char.toLowerCase();
+      if (current[color] && current[color][type] !== undefined) {
+        current[color][type]++;
+      }
+    }
+  }
+
+  const capturedByWhite = [];
+  ['q', 'r', 'b', 'n', 'p'].forEach((type) => {
+    const missing = Math.max(0, STARTING.b[type] - current.b[type]);
+    for (let i = 0; i < missing; i++) capturedByWhite.push(`b${type.toUpperCase()}`);
+  });
+
+  const capturedByBlack = [];
+  ['q', 'r', 'b', 'n', 'p'].forEach((type) => {
+    const missing = Math.max(0, STARTING.w[type] - current.w[type]);
+    for (let i = 0; i < missing; i++) capturedByBlack.push(`w${type.toUpperCase()}`);
+  });
+
+  let whiteMaterial = 0;
+  let blackMaterial = 0;
+  Object.keys(PIECE_VALUES).forEach((type) => {
+    whiteMaterial += current.w[type] * PIECE_VALUES[type];
+    blackMaterial += current.b[type] * PIECE_VALUES[type];
+  });
+
+  const diff = whiteMaterial - blackMaterial;
+
+  return {
+    capturedByWhite,
+    capturedByBlack,
+    whiteDiff: diff > 0 ? diff : 0,
+    blackDiff: diff < 0 ? Math.abs(diff) : 0
+  };
+}
+
 class Chessboard {
   constructor(containerEl, options = {}) {
     this.container = containerEl;
@@ -3099,6 +3149,9 @@ class Chessboard {
     this.orientation = options.orientation || 'w';
     this.theme = options.theme || 'green';
     this.interactive = options.interactive || false;
+    this.showPlayerBars = options.showPlayerBars !== undefined ? options.showPlayerBars : true;
+    this.whiteName = options.whiteName || 'White';
+    this.blackName = options.blackName || 'Black';
     this.onMove = options.onMove || null; // (from, to) => {}
     this.legalMovesFrom = options.legalMovesFrom || null; // (square) => string[] destinations
     this.lastMove = options.lastMove || null; // { from, to }
@@ -3119,7 +3172,7 @@ class Chessboard {
 
   setProps(newProps) {
     let shouldRerender = false;
-    ['fen', 'orientation', 'theme', 'interactive', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'secondBestMove', 'threatMove', 'badge'].forEach((k) => {
+    ['fen', 'orientation', 'theme', 'interactive', 'showPlayerBars', 'whiteName', 'blackName', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'secondBestMove', 'threatMove', 'badge'].forEach((k) => {
       if (newProps[k] !== undefined && newProps[k] !== this[k]) {
         this[k] = newProps[k];
         shouldRerender = true;
@@ -3138,7 +3191,7 @@ class Chessboard {
   }
 
   parseFen(fen) {
-    const rows = fen.split(' ')[0].split('/');
+    const rows = (fen || '').split(' ')[0].split('/');
     const board = [];
     for (const r of rows) {
       const row = [];
@@ -3160,14 +3213,12 @@ class Chessboard {
 
     if (this.selectedSquare) {
       if (this.selectedSquare === square) {
-        // Deselect
         this.selectedSquare = null;
         this.possibleDests = [];
         this.render();
         return;
       }
 
-      // Check if clicking a destination
       if (this.possibleDests.includes(square)) {
         const from = this.selectedSquare;
         this.selectedSquare = null;
@@ -3179,7 +3230,6 @@ class Chessboard {
       }
     }
 
-    // Try selecting piece
     if (piece) {
       this.selectedSquare = square;
       this.possibleDests = this.legalMovesFrom ? this.legalMovesFrom(square) : [];
@@ -3191,20 +3241,96 @@ class Chessboard {
     }
   }
 
+  createPlayerBar(color, capturedData) {
+    const isWhite = color === 'w';
+    const name = isWhite ? (this.whiteName || 'White') : (this.blackName || 'Black');
+    const captured = isWhite ? capturedData.capturedByWhite : capturedData.capturedByBlack;
+    const diff = isWhite ? capturedData.whiteDiff : capturedData.blackDiff;
+
+    const bar = document.createElement('div');
+    bar.className = 'board-player-bar';
+
+    const left = document.createElement('div');
+    left.className = 'd-flex align-items-center gap-1.5 min-w-0';
+    left.innerHTML = `
+      <span style="font-size: 13px; line-height: 1;">${isWhite ? '⚪' : '⚫'}</span>
+      <span class="text-truncate fw-bold" style="max-width: 160px;">${name}</span>
+    `;
+
+    const right = document.createElement('div');
+    right.className = 'd-flex align-items-center';
+
+    const piecesDiv = document.createElement('div');
+    piecesDiv.className = 'board-captured-pieces';
+    captured.forEach((pKey) => {
+      const pSrc = INLINE_PIECE_DATA_URLS[pKey] || `./pieces/${pKey}.svg`;
+      const pImg = document.createElement('img');
+      pImg.src = pSrc;
+      pImg.className = 'captured-piece-img';
+      pImg.alt = pKey;
+      piecesDiv.appendChild(pImg);
+    });
+
+    right.appendChild(piecesDiv);
+
+    if (diff > 0) {
+      const diffBadge = document.createElement('span');
+      diffBadge.className = 'material-diff-badge bg-body-secondary text-secondary';
+      diffBadge.textContent = `+${diff}`;
+      right.appendChild(diffBadge);
+    }
+
+    bar.appendChild(left);
+    bar.appendChild(right);
+    return bar;
+  }
+
   render() {
     this.container.innerHTML = '';
-
-    const boardWrapper = document.createElement('div');
-    boardWrapper.className = 'board-container';
-
-    const grid = document.createElement('div');
-    grid.className = 'board-grid';
 
     const board = this.parseFen(this.fen);
     const files = this.orientation === 'w' ? FILES : [...FILES].reverse();
     const ranks = this.orientation === 'w' ? RANKS : [...RANKS].reverse();
     const themeColors = THEMES[this.theme] || THEMES.green;
     const pendingAnimations = [];
+
+    let checkSquare = null;
+    try {
+      if (Chess) {
+        const c = new Chess(this.fen);
+        if (typeof c.in_check === 'function' && c.in_check()) {
+          const turn = c.turn();
+          const kingChar = turn === 'w' ? 'K' : 'k';
+          ranks.forEach((r) => {
+            files.forEach((f) => {
+              const origR = RANKS.indexOf(r);
+              const origF = FILES.indexOf(f);
+              if (board[origR] && board[origR][origF] === kingChar) {
+                checkSquare = `${f}${r}`;
+              }
+            });
+          });
+        }
+      }
+    } catch {}
+
+    const capturedData = getCapturedPiecesAndDiff(this.fen);
+
+    const outerWrapper = document.createElement('div');
+    outerWrapper.className = 'd-flex flex-column align-items-center w-100';
+
+    const topColor = this.orientation === 'w' ? 'b' : 'w';
+    const bottomColor = this.orientation === 'w' ? 'w' : 'b';
+
+    if (this.showPlayerBars) {
+      outerWrapper.appendChild(this.createPlayerBar(topColor, capturedData));
+    }
+
+    const boardWrapper = document.createElement('div');
+    boardWrapper.className = 'board-container';
+
+    const grid = document.createElement('div');
+    grid.className = 'board-grid';
 
     ranks.forEach((rank, rIdx) => {
       files.forEach((file, fIdx) => {
@@ -3216,11 +3342,13 @@ class Chessboard {
         sqDiv.className = 'board-square';
         sqDiv.dataset.square = square;
 
-        // Last move highlight
         const isLastMove = this.lastMove && (this.lastMove.from === square || this.lastMove.to === square);
         const isSelected = this.selectedSquare === square;
+        const isCheck = checkSquare === square;
 
-        if (isSelected) {
+        if (isCheck) {
+          sqDiv.classList.add('in-check');
+        } else if (isSelected) {
           sqDiv.classList.add('selected');
         } else if (isLastMove) {
           sqDiv.classList.add(isDark ? 'last-move-dark' : 'last-move-light');
@@ -3232,7 +3360,6 @@ class Chessboard {
           sqDiv.style.boxShadow = 'inset 0 0 0 4px rgba(245, 158, 11, 0.85)';
         }
 
-        // Square coordinates on edges
         if (rIdx === 7) {
           const fileLabel = document.createElement('span');
           fileLabel.className = 'square-coord-file';
@@ -3248,7 +3375,6 @@ class Chessboard {
           sqDiv.appendChild(rankLabel);
         }
 
-        // Piece
         const origR = RANKS.indexOf(rank);
         const origF = FILES.indexOf(file);
         const pieceChar = board[origR] ? board[origR][origF] : null;
@@ -3263,9 +3389,32 @@ class Chessboard {
           img.src = pieceSrc;
           img.className = 'piece-img';
           img.alt = `${colorCode === 'w' ? 'White' : 'Black'} ${typeCode}`;
-          img.draggable = false;
 
-          // Animate piece movement from previous square
+          if (this.interactive) {
+            img.draggable = true;
+
+            img.addEventListener('dragstart', (e) => {
+              if (!this.interactive) {
+                e.preventDefault();
+                return;
+              }
+              this.selectedSquare = square;
+              this.possibleDests = this.legalMovesFrom ? this.legalMovesFrom(square) : [];
+              this.render();
+
+              e.dataTransfer.setData('text/plain', square);
+              e.dataTransfer.effectAllowed = 'move';
+              img.classList.add('is-dragging');
+            });
+
+            img.addEventListener('dragend', () => {
+              img.classList.remove('is-dragging');
+              this.container.querySelectorAll('.board-square').forEach((s) => s.classList.remove('drag-over'));
+            });
+          } else {
+            img.draggable = false;
+          }
+
           if (this.lastMove && this.lastMove.to === square && this.lastMove.from) {
             const currentMoveKey = `${this.lastMove.from}-${this.lastMove.to}-${this.fen}`;
             if (this.lastAnimatedMoveKey !== currentMoveKey) {
@@ -3290,7 +3439,6 @@ class Chessboard {
           sqDiv.appendChild(img);
         }
 
-        // Possible destination dot or capture target border
         if (this.possibleDests.includes(square)) {
           if (pieceChar) {
             sqDiv.classList.add('capture-target');
@@ -3301,7 +3449,6 @@ class Chessboard {
           }
         }
 
-        // Comic Badge
         if (this.badge && this.badge.square === square) {
           const comic = getComicBadge(this.badge.classification, square);
           const badgeEl = document.createElement('div');
@@ -3311,6 +3458,40 @@ class Chessboard {
           badgeEl.title = `${comic.term} (${COMIC_DICTIONARY[this.badge.classification]?.standardLabel || ''})`;
           badgeEl.innerHTML = `<span>${comic.symbol}</span><span>${comic.term}</span>`;
           sqDiv.appendChild(badgeEl);
+        }
+
+        if (this.interactive) {
+          sqDiv.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (!sqDiv.classList.contains('drag-over')) {
+              sqDiv.classList.add('drag-over');
+            }
+          });
+
+          sqDiv.addEventListener('dragleave', (e) => {
+            if (e.relatedTarget && sqDiv.contains(e.relatedTarget)) return;
+            sqDiv.classList.remove('drag-over');
+          });
+
+          sqDiv.addEventListener('drop', (e) => {
+            e.preventDefault();
+            sqDiv.classList.remove('drag-over');
+            const from = e.dataTransfer.getData('text/plain') || this.selectedSquare;
+            const to = square;
+
+            if (from && to && from !== to && this.possibleDests.includes(to)) {
+              this.selectedSquare = null;
+              this.possibleDests = [];
+              if (this.onMove) {
+                this.onMove(from, to);
+              }
+            } else if (from && from === to) {
+              this.selectedSquare = null;
+              this.possibleDests = [];
+              this.render();
+            }
+          });
         }
 
         sqDiv.addEventListener('click', () => {
@@ -3323,25 +3504,20 @@ class Chessboard {
 
     boardWrapper.appendChild(grid);
 
-    // SVG Arrows Layer (Best move, second best move, threat arrow)
     const svgLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svgLayer.setAttribute('class', 'position-absolute top-0 start-0 w-100 h-100 pointer-events-none');
     svgLayer.style.pointerEvents = 'none';
     svgLayer.style.zIndex = '15';
 
-    // Thin green arrow for second best move (rendered underneath if overlapping)
     if (this.secondBestMove && this.secondBestMove.from && this.secondBestMove.to) {
       this.drawArrow(svgLayer, this.secondBestMove.from, this.secondBestMove.to, '#10b981', false, 'second-best-move', 2.2);
     }
-    // Thick green arrow for best move
     if (this.bestMove && this.bestMove.from && this.bestMove.to) {
       this.drawArrow(svgLayer, this.bestMove.from, this.bestMove.to, '#10b981', false, 'best-move', 4.8);
     }
-    // Red dashed arrow for threat
     if (this.threatMove && this.threatMove.from && this.threatMove.to) {
       this.drawArrow(svgLayer, this.threatMove.from, this.threatMove.to, '#ef4444', true, 'threat-move', 3.5);
     }
-    // User custom arrows (drawn via right-click drag)
     this.userArrows.forEach((arr, idx) => {
       this.drawArrow(svgLayer, arr.from, arr.to, '#f59e0b', false, `user-${idx}`, 3.8);
     });
@@ -3392,7 +3568,13 @@ class Chessboard {
       }
     });
 
-    this.container.appendChild(boardWrapper);
+    outerWrapper.appendChild(boardWrapper);
+
+    if (this.showPlayerBars) {
+      outerWrapper.appendChild(this.createPlayerBar(bottomColor, capturedData));
+    }
+
+    this.container.appendChild(outerWrapper);
 
     if (pendingAnimations.length > 0) {
       requestAnimationFrame(() => {
@@ -3913,11 +4095,15 @@ class BotArena {
     if (!this.board) return;
     const history = this.chess.history({ verbose: true });
     const lastMove = history.length > 0 ? { from: history[history.length - 1].from, to: history[history.length - 1].to } : null;
+    const isUserWhite = this.userColor === 'w';
 
     this.board.setProps({
       fen: this.chess.fen(),
       orientation: this.userColor,
       lastMove,
+      whiteName: isUserWhite ? 'You' : this.selectedBot.name,
+      blackName: isUserWhite ? this.selectedBot.name : 'You',
+      showPlayerBars: true,
       interactive: !this.isBotThinking && !this.gameResult,
       legalMovesFrom: (sq) => {
         const moves = this.chess.moves({ square: sq, verbose: true });
@@ -4100,10 +4286,14 @@ class BotArena {
 
     // Mount Chessboard
     const boardMount = this.container.querySelector('#bot-board-mount');
+    const isUserWhite = this.userColor === 'w';
     this.board = new Chessboard(boardMount, {
       fen: this.chess.fen(),
       orientation: this.userColor,
       theme: this.theme,
+      whiteName: isUserWhite ? 'You' : this.selectedBot.name,
+      blackName: isUserWhite ? this.selectedBot.name : 'You',
+      showPlayerBars: true,
       interactive: true,
       legalMovesFrom: (sq) => {
         const moves = this.chess.moves({ square: sq, verbose: true });
@@ -5165,6 +5355,9 @@ class ReviewDashboard {
       secondBestMove,
       threatMove,
       badge,
+      whiteName: this.game?.white || 'White',
+      blackName: this.game?.black || 'Black',
+      showPlayerBars: true,
     });
 
     // Update Eval Bar
@@ -5681,6 +5874,9 @@ class ReviewDashboard {
       orientation: this.orientation,
       theme: this.theme,
       interactive: false,
+      showPlayerBars: true,
+      whiteName: this.game.white || 'White',
+      blackName: this.game.black || 'Black',
     });
 
     // Bind Navigation Buttons

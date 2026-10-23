@@ -297,11 +297,15 @@ export class BotArena {
     if (!this.board) return;
     const history = this.chess.history({ verbose: true });
     const lastMove = history.length > 0 ? { from: history[history.length - 1].from, to: history[history.length - 1].to } : null;
+    const isUserWhite = this.userColor === 'w';
 
     this.board.setProps({
       fen: this.chess.fen(),
       orientation: this.userColor,
       lastMove,
+      whiteName: isUserWhite ? 'You' : this.selectedBot.name,
+      blackName: isUserWhite ? this.selectedBot.name : 'You',
+      showPlayerBars: true,
       interactive: !this.isBotThinking && !this.gameResult,
       legalMovesFrom: (sq) => {
         const moves = this.chess.moves({ square: sq, verbose: true });
@@ -484,10 +488,14 @@ export class BotArena {
 
     // Mount Chessboard
     const boardMount = this.container.querySelector('#bot-board-mount');
+    const isUserWhite = this.userColor === 'w';
     this.board = new Chessboard(boardMount, {
       fen: this.chess.fen(),
       orientation: this.userColor,
       theme: this.theme,
+      whiteName: isUserWhite ? 'You' : this.selectedBot.name,
+      blackName: isUserWhite ? this.selectedBot.name : 'You',
+      showPlayerBars: true,
       interactive: true,
       legalMovesFrom: (sq) => {
         const moves = this.chess.moves({ square: sq, verbose: true });
