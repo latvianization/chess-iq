@@ -542,8 +542,23 @@ export class ReviewDashboard {
 
     const userColor = this.game.userColor || 'w';
     const isWhiteUser = userColor === 'w';
+
+    const whiteName = this.game.white || 'White';
+    const blackName = this.game.black || 'Black';
+    const whiteElo = this.game.whiteElo || 1500;
+    const blackElo = this.game.blackElo || 1500;
+
     const userAcc = Number(this.game.userAccuracy ?? this.game.accuracy ?? this.game.overallAccuracy ?? 85).toFixed(1);
     const oppAcc = Number(this.game.opponentAccuracy ?? 85).toFixed(1);
+
+    const whiteAcc = isWhiteUser ? userAcc : oppAcc;
+    const blackAcc = isWhiteUser ? oppAcc : userAcc;
+
+    const userGameElo = this.game.userGameElo || this.game.overallGameElo || (isWhiteUser ? whiteElo : blackElo);
+    const oppGameElo = this.game.oppGameElo || this.game.opponentGameElo || (isWhiteUser ? blackElo : whiteElo);
+
+    const whiteGameElo = isWhiteUser ? userGameElo : oppGameElo;
+    const blackGameElo = isWhiteUser ? oppGameElo : userGameElo;
 
     const userPhases = this.game.userPhaseElos || this.game.phaseElos || {};
     const oppPhases = this.game.opponentPhaseElos || {};
@@ -630,24 +645,65 @@ export class ReviewDashboard {
 
         <!-- Right: Move List & Performance Stats in Columns on Desktop -->
         <div class="col-12 col-lg-6 col-xl-7 d-flex flex-column gap-3">
-          <!-- Match Overview Header Card -->
+          <!-- Match Overview & Player VS Player Header Card -->
           <div class="comic-card p-3">
-            <div class="d-flex align-items-center justify-content-between">
-              <div>
-                <div class="fw-black fs-6 text-truncate" style="max-width: 280px;">
-                  ${this.game.white} vs ${this.game.black}
-                </div>
-                <div class="text-secondary small" style="font-size: 11px;">
-                  ${this.game.ecoName || this.game.ecoCode || 'Chess Match'} · ${this.game.date || ''}
-                </div>
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom" style="border-color: var(--arcade-border) !important;">
+              <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-warning text-dark font-monospace fw-black px-2 py-1">${this.game.ecoCode || 'PGN'}</span>
+                <span class="fw-bold small text-truncate" style="max-width: 260px;">${this.game.ecoName || 'Chess Match'}</span>
+                <span class="text-secondary small font-monospace d-none sm:inline">· ${this.game.date || ''}</span>
               </div>
               <div class="d-flex align-items-center gap-2">
                 <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-2 py-1" id="btn-share-review" title="Copy Review Summary to Clipboard">
                   <i class="bi bi-share me-1"></i>Share
                 </button>
-                <span class="badge ${this.game.result === '1-0' ? 'bg-success' : this.game.result === '0-1' ? 'bg-danger' : 'bg-secondary'} font-monospace px-2.5 py-1.5 fs-6">
-                  ${this.game.result}
-                </span>
+              </div>
+            </div>
+
+            <!-- Player VS Player Cards Row -->
+            <div class="row g-2 align-items-center">
+              <!-- White Player -->
+              <div class="col-5">
+                <div class="p-2 rounded d-flex flex-column gap-1" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
+                  <div class="d-flex align-items-center gap-1.5 min-w-0">
+                    <span class="fs-6 lh-1">⚪</span>
+                    <span class="fw-black small text-truncate ${isWhiteUser ? 'text-warning' : 'text-body'}">${whiteName}</span>
+                    ${isWhiteUser ? '<span class="badge bg-warning text-dark fw-bold px-1 py-0.5" style="font-size: 8px;">YOU</span>' : ''}
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 font-monospace" style="font-size: 11px;">
+                    <span class="text-secondary">${whiteElo} Elo</span>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold">⭐ ${whiteGameElo}</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle fw-bold">🎯 ${whiteAcc}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Center VS & Result -->
+              <div class="col-2 text-center">
+                <div class="d-flex flex-column align-items-center justify-content-center">
+                  <span class="badge ${this.game.result === '1-0' ? 'bg-success' : this.game.result === '0-1' ? 'bg-danger' : 'bg-secondary'} font-monospace px-2 py-1 mb-1 fw-black" style="font-size: 13px;">
+                    ${this.game.result}
+                  </span>
+                  <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 9px;">RESULT</span>
+                </div>
+              </div>
+
+              <!-- Black Player -->
+              <div class="col-5">
+                <div class="p-2 rounded d-flex flex-column gap-1" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
+                  <div class="d-flex align-items-center justify-content-between min-w-0">
+                    <div class="d-flex align-items-center gap-1.5 min-w-0">
+                      <span class="fs-6 lh-1">⚫</span>
+                      <span class="fw-black small text-truncate ${!isWhiteUser ? 'text-warning' : 'text-body'}">${blackName}</span>
+                      ${!isWhiteUser ? '<span class="badge bg-warning text-dark fw-bold px-1 py-0.5" style="font-size: 8px;">YOU</span>' : ''}
+                    </div>
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 font-monospace" style="font-size: 11px;">
+                    <span class="text-secondary">${blackElo} Elo</span>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold">⭐ ${blackGameElo}</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle fw-bold">🎯 ${blackAcc}%</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -920,11 +976,11 @@ Result: ${this.game.result || '*'}`;
         const hasAny = userCnt > 0 || oppCnt > 0;
 
         return `
-          <div class="d-flex align-items-center justify-content-between py-1 px-2 rounded ${hasAny ? 'bg-body-tertiary bg-opacity-25' : 'opacity-60'}" style="font-size: 12px;">
+          <div class="d-flex align-items-center justify-content-between py-1 px-2 rounded ${hasAny ? 'bg-body-tertiary bg-opacity-25' : 'opacity-50'}" style="font-size: 12px;">
             <span class="font-monospace fw-black text-end ${userCnt > 0 ? 'text-primary' : 'text-body-tertiary'}" style="width: 38px;">
               ${userCnt}
             </span>
-            <span class="badge border border-dark rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
+            <span class="badge rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
               style="background-color: ${dict.bg}; color: ${dict.text}; font-size: 11px; font-weight: 800; min-width: 125px; justify-content: center;">
               <span>${dict.symbol}</span>
               <span>${dict.words[0]}</span>

@@ -1472,13 +1472,14 @@ const PST_MG_KING = [
 const FEN_EVAL_CACHE = /* @__PURE__ */ new Map();
 function cpToWinProb(cp, mate) {
   if (mate !== void 0 && mate !== null) {
-    if (mate > 0) return 1;
-    if (mate < 0) return 0;
+    if (mate > 0) return 1.0;
+    if (mate < 0) return 0.0;
     return 0.5;
   }
-  return 1 / (1 + Math.pow(10, -cp / 400));
+  return 1 / (1 + Math.exp(-0.00368208 * cp));
 }
 function calculateMoveAccuracy(winProbLoss) {
+  if (winProbLoss <= 0.001) return 100;
   const acc = 103.1668 * Math.exp(-4.354 * winProbLoss) - 3.1669;
   return Math.min(100, Math.max(0, Math.round(acc * 10) / 10));
 }
@@ -1904,30 +1905,65 @@ async function evaluateFenHybrid(fen, isDeep = false) {
   return localResult;
 }
 
-function isMaterialSacrifice(fenBefore, fenAfter, moverColor) {
-  const cBefore = new Chess(fenBefore);
-  const cAfter = new Chess(fenAfter);
-  let moverValBefore = 0;
-  let moverValAfter = 0;
-  cBefore.board().flat().forEach((p) => {
-    if (p && p.color === moverColor && p.type !== "k") {
-      moverValBefore += PIECE_VALUES[p.type];
+function isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci = null) {
+  try {
+    const cBefore = new Chess(fenBefore);
+    const cAfter = new Chess(fenAfter);
+
+    if (opponentBestUci && opponentBestUci.length >= 4) {
+      const from = opponentBestUci.slice(0, 2);
+      const to = opponentBestUci.slice(2, 4);
+      const promotion = opponentBestUci.length > 4 ? opponentBestUci[4] : void 0;
+      const oppMove = cAfter.move({ from, to, promotion });
+      if (oppMove && oppMove.captured) {
+        let moverValBefore = 0;
+        let moverValAfterOpp = 0;
+        cBefore.board().flat().forEach((p) => {
+          if (p && p.color === moverColor && p.type !== "k") moverValBefore += PIECE_VALUES[p.type];
+        });
+        cAfter.board().flat().forEach((p) => {
+          if (p && p.color === moverColor && p.type !== "k") moverValAfterOpp += PIECE_VALUES[p.type];
+        });
+        if (moverValAfterOpp <= moverValBefore - 200) {
+          return true;
+        }
+      }
     }
-  });
-  cAfter.board().flat().forEach((p) => {
-    if (p && p.color === moverColor && p.type !== "k") {
-      moverValAfter += PIECE_VALUES[p.type];
-    }
-  });
-  return moverValAfter <= moverValBefore - 200;
+
+    let moverValBefore = 0;
+    let moverValAfter = 0;
+    cBefore.board().flat().forEach((p) => {
+      if (p && p.color === moverColor && p.type !== "k") moverValBefore += PIECE_VALUES[p.type];
+    });
+    cAfter.board().flat().forEach((p) => {
+      if (p && p.color === moverColor && p.type !== "k") moverValAfter += PIECE_VALUES[p.type];
+    });
+    return moverValAfter <= moverValBefore - 200;
+  } catch {
+    return false;
+  }
 }
-function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter, winProbLoss, isBook, multiPv1WinProb, multiPv2WinProb, fenBefore, fenAfter, moverColor) {
+
+function classifyMove(
+  playedUci,
+  bestMoveUci,
+  winProbBefore,
+  winProbAfter,
+  winProbLoss,
+  isBook,
+  multiPv1WinProb,
+  multiPv2WinProb,
+  fenBefore,
+  fenAfter,
+  moverColor,
+  opponentBestUci = null
+) {
   if (isBook) return "book";
   const isExactBest = Boolean(bestMoveUci && playedUci && playedUci.toLowerCase() === bestMoveUci.toLowerCase());
 
   if (isExactBest) {
-    if (winProbAfter >= 0.48 && winProbBefore < 0.9) {
-      if (isMaterialSacrifice(fenBefore, fenAfter, moverColor)) {
+    if (winProbAfter >= 0.48 && winProbBefore < 0.90) {
+      if (isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci)) {
         return "brilliant";
       }
     }
@@ -1940,31 +1976,34 @@ function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter, winPr
   if (winProbBefore >= 0.75 && winProbAfter <= 0.55) {
     return "missed_win";
   }
-  if (winProbLoss > 0.2) return "blunder";
-  if (winProbLoss > 0.1) return "mistake";
+  if (winProbLoss > 0.20) return "blunder";
+  if (winProbLoss > 0.10) return "mistake";
   if (winProbLoss > 0.05) return "inaccuracy";
   if (winProbLoss <= 0.02) return "excellent";
   return "good";
 }
-function calculatePhaseElo(baseElo, acpl, movesCount, isOverall = false, result = "*", userColor = "w") {
-  if (movesCount < 3) return null;
-  const expectedAcpl = Math.max(18, 135 - baseElo * 0.05);
-  const eloDelta = (expectedAcpl - acpl) * 4.5;
-  const maxClamp = isOverall ? 320 : 220;
-  const clampedDelta = Math.min(maxClamp, Math.max(-maxClamp, eloDelta));
+
+function calculatePerformanceElo(baseElo, accuracy, movesCount, result = "*", userColor = "w") {
+  if (!movesCount || movesCount < 3) return null;
+  const anchor = baseElo && baseElo >= 400 ? baseElo : 1500;
+  const acc = typeof accuracy === 'number' && !isNaN(accuracy) ? accuracy : 80;
+  const expectedAcc = Math.min(96, Math.max(50, 48 + (anchor / 50)));
+  const accDelta = acc - expectedAcc;
+  const eloDelta = accDelta * 32;
+  const clampedDelta = Math.min(500, Math.max(-500, eloDelta));
+
   let resultBonus = 0;
-  if (isOverall) {
-    if (result === "1-0" && userColor === "w" || result === "0-1" && userColor === "b") {
-      resultBonus = 25;
-    } else if (result === "1/2-1/2") {
-      resultBonus = 0;
-    } else if (result !== "*") {
-      resultBonus = -25;
-    }
+  if (result === "1-0") {
+    resultBonus = userColor === "w" ? 25 : -25;
+  } else if (result === "0-1") {
+    resultBonus = userColor === "b" ? 25 : -25;
   }
-  const estimated = Math.round(baseElo + clampedDelta + resultBonus);
-  return Math.min(3000, Math.max(400, estimated));
+
+  const estimated = Math.round(anchor + clampedDelta + resultBonus);
+  return Math.min(3100, Math.max(400, estimated));
 }
+
+const calculatePhaseElo = calculatePerformanceElo;
 
 /* --- src/services/engineRefutations.js --- */
 async function detectThreat(fen) {
@@ -2219,7 +2258,12 @@ async function prepareMoveExplanation(cur) {
       punishmentSteps,
       punishmentSummary,
       bestSteps,
-      bestSummary
+      bestSummary,
+      winProbBefore: cur.winProbBefore,
+      winProbAfter: cur.winProbAfter,
+      scoreBefore: cur.scoreBefore,
+      scoreAfter: cur.scoreAfter,
+      classification: cur.classification
     };
   } catch {
     return null;
@@ -2570,7 +2614,11 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         }
       }
       const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
+      const oppBestUci = (engineAfter.pv && engineAfter.pv[0]) || "";
       const multiPv2WinProb = engineBefore.multiPv2ScoreCp !== void 0 ? cpToWinProb(engineBefore.multiPv2ScoreCp) : void 0;
+      const moverMultiPv2WinProb = multiPv2WinProb !== void 0
+        ? (item.side === "w" ? multiPv2WinProb : 1 - multiPv2WinProb)
+        : void 0;
       const classification = classifyMove(
         playedUci,
         bestMoveUci,
@@ -2579,10 +2627,11 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         winProbLoss,
         item.isBook,
         moverWinProbBefore,
-        multiPv2WinProb,
+        moverMultiPv2WinProb,
         item.fenBefore,
         item.fenAfter,
-        item.side
+        item.side,
+        oppBestUci
       );
       const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
       let threat = null;
@@ -2601,7 +2650,12 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
           bestMoveUci,
           bestMoveSan: bestMoveSan || item.moveObj.san,
           punishmentPv: engineAfter.pv,
-          bestPv: engineBefore.pv
+          bestPv: engineBefore.pv,
+          winProbBefore: moverWinProbBefore,
+          winProbAfter: moverWinProbAfter,
+          scoreBefore: whiteScoreBefore,
+          scoreAfter: whiteScoreAfter,
+          classification
         });
       }
       plies[i] = {
@@ -2619,10 +2673,14 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         timeSpent: item.timeSpent,
         isTimeTrouble: item.isTimeTrouble,
         isImpulsive,
+        scoreBefore: whiteScoreBefore,
+        scoreAfter: whiteScoreAfter,
         scoreCp: whiteScoreAfter,
         mate: engineAfter.mate,
         winProb: whiteWinProbAfter,
         winProbBefore: whiteWinProbBefore,
+        moverWinProbBefore,
+        moverWinProbAfter,
         winProbLoss,
         accuracy,
         classification,
@@ -2741,14 +2799,16 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     overall: calcAcpl(oppPhaseLosses.overall)
   };
 
-  const overallGameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.overall, userMovesCount, true, result, userColor) ?? userBaseElo;
-  const openingElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.opening, userPhaseLosses.opening.length) ?? userBaseElo;
-  const middlegameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.middlegame, userPhaseLosses.middlegame.length) ?? userBaseElo;
-  const endgameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.endgame, userPhaseLosses.endgame.length) ?? userBaseElo;
+  const overallGameElo = calculatePerformanceElo(userBaseElo, userAccuracy, userMovesCount, result, userColor) ?? userBaseElo;
+  const oppOverallGameElo = calculatePerformanceElo(oppBaseElo, opponentAccuracy, oppMovesCount, result, oppColor) ?? oppBaseElo;
 
-  const oppOpeningElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.opening, oppPhaseLosses.opening.length) ?? oppBaseElo;
-  const oppMiddlegameElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.middlegame, oppPhaseLosses.middlegame.length) ?? oppBaseElo;
-  const oppEndgameElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.endgame, oppPhaseLosses.endgame.length) ?? oppBaseElo;
+  const openingElo = calculatePerformanceElo(userBaseElo, userPhaseAccuracy.opening ?? userAccuracy, userPhaseAcc.opening.length, "*", userColor) ?? userBaseElo;
+  const middlegameElo = calculatePerformanceElo(userBaseElo, userPhaseAccuracy.middlegame ?? userAccuracy, userPhaseAcc.middlegame.length, "*", userColor) ?? userBaseElo;
+  const endgameElo = calculatePerformanceElo(userBaseElo, userPhaseAccuracy.endgame ?? userAccuracy, userPhaseAcc.endgame.length, "*", userColor) ?? userBaseElo;
+
+  const oppOpeningElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.opening ?? opponentAccuracy, oppPhaseAcc.opening.length, "*", oppColor) ?? oppBaseElo;
+  const oppMiddlegameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.middlegame ?? opponentAccuracy, oppPhaseAcc.middlegame.length, "*", oppColor) ?? oppBaseElo;
+  const oppEndgameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.endgame ?? opponentAccuracy, oppPhaseAcc.endgame.length, "*", oppColor) ?? oppBaseElo;
 
   return {
     id: `game_${Date.now()}`,
@@ -2772,9 +2832,15 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     userPhaseAccuracy,
     opponentPhaseAccuracy,
     overallGameElo,
+    userGameElo: overallGameElo,
+    oppGameElo: oppOverallGameElo,
+    opponentGameElo: oppOverallGameElo,
     openingElo,
     middlegameElo,
     endgameElo,
+    oppOpeningElo,
+    oppMiddlegameElo,
+    oppEndgameElo,
     phaseElos: {
       opening: openingElo,
       middlegame: middlegameElo,
@@ -4421,33 +4487,41 @@ async function openWhyModal(dashboard, targetEval = null) {
   const comic = getComicBadge(cur.classification, cur.san);
   const classificationName = cur.classification.replace('_', ' ');
 
+  const winProbBeforePct = Math.round((cur.moverWinProbBefore ?? cur.winProbBefore ?? 0.5) * 100);
+  const winProbAfterPct = Math.round((cur.moverWinProbAfter ?? cur.winProb ?? 0.5) * 100);
+  const winLossPct = Math.max(0, winProbBeforePct - winProbAfterPct);
+
+  const evalBefore = cur.scoreBefore !== undefined ? (cur.scoreBefore / 100).toFixed(1) : null;
+  const evalAfter = cur.scoreAfter !== undefined ? (cur.scoreAfter / 100).toFixed(1) : null;
+
   const modal = document.createElement('div');
   modal.className = 'why-modal-backdrop';
   modal.id = 'why-blunder-modal';
   modal.innerHTML = `
-    <div class="why-dialog comic-card p-3 p-md-4 border border-3 border-dark shadow-lg" style="max-width: 780px; width: 100%; max-height: 94vh; overflow-y: auto; border-radius: 1.25rem; background: var(--bs-body-bg, #fff);">
-      <div class="d-flex align-items-center justify-content-between pb-2 mb-3 border-bottom border-2 border-dark">
-        <div class="d-flex align-items-center gap-2">
-          <span class="badge border border-dark rounded-pill px-2.5 py-1" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 11px;">
+    <div class="why-dialog p-3 p-md-4 shadow-lg" style="max-width: 820px; width: 100%; max-height: 94vh; overflow-y: auto; border-radius: 1.25rem; background: var(--arcade-card); border: 1px solid var(--arcade-border);">
+      <div class="d-flex align-items-center justify-content-between pb-2.5 mb-3 border-bottom" style="border-color: var(--arcade-border) !important;">
+        <div class="d-flex align-items-center gap-2.5">
+          <span class="badge rounded-pill px-3 py-1.5" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 800; font-size: 12px;">
             ${comic.symbol} ${comic.term}
           </span>
-          <h5 class="mb-0 fw-black font-monospace fs-6">Why was ${cur.san} a ${classificationName}?</h5>
+          <div>
+            <h5 class="mb-0 fw-black fs-6">Why was ${cur.san} a ${classificationName}?</h5>
+            <div class="text-secondary small font-monospace" style="font-size: 11px;">Move ${Math.ceil((cur.ply || 1) / 2)}${cur.color === 'b' ? '... ' : '. '}${cur.san}</div>
+          </div>
         </div>
-        <button type="button" class="btn btn-sm btn-outline-dark comic-btn rounded-circle px-2 py-1" id="why-btn-close" aria-label="Close">
-          <i class="bi bi-x-lg"></i>
-        </button>
+        <button type="button" class="btn-close" id="why-btn-close" aria-label="Close"></button>
       </div>
 
       <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-        <div class="btn-group btn-group-sm" role="group">
-          <button type="button" class="btn btn-danger active fw-bold comic-btn" id="why-tab-punishment">
-            <i class="bi bi-lightning-charge-fill me-1"></i>Opponent's Punishment
+        <div class="arcade-mode-pills" role="group">
+          <button type="button" class="arcade-pill active" id="why-tab-punishment">
+            <i class="bi bi-lightning-charge-fill me-1 text-danger"></i>Opponent's Punishment
           </button>
-          <button type="button" class="btn btn-outline-success fw-bold comic-btn" id="why-tab-best">
-            <i class="bi bi-star-fill me-1"></i>Best Alternative (${cur.bestMoveSan || 'Top Move'})
+          <button type="button" class="arcade-pill" id="why-tab-best">
+            <i class="bi bi-star-fill me-1 text-success"></i>Best Alternative (${cur.bestMoveSan || 'Top Move'})
           </button>
         </div>
-        <span class="badge bg-body-secondary text-secondary font-monospace fw-bold px-2 py-1" id="why-step-counter">Move 0 / 0</span>
+        <span class="badge bg-body-secondary text-secondary font-monospace fw-bold px-2.5 py-1.5" id="why-step-counter">Move 0 / 0</span>
       </div>
 
       <div class="row g-3 align-items-stretch">
@@ -4456,41 +4530,59 @@ async function openWhyModal(dashboard, targetEval = null) {
         </div>
         <div class="col-12 col-md-5 d-flex flex-column justify-content-between">
           <div>
-            <div class="card border border-2 border-dark mb-2 shadow-sm">
-              <div class="card-body p-2.5">
-                <div class="d-flex align-items-center justify-content-between mb-1">
-                  <span class="text-uppercase fw-black small text-secondary" style="font-size: 11px;">Tactical Consequence</span>
-                  <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace" id="why-line-tag">Punishment</span>
+            <div class="card border-0 mb-2 p-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border) !important; border-radius: 0.75rem;">
+              <div class="d-flex align-items-center justify-content-between mb-1.5">
+                <span class="text-uppercase fw-bold text-secondary" style="font-size: 10px; letter-spacing: 0.5px;">Evaluation Impact</span>
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace" id="why-line-tag">Punishment</span>
+              </div>
+              <div class="d-flex align-items-center gap-3">
+                <div>
+                  <span class="text-secondary small d-block" style="font-size: 10px;">Win Chance</span>
+                  <span class="fw-black font-monospace fs-6">${winProbBeforePct}% → ${winProbAfterPct}%</span>
+                  <span class="badge bg-danger text-white font-monospace ms-1" style="font-size: 10px;">-${winLossPct}%</span>
                 </div>
-                <div class="fw-bold small text-body" id="why-summary-text">
-                  <span class="spinner-border spinner-border-sm me-1 text-danger"></span>Calculating continuation...
+                ${evalBefore !== null && evalAfter !== null ? `
+                <div class="vr opacity-25"></div>
+                <div>
+                  <span class="text-secondary small d-block" style="font-size: 10px;">Engine Score</span>
+                  <span class="fw-black font-monospace fs-6">${Number(evalBefore) > 0 ? '+' + evalBefore : evalBefore} → ${Number(evalAfter) > 0 ? '+' + evalAfter : evalAfter}</span>
+                </div>
+                ` : ''}
+              </div>
+            </div>
+
+            <div class="card border-0 mb-3 p-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border) !important; border-radius: 0.75rem;">
+              <div class="d-flex align-items-start gap-2">
+                <i class="bi bi-shield-exclamation text-danger fs-5 lh-1 mt-0.5"></i>
+                <div>
+                  <span class="fw-bold small d-block text-body" id="why-summary-text">Calculating continuation...</span>
                 </div>
               </div>
             </div>
 
-            <div class="border border-2 border-dark rounded p-2 bg-body-tertiary mb-3" style="max-height: 140px; overflow-y: auto;">
-              <div class="small fw-black text-secondary mb-1" style="font-size: 11px;">Continuation Line (Next 10 Moves):</div>
-              <div class="d-flex flex-wrap gap-1" id="why-pills-container">
+            <div class="p-2 mb-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border); border-radius: 0.75rem; max-height: 140px; overflow-y: auto;">
+              <div class="small fw-bold text-secondary mb-1.5" style="font-size: 11px;">Tactical Continuation (10 Plies):</div>
+              <div class="d-flex flex-wrap gap-1.5" id="why-pills-container">
                 <span class="text-secondary small fst-italic">Loading line...</span>
               </div>
             </div>
           </div>
 
           <div>
-            <div class="d-flex align-items-center justify-content-center gap-1.5 py-1">
-              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2" id="why-btn-first" title="Start">
+            <div class="d-flex align-items-center justify-content-center gap-2 py-1">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-first" title="Start">
                 <i class="bi bi-chevron-bar-left"></i>
               </button>
-              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2.5" id="why-btn-prev" title="Previous Move">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-prev" title="Previous Move">
                 <i class="bi bi-chevron-left"></i>
               </button>
-              <button type="button" class="btn btn-primary btn-sm comic-btn px-3" id="why-btn-play" title="Play / Pause">
+              <button type="button" class="btn btn-sm btn-primary px-3 fw-bold" id="why-btn-play" title="Play / Pause">
                 <i class="bi bi-play-fill" id="why-play-icon"></i>
               </button>
-              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2.5" id="why-btn-next" title="Next Move">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-next" title="Next Move">
                 <i class="bi bi-chevron-right"></i>
               </button>
-              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2" id="why-btn-last" title="End">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-last" title="End">
                 <i class="bi bi-chevron-bar-right"></i>
               </button>
             </div>
@@ -4583,7 +4675,7 @@ async function openWhyModal(dashboard, targetEval = null) {
     const pills = modal.querySelectorAll('.why-move-pill');
     pills.forEach((p, idx) => {
       if (idx === stepIdx) {
-        p.classList.remove('btn-outline-dark', 'btn-outline-secondary');
+        p.classList.remove('btn-outline-secondary');
         p.classList.add('btn-primary', 'text-white');
       } else {
         p.classList.remove('btn-primary', 'text-white');
@@ -4600,7 +4692,7 @@ async function openWhyModal(dashboard, targetEval = null) {
     currentSteps.forEach((st, idx) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = `btn btn-sm py-0.5 px-1.5 font-monospace fw-bold rounded-pill why-move-pill ${idx === stepIdx ? 'btn-primary text-white' : 'btn-outline-secondary'}`;
+      btn.className = `btn btn-sm py-0.5 px-2 font-monospace fw-bold rounded-pill why-move-pill ${idx === stepIdx ? 'btn-primary text-white' : 'btn-outline-secondary'}`;
       btn.style.fontSize = '11px';
       btn.textContent = idx === 0 ? (activeTab === 'punishment' ? `${st.san}` : 'Start') : `${st.ply}. ${st.san}`;
       btn.addEventListener('click', () => {
@@ -4625,10 +4717,8 @@ async function openWhyModal(dashboard, targetEval = null) {
 
     if (tab === 'punishment') {
       currentSteps = punishmentSteps;
-      btnPunish?.classList.add('active', 'btn-danger');
-      btnPunish?.classList.remove('btn-outline-danger');
-      btnBest?.classList.remove('active', 'btn-success');
-      btnBest?.classList.add('btn-outline-success');
+      btnPunish?.classList.add('active');
+      btnBest?.classList.remove('active');
 
       if (tagEl) {
         tagEl.className = 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace';
@@ -4637,10 +4727,8 @@ async function openWhyModal(dashboard, targetEval = null) {
       if (summaryEl) summaryEl.textContent = punishmentSummary;
     } else {
       currentSteps = bestSteps;
-      btnBest?.classList.add('active', 'btn-success');
-      btnBest?.classList.remove('btn-outline-success');
-      btnPunish?.classList.remove('active', 'btn-danger');
-      btnPunish?.classList.add('btn-outline-danger');
+      btnBest?.classList.add('active');
+      btnPunish?.classList.remove('active');
 
       if (tagEl) {
         tagEl.className = 'badge bg-success-subtle text-success border border-success-subtle font-monospace';
@@ -5290,8 +5378,23 @@ class ReviewDashboard {
 
     const userColor = this.game.userColor || 'w';
     const isWhiteUser = userColor === 'w';
+
+    const whiteName = this.game.white || 'White';
+    const blackName = this.game.black || 'Black';
+    const whiteElo = this.game.whiteElo || 1500;
+    const blackElo = this.game.blackElo || 1500;
+
     const userAcc = Number(this.game.userAccuracy ?? this.game.accuracy ?? this.game.overallAccuracy ?? 85).toFixed(1);
     const oppAcc = Number(this.game.opponentAccuracy ?? 85).toFixed(1);
+
+    const whiteAcc = isWhiteUser ? userAcc : oppAcc;
+    const blackAcc = isWhiteUser ? oppAcc : userAcc;
+
+    const userGameElo = this.game.userGameElo || this.game.overallGameElo || (isWhiteUser ? whiteElo : blackElo);
+    const oppGameElo = this.game.oppGameElo || this.game.opponentGameElo || (isWhiteUser ? blackElo : whiteElo);
+
+    const whiteGameElo = isWhiteUser ? userGameElo : oppGameElo;
+    const blackGameElo = isWhiteUser ? oppGameElo : userGameElo;
 
     const userPhases = this.game.userPhaseElos || this.game.phaseElos || {};
     const oppPhases = this.game.opponentPhaseElos || {};
@@ -5378,24 +5481,65 @@ class ReviewDashboard {
 
         <!-- Right: Move List & Performance Stats in Columns on Desktop -->
         <div class="col-12 col-lg-6 col-xl-7 d-flex flex-column gap-3">
-          <!-- Match Overview Header Card -->
+          <!-- Match Overview & Player VS Player Header Card -->
           <div class="comic-card p-3">
-            <div class="d-flex align-items-center justify-content-between">
-              <div>
-                <div class="fw-black fs-6 text-truncate" style="max-width: 280px;">
-                  ${this.game.white} vs ${this.game.black}
-                </div>
-                <div class="text-secondary small" style="font-size: 11px;">
-                  ${this.game.ecoName || this.game.ecoCode || 'Chess Match'} · ${this.game.date || ''}
-                </div>
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom" style="border-color: var(--arcade-border) !important;">
+              <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-warning text-dark font-monospace fw-black px-2 py-1">${this.game.ecoCode || 'PGN'}</span>
+                <span class="fw-bold small text-truncate" style="max-width: 260px;">${this.game.ecoName || 'Chess Match'}</span>
+                <span class="text-secondary small font-monospace d-none sm:inline">· ${this.game.date || ''}</span>
               </div>
               <div class="d-flex align-items-center gap-2">
                 <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-2 py-1" id="btn-share-review" title="Copy Review Summary to Clipboard">
                   <i class="bi bi-share me-1"></i>Share
                 </button>
-                <span class="badge ${this.game.result === '1-0' ? 'bg-success' : this.game.result === '0-1' ? 'bg-danger' : 'bg-secondary'} font-monospace px-2.5 py-1.5 fs-6">
-                  ${this.game.result}
-                </span>
+              </div>
+            </div>
+
+            <!-- Player VS Player Cards Row -->
+            <div class="row g-2 align-items-center">
+              <!-- White Player -->
+              <div class="col-5">
+                <div class="p-2 rounded d-flex flex-column gap-1" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
+                  <div class="d-flex align-items-center gap-1.5 min-w-0">
+                    <span class="fs-6 lh-1">⚪</span>
+                    <span class="fw-black small text-truncate ${isWhiteUser ? 'text-warning' : 'text-body'}">${whiteName}</span>
+                    ${isWhiteUser ? '<span class="badge bg-warning text-dark fw-bold px-1 py-0.5" style="font-size: 8px;">YOU</span>' : ''}
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 font-monospace" style="font-size: 11px;">
+                    <span class="text-secondary">${whiteElo} Elo</span>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold">⭐ ${whiteGameElo}</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle fw-bold">🎯 ${whiteAcc}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Center VS & Result -->
+              <div class="col-2 text-center">
+                <div class="d-flex flex-column align-items-center justify-content-center">
+                  <span class="badge ${this.game.result === '1-0' ? 'bg-success' : this.game.result === '0-1' ? 'bg-danger' : 'bg-secondary'} font-monospace px-2 py-1 mb-1 fw-black" style="font-size: 13px;">
+                    ${this.game.result}
+                  </span>
+                  <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 9px;">RESULT</span>
+                </div>
+              </div>
+
+              <!-- Black Player -->
+              <div class="col-5">
+                <div class="p-2 rounded d-flex flex-column gap-1" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
+                  <div class="d-flex align-items-center justify-content-between min-w-0">
+                    <div class="d-flex align-items-center gap-1.5 min-w-0">
+                      <span class="fs-6 lh-1">⚫</span>
+                      <span class="fw-black small text-truncate ${!isWhiteUser ? 'text-warning' : 'text-body'}">${blackName}</span>
+                      ${!isWhiteUser ? '<span class="badge bg-warning text-dark fw-bold px-1 py-0.5" style="font-size: 8px;">YOU</span>' : ''}
+                    </div>
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 font-monospace" style="font-size: 11px;">
+                    <span class="text-secondary">${blackElo} Elo</span>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold">⭐ ${blackGameElo}</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle fw-bold">🎯 ${blackAcc}%</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -5668,11 +5812,11 @@ Result: ${this.game.result || '*'}`;
         const hasAny = userCnt > 0 || oppCnt > 0;
 
         return `
-          <div class="d-flex align-items-center justify-content-between py-1 px-2 rounded ${hasAny ? 'bg-body-tertiary bg-opacity-25' : 'opacity-60'}" style="font-size: 12px;">
+          <div class="d-flex align-items-center justify-content-between py-1 px-2 rounded ${hasAny ? 'bg-body-tertiary bg-opacity-25' : 'opacity-50'}" style="font-size: 12px;">
             <span class="font-monospace fw-black text-end ${userCnt > 0 ? 'text-primary' : 'text-body-tertiary'}" style="width: 38px;">
               ${userCnt}
             </span>
-            <span class="badge border border-dark rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
+            <span class="badge rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
               style="background-color: ${dict.bg}; color: ${dict.text}; font-size: 11px; font-weight: 800; min-width: 125px; justify-content: center;">
               <span>${dict.symbol}</span>
               <span>${dict.words[0]}</span>

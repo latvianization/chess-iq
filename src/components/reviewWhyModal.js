@@ -27,33 +27,41 @@ export async function openWhyModal(dashboard, targetEval = null) {
   const comic = getComicBadge(cur.classification, cur.san);
   const classificationName = cur.classification.replace('_', ' ');
 
+  const winProbBeforePct = Math.round((cur.moverWinProbBefore ?? cur.winProbBefore ?? 0.5) * 100);
+  const winProbAfterPct = Math.round((cur.moverWinProbAfter ?? cur.winProb ?? 0.5) * 100);
+  const winLossPct = Math.max(0, winProbBeforePct - winProbAfterPct);
+
+  const evalBefore = cur.scoreBefore !== undefined ? (cur.scoreBefore / 100).toFixed(1) : null;
+  const evalAfter = cur.scoreAfter !== undefined ? (cur.scoreAfter / 100).toFixed(1) : null;
+
   const modal = document.createElement('div');
   modal.className = 'why-modal-backdrop';
   modal.id = 'why-blunder-modal';
   modal.innerHTML = `
-    <div class="why-dialog comic-card p-3 p-md-4 border border-3 border-dark shadow-lg" style="max-width: 780px; width: 100%; max-height: 94vh; overflow-y: auto; border-radius: 1.25rem; background: var(--bs-body-bg, #fff);">
-      <div class="d-flex align-items-center justify-content-between pb-2 mb-3 border-bottom border-2 border-dark">
-        <div class="d-flex align-items-center gap-2">
-          <span class="badge border border-dark rounded-pill px-2.5 py-1" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 11px;">
+    <div class="why-dialog p-3 p-md-4 shadow-lg" style="max-width: 820px; width: 100%; max-height: 94vh; overflow-y: auto; border-radius: 1.25rem; background: var(--arcade-card); border: 1px solid var(--arcade-border);">
+      <div class="d-flex align-items-center justify-content-between pb-2.5 mb-3 border-bottom" style="border-color: var(--arcade-border) !important;">
+        <div class="d-flex align-items-center gap-2.5">
+          <span class="badge rounded-pill px-3 py-1.5" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 800; font-size: 12px;">
             ${comic.symbol} ${comic.term}
           </span>
-          <h5 class="mb-0 fw-black font-monospace fs-6">Why was ${cur.san} a ${classificationName}?</h5>
+          <div>
+            <h5 class="mb-0 fw-black fs-6">Why was ${cur.san} a ${classificationName}?</h5>
+            <div class="text-secondary small font-monospace" style="font-size: 11px;">Move ${Math.ceil((cur.ply || 1) / 2)}${cur.color === 'b' ? '... ' : '. '}${cur.san}</div>
+          </div>
         </div>
-        <button type="button" class="btn btn-sm btn-outline-dark comic-btn rounded-circle px-2 py-1" id="why-btn-close" aria-label="Close">
-          <i class="bi bi-x-lg"></i>
-        </button>
+        <button type="button" class="btn-close" id="why-btn-close" aria-label="Close"></button>
       </div>
 
       <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-        <div class="btn-group btn-group-sm" role="group">
-          <button type="button" class="btn btn-danger active fw-bold comic-btn" id="why-tab-punishment">
-            <i class="bi bi-lightning-charge-fill me-1"></i>Opponent's Punishment
+        <div class="arcade-mode-pills" role="group">
+          <button type="button" class="arcade-pill active" id="why-tab-punishment">
+            <i class="bi bi-lightning-charge-fill me-1 text-danger"></i>Opponent's Punishment
           </button>
-          <button type="button" class="btn btn-outline-success fw-bold comic-btn" id="why-tab-best">
-            <i class="bi bi-star-fill me-1"></i>Best Alternative (${cur.bestMoveSan || 'Top Move'})
+          <button type="button" class="arcade-pill" id="why-tab-best">
+            <i class="bi bi-star-fill me-1 text-success"></i>Best Alternative (${cur.bestMoveSan || 'Top Move'})
           </button>
         </div>
-        <span class="badge bg-body-secondary text-secondary font-monospace fw-bold px-2 py-1" id="why-step-counter">Move 0 / 0</span>
+        <span class="badge bg-body-secondary text-secondary font-monospace fw-bold px-2.5 py-1.5" id="why-step-counter">Move 0 / 0</span>
       </div>
 
       <div class="row g-3 align-items-stretch">
@@ -62,41 +70,59 @@ export async function openWhyModal(dashboard, targetEval = null) {
         </div>
         <div class="col-12 col-md-5 d-flex flex-column justify-content-between">
           <div>
-            <div class="card border border-2 border-dark mb-2 shadow-sm">
-              <div class="card-body p-2.5">
-                <div class="d-flex align-items-center justify-content-between mb-1">
-                  <span class="text-uppercase fw-black small text-secondary" style="font-size: 11px;">Tactical Consequence</span>
-                  <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace" id="why-line-tag">Punishment</span>
+            <div class="card border-0 mb-2 p-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border) !important; border-radius: 0.75rem;">
+              <div class="d-flex align-items-center justify-content-between mb-1.5">
+                <span class="text-uppercase fw-bold text-secondary" style="font-size: 10px; letter-spacing: 0.5px;">Evaluation Impact</span>
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace" id="why-line-tag">Punishment</span>
+              </div>
+              <div class="d-flex align-items-center gap-3">
+                <div>
+                  <span class="text-secondary small d-block" style="font-size: 10px;">Win Chance</span>
+                  <span class="fw-black font-monospace fs-6">${winProbBeforePct}% → ${winProbAfterPct}%</span>
+                  <span class="badge bg-danger text-white font-monospace ms-1" style="font-size: 10px;">-${winLossPct}%</span>
                 </div>
-                <div class="fw-bold small text-body" id="why-summary-text">
-                  <span class="spinner-border spinner-border-sm me-1 text-danger"></span>Calculating continuation...
+                ${evalBefore !== null && evalAfter !== null ? `
+                <div class="vr opacity-25"></div>
+                <div>
+                  <span class="text-secondary small d-block" style="font-size: 10px;">Engine Score</span>
+                  <span class="fw-black font-monospace fs-6">${Number(evalBefore) > 0 ? '+' + evalBefore : evalBefore} → ${Number(evalAfter) > 0 ? '+' + evalAfter : evalAfter}</span>
+                </div>
+                ` : ''}
+              </div>
+            </div>
+
+            <div class="card border-0 mb-3 p-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border) !important; border-radius: 0.75rem;">
+              <div class="d-flex align-items-start gap-2">
+                <i class="bi bi-shield-exclamation text-danger fs-5 lh-1 mt-0.5"></i>
+                <div>
+                  <span class="fw-bold small d-block text-body" id="why-summary-text">Calculating continuation...</span>
                 </div>
               </div>
             </div>
 
-            <div class="border border-2 border-dark rounded p-2 bg-body-tertiary mb-3" style="max-height: 140px; overflow-y: auto;">
-              <div class="small fw-black text-secondary mb-1" style="font-size: 11px;">Continuation Line (Next 10 Moves):</div>
-              <div class="d-flex flex-wrap gap-1" id="why-pills-container">
+            <div class="p-2 mb-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border); border-radius: 0.75rem; max-height: 140px; overflow-y: auto;">
+              <div class="small fw-bold text-secondary mb-1.5" style="font-size: 11px;">Tactical Continuation (10 Plies):</div>
+              <div class="d-flex flex-wrap gap-1.5" id="why-pills-container">
                 <span class="text-secondary small fst-italic">Loading line...</span>
               </div>
             </div>
           </div>
 
           <div>
-            <div class="d-flex align-items-center justify-content-center gap-1.5 py-1">
-              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2" id="why-btn-first" title="Start">
+            <div class="d-flex align-items-center justify-content-center gap-2 py-1">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-first" title="Start">
                 <i class="bi bi-chevron-bar-left"></i>
               </button>
-              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2.5" id="why-btn-prev" title="Previous Move">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-prev" title="Previous Move">
                 <i class="bi bi-chevron-left"></i>
               </button>
-              <button type="button" class="btn btn-primary btn-sm comic-btn px-3" id="why-btn-play" title="Play / Pause">
+              <button type="button" class="btn btn-sm btn-primary px-3 fw-bold" id="why-btn-play" title="Play / Pause">
                 <i class="bi bi-play-fill" id="why-play-icon"></i>
               </button>
-              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2.5" id="why-btn-next" title="Next Move">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-next" title="Next Move">
                 <i class="bi bi-chevron-right"></i>
               </button>
-              <button type="button" class="btn btn-outline-dark btn-sm comic-btn px-2" id="why-btn-last" title="End">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-last" title="End">
                 <i class="bi bi-chevron-bar-right"></i>
               </button>
             </div>
@@ -189,7 +215,7 @@ export async function openWhyModal(dashboard, targetEval = null) {
     const pills = modal.querySelectorAll('.why-move-pill');
     pills.forEach((p, idx) => {
       if (idx === stepIdx) {
-        p.classList.remove('btn-outline-dark', 'btn-outline-secondary');
+        p.classList.remove('btn-outline-secondary');
         p.classList.add('btn-primary', 'text-white');
       } else {
         p.classList.remove('btn-primary', 'text-white');
@@ -206,7 +232,7 @@ export async function openWhyModal(dashboard, targetEval = null) {
     currentSteps.forEach((st, idx) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = `btn btn-sm py-0.5 px-1.5 font-monospace fw-bold rounded-pill why-move-pill ${idx === stepIdx ? 'btn-primary text-white' : 'btn-outline-secondary'}`;
+      btn.className = `btn btn-sm py-0.5 px-2 font-monospace fw-bold rounded-pill why-move-pill ${idx === stepIdx ? 'btn-primary text-white' : 'btn-outline-secondary'}`;
       btn.style.fontSize = '11px';
       btn.textContent = idx === 0 ? (activeTab === 'punishment' ? `${st.san}` : 'Start') : `${st.ply}. ${st.san}`;
       btn.addEventListener('click', () => {
@@ -231,10 +257,8 @@ export async function openWhyModal(dashboard, targetEval = null) {
 
     if (tab === 'punishment') {
       currentSteps = punishmentSteps;
-      btnPunish?.classList.add('active', 'btn-danger');
-      btnPunish?.classList.remove('btn-outline-danger');
-      btnBest?.classList.remove('active', 'btn-success');
-      btnBest?.classList.add('btn-outline-success');
+      btnPunish?.classList.add('active');
+      btnBest?.classList.remove('active');
 
       if (tagEl) {
         tagEl.className = 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace';
@@ -243,10 +267,8 @@ export async function openWhyModal(dashboard, targetEval = null) {
       if (summaryEl) summaryEl.textContent = punishmentSummary;
     } else {
       currentSteps = bestSteps;
-      btnBest?.classList.add('active', 'btn-success');
-      btnBest?.classList.remove('btn-outline-success');
-      btnPunish?.classList.remove('active', 'btn-danger');
-      btnPunish?.classList.add('btn-outline-danger');
+      btnBest?.classList.add('active');
+      btnPunish?.classList.remove('active');
 
       if (tagEl) {
         tagEl.className = 'badge bg-success-subtle text-success border border-success-subtle font-monospace';

@@ -254,7 +254,12 @@ export async function prepareMoveExplanation(cur) {
       punishmentSteps,
       punishmentSummary,
       bestSteps,
-      bestSummary
+      bestSummary,
+      winProbBefore: cur.winProbBefore,
+      winProbAfter: cur.winProbAfter,
+      scoreBefore: cur.scoreBefore,
+      scoreAfter: cur.scoreAfter,
+      classification: cur.classification
     };
   } catch {
     return null;

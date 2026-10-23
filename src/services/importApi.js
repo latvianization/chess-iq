@@ -1,6 +1,7 @@
 const Chess = window.Chess;
 import {
   calculateMoveAccuracy,
+  calculatePerformanceElo,
   calculatePhaseElo,
   classifyMove,
   cpToWinProb,
@@ -228,7 +229,11 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
         }
       }
       const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
+      const oppBestUci = (engineAfter.pv && engineAfter.pv[0]) || "";
       const multiPv2WinProb = engineBefore.multiPv2ScoreCp !== void 0 ? cpToWinProb(engineBefore.multiPv2ScoreCp) : void 0;
+      const moverMultiPv2WinProb = multiPv2WinProb !== void 0
+        ? (item.side === "w" ? multiPv2WinProb : 1 - multiPv2WinProb)
+        : void 0;
       const classification = classifyMove(
         playedUci,
         bestMoveUci,
@@ -237,10 +242,11 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
         winProbLoss,
         item.isBook,
         moverWinProbBefore,
-        multiPv2WinProb,
+        moverMultiPv2WinProb,
         item.fenBefore,
         item.fenAfter,
-        item.side
+        item.side,
+        oppBestUci
       );
       const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
       let threat = null;
@@ -259,7 +265,12 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
           bestMoveUci,
           bestMoveSan: bestMoveSan || item.moveObj.san,
           punishmentPv: engineAfter.pv,
-          bestPv: engineBefore.pv
+          bestPv: engineBefore.pv,
+          winProbBefore: moverWinProbBefore,
+          winProbAfter: moverWinProbAfter,
+          scoreBefore: whiteScoreBefore,
+          scoreAfter: whiteScoreAfter,
+          classification
         });
       }
       plies[i] = {
@@ -277,10 +288,14 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
         timeSpent: item.timeSpent,
         isTimeTrouble: item.isTimeTrouble,
         isImpulsive,
+        scoreBefore: whiteScoreBefore,
+        scoreAfter: whiteScoreAfter,
         scoreCp: whiteScoreAfter,
         mate: engineAfter.mate,
         winProb: whiteWinProbAfter,
         winProbBefore: whiteWinProbBefore,
+        moverWinProbBefore,
+        moverWinProbAfter,
         winProbLoss,
         accuracy,
         classification,
@@ -399,14 +414,16 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     overall: calcAcpl(oppPhaseLosses.overall)
   };
 
-  const overallGameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.overall, userMovesCount, true, result, userColor) ?? userBaseElo;
-  const openingElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.opening, userPhaseLosses.opening.length) ?? userBaseElo;
-  const middlegameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.middlegame, userPhaseLosses.middlegame.length) ?? userBaseElo;
-  const endgameElo = calculatePhaseElo(userBaseElo, userPhaseAcpl.endgame, userPhaseLosses.endgame.length) ?? userBaseElo;
+  const overallGameElo = calculatePerformanceElo(userBaseElo, userAccuracy, userMovesCount, result, userColor) ?? userBaseElo;
+  const oppOverallGameElo = calculatePerformanceElo(oppBaseElo, opponentAccuracy, oppMovesCount, result, oppColor) ?? oppBaseElo;
 
-  const oppOpeningElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.opening, oppPhaseLosses.opening.length) ?? oppBaseElo;
-  const oppMiddlegameElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.middlegame, oppPhaseLosses.middlegame.length) ?? oppBaseElo;
-  const oppEndgameElo = calculatePhaseElo(oppBaseElo, oppPhaseAcpl.endgame, oppPhaseLosses.endgame.length) ?? oppBaseElo;
+  const openingElo = calculatePerformanceElo(userBaseElo, userPhaseAccuracy.opening ?? userAccuracy, userPhaseAcc.opening.length, "*", userColor) ?? userBaseElo;
+  const middlegameElo = calculatePerformanceElo(userBaseElo, userPhaseAccuracy.middlegame ?? userAccuracy, userPhaseAcc.middlegame.length, "*", userColor) ?? userBaseElo;
+  const endgameElo = calculatePerformanceElo(userBaseElo, userPhaseAccuracy.endgame ?? userAccuracy, userPhaseAcc.endgame.length, "*", userColor) ?? userBaseElo;
+
+  const oppOpeningElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.opening ?? opponentAccuracy, oppPhaseAcc.opening.length, "*", oppColor) ?? oppBaseElo;
+  const oppMiddlegameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.middlegame ?? opponentAccuracy, oppPhaseAcc.middlegame.length, "*", oppColor) ?? oppBaseElo;
+  const oppEndgameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.endgame ?? opponentAccuracy, oppPhaseAcc.endgame.length, "*", oppColor) ?? oppBaseElo;
 
   return {
     id: `game_${Date.now()}`,
@@ -430,9 +447,15 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     userPhaseAccuracy,
     opponentPhaseAccuracy,
     overallGameElo,
+    userGameElo: overallGameElo,
+    oppGameElo: oppOverallGameElo,
+    opponentGameElo: oppOverallGameElo,
     openingElo,
     middlegameElo,
     endgameElo,
+    oppOpeningElo,
+    oppMiddlegameElo,
+    oppEndgameElo,
     phaseElos: {
       opening: openingElo,
       middlegame: middlegameElo,

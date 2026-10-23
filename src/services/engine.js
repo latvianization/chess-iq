@@ -31,13 +31,14 @@ export {
 export const FEN_EVAL_CACHE = /* @__PURE__ */ new Map();
 export function cpToWinProb(cp, mate) {
   if (mate !== void 0 && mate !== null) {
-    if (mate > 0) return 1;
-    if (mate < 0) return 0;
+    if (mate > 0) return 1.0;
+    if (mate < 0) return 0.0;
     return 0.5;
   }
-  return 1 / (1 + Math.pow(10, -cp / 400));
+  return 1 / (1 + Math.exp(-0.00368208 * cp));
 }
 export function calculateMoveAccuracy(winProbLoss) {
+  if (winProbLoss <= 0.001) return 100;
   const acc = 103.1668 * Math.exp(-4.354 * winProbLoss) - 3.1669;
   return Math.min(100, Math.max(0, Math.round(acc * 10) / 10));
 }
@@ -463,30 +464,65 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
   return localResult;
 }
 
-function isMaterialSacrifice(fenBefore, fenAfter, moverColor) {
-  const cBefore = new Chess(fenBefore);
-  const cAfter = new Chess(fenAfter);
-  let moverValBefore = 0;
-  let moverValAfter = 0;
-  cBefore.board().flat().forEach((p) => {
-    if (p && p.color === moverColor && p.type !== "k") {
-      moverValBefore += PIECE_VALUES[p.type];
+export function isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci = null) {
+  try {
+    const cBefore = new Chess(fenBefore);
+    const cAfter = new Chess(fenAfter);
+
+    if (opponentBestUci && opponentBestUci.length >= 4) {
+      const from = opponentBestUci.slice(0, 2);
+      const to = opponentBestUci.slice(2, 4);
+      const promotion = opponentBestUci.length > 4 ? opponentBestUci[4] : void 0;
+      const oppMove = cAfter.move({ from, to, promotion });
+      if (oppMove && oppMove.captured) {
+        let moverValBefore = 0;
+        let moverValAfterOpp = 0;
+        cBefore.board().flat().forEach((p) => {
+          if (p && p.color === moverColor && p.type !== "k") moverValBefore += PIECE_VALUES[p.type];
+        });
+        cAfter.board().flat().forEach((p) => {
+          if (p && p.color === moverColor && p.type !== "k") moverValAfterOpp += PIECE_VALUES[p.type];
+        });
+        if (moverValAfterOpp <= moverValBefore - 200) {
+          return true;
+        }
+      }
     }
-  });
-  cAfter.board().flat().forEach((p) => {
-    if (p && p.color === moverColor && p.type !== "k") {
-      moverValAfter += PIECE_VALUES[p.type];
-    }
-  });
-  return moverValAfter <= moverValBefore - 200;
+
+    let moverValBefore = 0;
+    let moverValAfter = 0;
+    cBefore.board().flat().forEach((p) => {
+      if (p && p.color === moverColor && p.type !== "k") moverValBefore += PIECE_VALUES[p.type];
+    });
+    cAfter.board().flat().forEach((p) => {
+      if (p && p.color === moverColor && p.type !== "k") moverValAfter += PIECE_VALUES[p.type];
+    });
+    return moverValAfter <= moverValBefore - 200;
+  } catch {
+    return false;
+  }
 }
-export function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter, winProbLoss, isBook, multiPv1WinProb, multiPv2WinProb, fenBefore, fenAfter, moverColor) {
+
+export function classifyMove(
+  playedUci,
+  bestMoveUci,
+  winProbBefore,
+  winProbAfter,
+  winProbLoss,
+  isBook,
+  multiPv1WinProb,
+  multiPv2WinProb,
+  fenBefore,
+  fenAfter,
+  moverColor,
+  opponentBestUci = null
+) {
   if (isBook) return "book";
   const isExactBest = Boolean(bestMoveUci && playedUci && playedUci.toLowerCase() === bestMoveUci.toLowerCase());
 
   if (isExactBest) {
-    if (winProbAfter >= 0.48 && winProbBefore < 0.9) {
-      if (isMaterialSacrifice(fenBefore, fenAfter, moverColor)) {
+    if (winProbAfter >= 0.48 && winProbBefore < 0.90) {
+      if (isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci)) {
         return "brilliant";
       }
     }
@@ -499,28 +535,31 @@ export function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter
   if (winProbBefore >= 0.75 && winProbAfter <= 0.55) {
     return "missed_win";
   }
-  if (winProbLoss > 0.2) return "blunder";
-  if (winProbLoss > 0.1) return "mistake";
+  if (winProbLoss > 0.20) return "blunder";
+  if (winProbLoss > 0.10) return "mistake";
   if (winProbLoss > 0.05) return "inaccuracy";
   if (winProbLoss <= 0.02) return "excellent";
   return "good";
 }
-export function calculatePhaseElo(baseElo, acpl, movesCount, isOverall = false, result = "*", userColor = "w") {
-  if (movesCount < 3) return null;
-  const expectedAcpl = Math.max(18, 135 - baseElo * 0.05);
-  const eloDelta = (expectedAcpl - acpl) * 4.5;
-  const maxClamp = isOverall ? 320 : 220;
-  const clampedDelta = Math.min(maxClamp, Math.max(-maxClamp, eloDelta));
+
+export function calculatePerformanceElo(baseElo, accuracy, movesCount, result = "*", userColor = "w") {
+  if (!movesCount || movesCount < 3) return null;
+  const anchor = baseElo && baseElo >= 400 ? baseElo : 1500;
+  const acc = typeof accuracy === 'number' && !isNaN(accuracy) ? accuracy : 80;
+  const expectedAcc = Math.min(96, Math.max(50, 48 + (anchor / 50)));
+  const accDelta = acc - expectedAcc;
+  const eloDelta = accDelta * 32;
+  const clampedDelta = Math.min(500, Math.max(-500, eloDelta));
+
   let resultBonus = 0;
-  if (isOverall) {
-    if (result === "1-0" && userColor === "w" || result === "0-1" && userColor === "b") {
-      resultBonus = 25;
-    } else if (result === "1/2-1/2") {
-      resultBonus = 0;
-    } else if (result !== "*") {
-      resultBonus = -25;
-    }
+  if (result === "1-0") {
+    resultBonus = userColor === "w" ? 25 : -25;
+  } else if (result === "0-1") {
+    resultBonus = userColor === "b" ? 25 : -25;
   }
-  const estimated = Math.round(baseElo + clampedDelta + resultBonus);
-  return Math.min(3000, Math.max(400, estimated));
+
+  const estimated = Math.round(anchor + clampedDelta + resultBonus);
+  return Math.min(3100, Math.max(400, estimated));
 }
+
+export const calculatePhaseElo = calculatePerformanceElo;
