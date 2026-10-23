@@ -7,14 +7,10 @@ function getCandidateWorkerUrls() {
   }
   const base = (typeof window !== "undefined" && window.__BASE_URL__) || "./";
   const normalizedBase = base.endsWith("/") ? base : `${base}/`;
-  const list = [
-    `${normalizedBase}stockfish.js`,
+  return [
     `${normalizedBase}public/stockfish.js`,
-    "./stockfish.js",
-    "./public/stockfish.js",
-    "/stockfish.js"
+    "./public/stockfish.js"
   ];
-  return [...new Set(list)];
 }
 
 class StockfishWorkerService {
@@ -41,6 +37,11 @@ class StockfishWorkerService {
   initWorker() {
     if (typeof window === "undefined" || typeof Worker === "undefined") {
       this.isAvailable = false;
+      return;
+    }
+    if (typeof window !== "undefined" && window.location && window.location.protocol === "file:") {
+      this.isAvailable = false;
+      this.drainQueue();
       return;
     }
     const candidates = getCandidateWorkerUrls();
@@ -278,9 +279,16 @@ class StockfishPool {
   constructor() {
     const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
     this.targetSize = Math.min(POOL_MAX_WORKERS, Math.max(1, cores - 1));
-    this.workers = [new StockfishWorkerService()];
     this.consecutiveFailures = 0;
     this.isPermanentlyDisabled = false;
+
+    if (typeof window !== "undefined" && window.location && window.location.protocol === "file:") {
+      this.isPermanentlyDisabled = true;
+      this.workers = [];
+      return;
+    }
+
+    this.workers = [new StockfishWorkerService()];
   }
   cleanDeadWorkers() {
     const dead = this.workers.filter((w) => !w.isAvailable);
@@ -292,10 +300,7 @@ class StockfishPool {
       this.workers = this.workers.filter((w) => w.isAvailable);
     }
     if (this.consecutiveFailures >= MAX_CONSECUTIVE_INIT_FAILURES && this.workers.length === 0) {
-      if (!this.isPermanentlyDisabled) {
-        this.isPermanentlyDisabled = true;
-        console.warn("[StockfishPool] Web Workers cannot run in this environment. Falling back to built-in local engine.");
-      }
+      this.isPermanentlyDisabled = true;
     }
   }
   warmUp() {
@@ -345,4 +350,4 @@ class StockfishPool {
     return leastBusy.evaluate(fen, depth, maxWaitMs);
   }
 }
-export const stockfishService = new StockfishPool();
+var stockfishService = new StockfishPool();

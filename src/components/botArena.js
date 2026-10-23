@@ -1,24 +1,18 @@
 /**
  * Vanilla JS Bot Arena Component
  * Provides 33 tiered bots (400–2000 Elo in 50-point increments),
- * quick Elo slider, tier tabs, live gameplay, and dynamic personality speech bubbles.
+ * all visible on one page separated into cards by tier.
+ * Clicking any bot instantly starts a game with a random side.
  */
 
-const Chess = window.Chess;
-const confetti = window.confetti || function() {};
-import { BOTS_33 } from '../data/botsData.js';
-import { Chessboard } from './board.js';
-import { soundService } from '../services/sound.js';
-import {
-  evaluatePositionLocally,
-  findBestMoveLocal,
-  isChessCheckmate,
-  isChessGameOver,
-  isChessInCheck
-} from '../services/engine.js';
-import { closeGameOverModal, showGameOverModal, getBotRecords, recordBotResult } from './botGameOverModal.js';
+const BOT_TIERS = [
+  { id: 'rookie', name: 'Rookies', range: '400 – 750 Elo', icon: '🌱', subtitle: 'Beginner & playful personalities' },
+  { id: 'challenger', name: 'Challengers', range: '800 – 1150 Elo', icon: '⚡', subtitle: 'Solid club opponents' },
+  { id: 'hero', name: 'Heroes', range: '1200 – 1550 Elo', icon: '🦸', subtitle: 'Sharp tactical fighters' },
+  { id: 'titan', name: 'Titans', range: '1600 – 2000 Elo', icon: '👑', subtitle: 'Master tournament play' },
+];
 
-export class BotArena {
+class BotArena {
   constructor(containerEl, options = {}) {
     this.container = containerEl;
     this.onAnalyzeGame = options.onAnalyzeGame || null; // (pgn, userColor) => {}
@@ -36,6 +30,7 @@ export class BotArena {
     this.gameResult = null; // 'win' | 'loss' | 'draw' | null
     this.board = null;
     this.lastSpeechPly = -10;
+    this.isPlaying = false; // False = showing all bots by tier; True = live match
 
     this.render();
   }
@@ -47,29 +42,50 @@ export class BotArena {
     }
   }
 
+  selectBotAndPlay(bot) {
+    this.selectedBot = bot;
+    this.activeTier = bot.tier;
+    const randomSide = Math.random() < 0.5 ? 'w' : 'b';
+    this.userColor = randomSide;
+    this.isPlaying = true;
+    this.startNewGame(randomSide);
+  }
+
   startNewGame(color = this.userColor) {
+    this.isPlaying = true;
     this.userColor = color;
     this.chess.reset();
     this.gameResult = null;
     this.gameStartTime = Date.now();
     this.closeGameOverModal();
-    this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onStart));
+    this.speechText = this.getRandomQuote(this.selectedBot.speech.onStart);
+    this.isSpeechVisible = true;
+    this.lastSpeechPly = 0;
 
-    this.updateBoard();
-    this.updateControls();
-
+    this.render();
     soundService.playSuccess();
+
+    if (this.speechTimeout) clearTimeout(this.speechTimeout);
+    this.speechTimeout = setTimeout(() => {
+      this.isSpeechVisible = false;
+      this.updateSpeechBubble();
+    }, 3800);
 
     if (this.userColor === 'b') {
       setTimeout(() => this.triggerBotMove(), 600);
     }
   }
 
-  selectBot(bot) {
-    this.selectedBot = bot;
-    this.activeTier = bot.tier;
-    this.startNewGame();
+  resetToPicker() {
+    this.isPlaying = false;
+    this.isBotThinking = false;
+    this.gameResult = null;
+    this.chess.reset();
+    this.closeGameOverModal();
+    if (this.speechTimeout) clearTimeout(this.speechTimeout);
+    this.board = null;
     this.render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   getRandomQuote(arr) {
@@ -270,7 +286,6 @@ export class BotArena {
         reason = 'Checkmate';
         this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotLoss));
         soundService.playSuccess();
-        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
       } else {
         this.gameResult = 'loss';
         reason = 'Checkmate';
@@ -362,12 +377,15 @@ export class BotArena {
 
     if (this.gameResult && this.onAnalyzeGame) {
       actionArea.innerHTML = `
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center flex-wrap justify-content-center gap-2">
           <button type="button" class="arcade-btn-primary px-4 py-2" id="bot-btn-review">
             <i class="bi bi-lightning-charge-fill me-1"></i> Review Game with Stockfish ⚡
           </button>
-          <button type="button" class="btn btn-outline-secondary comic-btn px-3 py-2" id="bot-btn-rematch">
+          <button type="button" class="btn btn-light comic-btn px-3 py-2" id="bot-btn-rematch">
             <i class="bi bi-arrow-repeat me-1"></i> Rematch
+          </button>
+          <button type="button" class="btn btn-outline-secondary comic-btn px-3 py-2" id="bot-btn-change-bot">
+            <i class="bi bi-grid-fill me-1"></i> Change Bot
           </button>
         </div>
       `;
@@ -376,11 +394,15 @@ export class BotArena {
         this.onAnalyzeGame(this.getEnrichedPgn(), this.userColor);
       });
       actionArea.querySelector('#bot-btn-rematch')?.addEventListener('click', () => {
-        this.startNewGame();
+        const randomSide = Math.random() < 0.5 ? 'w' : 'b';
+        this.startNewGame(randomSide);
+      });
+      actionArea.querySelector('#bot-btn-change-bot')?.addEventListener('click', () => {
+        this.resetToPicker();
       });
     } else {
       actionArea.innerHTML = `
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center flex-wrap justify-content-center gap-2">
           <button type="button" class="btn btn-light comic-btn px-3 py-1.5" id="bot-btn-new">
             <i class="bi bi-plus-circle me-1"></i> New Game
           </button>
@@ -390,10 +412,16 @@ export class BotArena {
           <button type="button" class="btn btn-outline-danger comic-btn px-3 py-1.5" id="bot-btn-resign">
             <i class="bi bi-flag me-1"></i> Resign
           </button>
+          <button type="button" class="btn btn-outline-secondary comic-btn px-3 py-1.5" id="bot-btn-change-bot">
+            <i class="bi bi-grid-fill me-1"></i> Change Bot
+          </button>
         </div>
       `;
 
-      actionArea.querySelector('#bot-btn-new')?.addEventListener('click', () => this.startNewGame());
+      actionArea.querySelector('#bot-btn-new')?.addEventListener('click', () => {
+        const randomSide = Math.random() < 0.5 ? 'w' : 'b';
+        this.startNewGame(randomSide);
+      });
       actionArea.querySelector('#bot-btn-flip')?.addEventListener('click', () => {
         this.startNewGame(this.userColor === 'w' ? 'b' : 'w');
       });
@@ -406,75 +434,144 @@ export class BotArena {
           setTimeout(() => this.showGameOverModal('Resignation'), 350);
         }
       });
+      actionArea.querySelector('#bot-btn-change-bot')?.addEventListener('click', () => {
+        this.resetToPicker();
+      });
     }
   }
 
   render() {
+    // ══════════════════════════════════════════════════════════════════════════
+    // VIEW STATE 1: ALL BOTS ON ONE PAGE SEPARATED BY TIER (NO BOARD DISPLAYED)
+    // ══════════════════════════════════════════════════════════════════════════
+    if (!this.isPlaying) {
+      this.board = null;
+      const records = this.getBotRecords();
+
+      this.container.innerHTML = `
+        <div class="d-flex flex-column gap-4 max-w-5xl mx-auto py-2">
+          <!-- Page Header -->
+          <div class="comic-card p-3 p-sm-4 text-center">
+            <div class="d-inline-flex align-items-center justify-content-center p-2 rounded-circle bg-warning text-dark mb-2 shadow-sm" style="width: 48px; height: 48px; font-size: 1.5rem;">
+              🤖
+            </div>
+            <h3 class="fw-black mb-1 tracking-tight">Choose Your Bot Opponent</h3>
+            <p class="text-secondary small mb-3 max-w-md mx-auto">
+              Select any of the 33 bots below to start an instant match with a <span class="fw-bold text-body">random side</span> (⚪ White or ⚫ Black).
+            </p>
+
+            <!-- Quick Tier Jump Navigation Chips -->
+            <div class="d-flex align-items-center justify-content-center gap-1.5 flex-wrap">
+              ${BOT_TIERS.map(
+                (t) => `
+                <a href="#tier-sec-${t.id}" class="arcade-pill text-decoration-none px-3 py-1.5" style="border: 1px solid var(--arcade-border);">
+                  <span class="me-1">${t.icon}</span>${t.name}
+                  <span class="badge bg-secondary-subtle text-secondary ms-1 font-monospace" style="font-size: 10px;">${t.range}</span>
+                </a>
+              `
+              ).join('')}
+            </div>
+          </div>
+
+          <!-- All Bots Grouped in Separate Cards by Tier -->
+          ${BOT_TIERS.map((tier) => {
+            const tierBots = BOTS_33.filter((b) => b.tier === tier.id);
+            return `
+              <div class="comic-card p-3 p-sm-4" id="tier-sec-${tier.id}">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 pb-2.5 mb-3 border-bottom" style="border-color: var(--arcade-border) !important;">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="fs-4">${tier.icon}</span>
+                    <h4 class="fw-black mb-0 fs-5">${tier.name}</h4>
+                    <span class="badge bg-warning text-dark fw-bold font-monospace" style="font-size: 11px;">${tier.range}</span>
+                  </div>
+                  <span class="text-secondary small fw-bold">${tier.subtitle} · ${tierBots.length} Bots</span>
+                </div>
+
+                <div class="row g-2.5 row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4">
+                  ${tierBots
+                    .map((b) => {
+                      const wins = records[b.id]?.wins || 0;
+                      return `
+                      <div class="col">
+                        <div class="bot-select-card comic-card p-3 d-flex flex-column justify-content-between h-100" data-bot-id="${b.id}" style="cursor: pointer; position: relative; border-radius: 1rem;">
+                          ${wins > 0 ? `<span class="badge bg-success-subtle text-success border border-success fw-bold position-absolute top-0 end-0 m-2.5" style="font-size: 10px;"><i class="bi bi-trophy-fill me-0.5"></i>${wins}W</span>` : ''}
+                          <div>
+                            <div class="d-flex align-items-center gap-2.5 mb-2">
+                              <span class="bot-avatar-emoji fs-1 lh-1">${b.avatar}</span>
+                              <div class="min-w-0 flex-grow-1">
+                                <div class="fw-black text-truncate fs-6">${b.name}</div>
+                                <div class="d-flex align-items-center gap-1.5 mt-0.5">
+                                  <span class="badge bg-warning text-dark fw-bold font-monospace" style="font-size: 11px;">${b.elo} Elo</span>
+                                  <span class="text-secondary small text-truncate fw-semibold" style="font-size: 11px;">${b.title}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <p class="text-secondary small mb-3" style="font-size: 12px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 32px;">
+                              ${b.description}
+                            </p>
+                          </div>
+                          <div class="d-flex align-items-center justify-content-between pt-2 border-top border-opacity-10 mt-auto">
+                            <span class="text-secondary small font-monospace" style="font-size: 11px;"><i class="bi bi-shuffle me-1"></i>Random</span>
+                            <span class="btn btn-sm btn-outline-warning comic-btn py-0.5 px-2.5 fw-bold" style="font-size: 11px;">Play ⚔️</span>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                    })
+                    .join('')}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+
+      // Bind click handlers to each bot card to start new game with random side
+      this.container.querySelectorAll('[data-bot-id]').forEach((card) => {
+        card.addEventListener('click', (e) => {
+          const botId = e.currentTarget.getAttribute('data-bot-id');
+          const targetBot = BOTS_33.find((b) => b.id === botId);
+          if (targetBot) {
+            this.selectBotAndPlay(targetBot);
+          }
+        });
+      });
+
+      return;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // VIEW STATE 2: ACTIVE MATCH (BOT SELECTION CARDS ARE COMPLETELY HIDDEN)
+    // ══════════════════════════════════════════════════════════════════════════
     this.container.innerHTML = `
       <div class="d-flex flex-column gap-3 max-w-4xl mx-auto">
-        <!-- Collectible Bot Selection Card -->
-        <div class="comic-card p-3 p-sm-4">
-          <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3 mb-3">
-            <div class="flex-grow-1 min-w-0">
-              <div class="d-flex align-items-center gap-2 flex-wrap">
-                <span class="fs-3">${this.selectedBot.avatar}</span>
-                <h4 class="mb-0 fw-black text-nowrap">${this.selectedBot.name}</h4>
-                <span class="badge bg-warning text-dark fw-bold border border-dark text-nowrap">${this.selectedBot.elo} Elo</span>
-                <span class="badge bg-secondary fw-semibold text-nowrap">${this.selectedBot.title}</span>
-              </div>
-              <p class="text-secondary small mb-0 mt-1">${this.selectedBot.description}</p>
-            </div>
-
-            <!-- 4 Tier Selector Tabs -->
-            <div class="d-flex align-items-center gap-1.5 flex-nowrap flex-shrink-0 overflow-x-auto mw-100 py-1" style="scrollbar-width: none;" role="group">
-              <button type="button" class="arcade-tier-tab text-nowrap ${this.activeTier === 'rookie' ? 'active' : ''}" data-tier="rookie">🌱 Rookies</button>
-              <button type="button" class="arcade-tier-tab text-nowrap ${this.activeTier === 'challenger' ? 'active' : ''}" data-tier="challenger">⚡ Challengers</button>
-              <button type="button" class="arcade-tier-tab text-nowrap ${this.activeTier === 'hero' ? 'active' : ''}" data-tier="hero">🦸 Heroes</button>
-              <button type="button" class="arcade-tier-tab text-nowrap ${this.activeTier === 'titan' ? 'active' : ''}" data-tier="titan">👑 Titans</button>
-            </div>
-          </div>
-
-          <!-- Elo Step Slider (400 to 2000 in 50 increments) -->
-          <div class="d-flex align-items-center gap-3 bg-body-tertiary p-2.5 rounded-3 border mb-3">
-            <span class="small fw-bold text-nowrap"><i class="bi bi-speedometer2 me-1 text-warning"></i>Elo Level:</span>
-            <input type="range" class="form-range arcade-range" id="bot-elo-slider" min="400" max="2000" step="50" value="${this.selectedBot.elo}">
-            <span class="badge bg-dark fw-bold text-nowrap px-2.5 py-1.5 fs-6 font-monospace">${this.selectedBot.elo}</span>
-          </div>
-
-          <!-- Tier Collectible Bots Carousel -->
-          <div class="d-flex gap-2.5 overflow-x-auto py-2" id="tier-bots-row" style="scrollbar-width: thin;">
-            ${(() => {
-              const records = this.getBotRecords();
-              return BOTS_33.filter((b) => b.tier === this.activeTier)
-                .map(
-                  (b) => `
-                  <div class="arcade-bot-card flex-shrink-0 ${b.id === this.selectedBot.id ? 'active' : ''}" data-bot-id="${b.id}">
-                    ${records[b.id]?.wins ? `<span class="arcade-bot-win-badge" title="Defeated ${records[b.id].wins} time(s)">🏆 ${records[b.id].wins}</span>` : ''}
-                    <span class="arcade-bot-avatar">${b.avatar}</span>
-                    <span class="arcade-bot-name">${b.name}</span>
-                    <span class="arcade-bot-elo">${b.elo}</span>
-                  </div>
-                `
-                )
-                .join('');
-            })()}
-          </div>
-        </div>
-
         <!-- Live Match Banner & Personality Speech Bubble -->
-        <div class="arcade-match-strip">
-          <div class="d-flex align-items-center gap-2">
-            <span class="fs-4">${this.selectedBot.avatar}</span>
-            <div class="comic-bubble">
+        <div class="arcade-match-strip d-flex align-items-center justify-content-between p-2.5 px-3 rounded-3 flex-wrap gap-2">
+          <div class="d-flex align-items-center gap-2.5 flex-nowrap min-w-0">
+            <span class="fs-3 lh-1 flex-shrink-0">${this.selectedBot.avatar}</span>
+            <div class="flex-shrink-0">
+              <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                <span class="fw-black fs-6">${this.selectedBot.name}</span>
+                <span class="badge bg-warning text-dark fw-bold" style="font-size: 11px;">${this.selectedBot.elo} Elo</span>
+                <span class="badge bg-secondary d-none d-sm-inline" style="font-size: 11px;">${this.selectedBot.title}</span>
+                <span class="badge bg-body-secondary text-body fw-bold" style="font-size: 11px;">${this.userColor === 'w' ? '⚪ You play White' : '⚫ You play Black'}</span>
+              </div>
+            </div>
+            <div class="comic-bubble ms-1 d-none d-md-flex">
               <span class="bot-speech-bubble-text">${this.speechText}</span>
             </div>
           </div>
-          <div class="bot-status-text small fw-bold text-secondary">
-            <span class="pulse-dot me-1.5"></span>Your turn (White)
+          <div class="d-flex align-items-center gap-2 ms-auto flex-shrink-0">
+            <div class="bot-status-text small fw-bold text-secondary">
+              <span class="pulse-dot me-1.5"></span>Your turn (${this.userColor === 'w' ? 'White' : 'Black'})
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary comic-btn fw-bold py-1 px-2.5 text-nowrap" id="bot-match-change-btn" title="Choose another bot">
+              <i class="bi bi-grid-fill me-1"></i><span class="d-none d-sm-inline">Change </span>Bot
+            </button>
           </div>
         </div>
 
-        <!-- Chessboard Container -->
+        <!-- Chessboard Container (Center Stage) -->
         <div class="d-flex justify-content-center" id="bot-board-mount"></div>
 
         <!-- Controls Area -->
@@ -492,7 +589,7 @@ export class BotArena {
       whiteName: isUserWhite ? 'You' : this.selectedBot.name,
       blackName: isUserWhite ? this.selectedBot.name : 'You',
       showPlayerBars: true,
-      interactive: true,
+      interactive: !this.isBotThinking && !this.gameResult,
       legalMovesFrom: (sq) => {
         const moves = this.chess.moves({ square: sq, verbose: true });
         return moves.map((m) => m.to);
@@ -501,36 +598,12 @@ export class BotArena {
     });
 
     this.updateControls();
+    this.updateStatusText();
+    this.updateSpeechBubble();
 
-    // Bind Tier switcher buttons
-    this.container.querySelectorAll('[data-tier]').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        const tier = e.currentTarget.getAttribute('data-tier');
-        this.activeTier = tier;
-        const firstBotInTier = BOTS_33.find((b) => b.tier === tier);
-        if (firstBotInTier) {
-          this.selectBot(firstBotInTier);
-        }
-      });
-    });
-
-    // Bind Elo Range Slider
-    const slider = this.container.querySelector('#bot-elo-slider');
-    slider?.addEventListener('input', (e) => {
-      const eloVal = parseInt(e.target.value, 10);
-      const targetBot = BOTS_33.find((b) => b.elo === eloVal) || BOTS_33[0];
-      this.selectBot(targetBot);
-    });
-
-    // Bind Bot character cards in carousel
-    this.container.querySelectorAll('[data-bot-id]').forEach((card) => {
-      card.addEventListener('click', (e) => {
-        const botId = e.currentTarget.getAttribute('data-bot-id');
-        const targetBot = BOTS_33.find((b) => b.id === botId);
-        if (targetBot) {
-          this.selectBot(targetBot);
-        }
-      });
+    // Top Match Strip "Change Bot" button listener
+    this.container.querySelector('#bot-match-change-btn')?.addEventListener('click', () => {
+      this.resetToPicker();
     });
   }
 }

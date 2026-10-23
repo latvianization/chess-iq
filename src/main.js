@@ -4,15 +4,6 @@
  * Bootstrap 5 Light/Dark theming, and Stockfish analysis pipeline.
  */
 
-const bootstrap = window.bootstrap;
-
-import { ReviewDashboard } from './components/reviewDashboard.js';
-import { BotArena } from './components/botArena.js';
-import { ImportModal } from './components/importModal.js';
-import { analyzeFullPgn } from './services/importApi.js';
-import { soundService } from './services/sound.js';
-import { getCachedGame, saveCachedGame } from './services/gameCacheService.js';
-import { backgroundAnalysisQueue } from './services/backgroundAnalysisQueue.js';
 
 function ensureChessCompat() {
   if (typeof window === 'undefined' || !window.Chess) return;
@@ -155,8 +146,43 @@ class App {
     }
   }
 
+  goToHome() {
+    this.importModal?.hide();
+    document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+    document.body.classList.remove('modal-open');
+
+    if (typeof closeWhyModal === 'function' && this.reviewDashboard) {
+      closeWhyModal(this.reviewDashboard);
+    }
+    document.getElementById('why-blunder-modal')?.remove();
+    document.getElementById('insights-modal')?.remove();
+    if (typeof closeGameOverModal === 'function') {
+      closeGameOverModal();
+    }
+
+    if (this.reviewDashboard) {
+      this.reviewDashboard.hideLoading();
+      this.reviewDashboard.setGame(null);
+    }
+    if (this.botArena) {
+      this.botArena.resetToPicker();
+    }
+
+    this.switchMode('review');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   bindHeader() {
     this.updateSoundIcon();
+
+    const brandLogo = document.getElementById('brand-logo') || document.querySelector('.navbar-brand');
+    if (brandLogo) {
+      brandLogo.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.goToHome();
+      });
+    }
+
     document.getElementById('nav-mode-review')?.addEventListener('click', () => this.switchMode('review'));
     document.getElementById('nav-mode-bot')?.addEventListener('click', () => this.switchMode('bot'));
     document.getElementById('nav-btn-import')?.addEventListener('click', () => {
@@ -226,8 +252,8 @@ class App {
         pgn,
         userColor,
         this.isDeepReview,
-        (current, total) => {
-          this.reviewDashboard?.showLoading(current, total);
+        async (current, total) => {
+          await this.reviewDashboard?.showLoading(current, total);
         }
       );
 

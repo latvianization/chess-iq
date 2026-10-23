@@ -1,13 +1,13 @@
-import { getCachedGame, saveCachedGame } from './gameCacheService.js';
-import { analyzeFullPgn } from './importApi.js';
-
 class BackgroundAnalysisQueue {
   constructor() {
     this.queue = [];
     this.isAnalyzing = false;
     this.isPaused = true;
+    this.isUserActive = false;
     this.idleHandle = null;
     this.timer = null;
+    this.activityTimer = null;
+    this.currentItem = null;
   }
 
   setQueue(games, username = '') {
@@ -32,13 +32,29 @@ class BackgroundAnalysisQueue {
     });
   }
 
-  startIdleProcessing() {
-    this.isPaused = false;
-    this.scheduleNext(1000);
+  /**
+   * Called whenever the user interacts with the app (navigating moves, dragging pieces, scrubbing).
+   * Instantly pauses background analysis to guarantee responsive 60fps animations and zero lag.
+   * Debounces resumption until the user is idle for pauseDurationMs.
+   */
+  notifyUserActivity(pauseDurationMs = 5000) {
+    this.isUserActive = true;
+    this.clearTimers();
+
+    if (this.activityTimer) {
+      clearTimeout(this.activityTimer);
+    }
+
+    this.activityTimer = setTimeout(() => {
+      this.isUserActive = false;
+      this.activityTimer = null;
+      if (!this.isPaused && this.queue.length > 0) {
+        this.scheduleNext(1500);
+      }
+    }, pauseDurationMs);
   }
 
-  pause() {
-    this.isPaused = true;
+  clearTimers() {
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -49,24 +65,41 @@ class BackgroundAnalysisQueue {
     }
   }
 
-  scheduleNext(delayMs = 1500) {
-    if (this.isPaused || this.isAnalyzing || this.queue.length === 0) return;
+  startIdleProcessing() {
+    this.isPaused = false;
+    if (!this.isUserActive) {
+      this.scheduleNext(1500);
+    }
+  }
 
-    if (this.timer) clearTimeout(this.timer);
+  pause() {
+    this.isPaused = true;
+    this.clearTimers();
+    if (this.activityTimer) {
+      clearTimeout(this.activityTimer);
+      this.activityTimer = null;
+    }
+  }
+
+  scheduleNext(delayMs = 2000) {
+    if (this.isPaused || this.isUserActive || this.isAnalyzing || this.queue.length === 0) return;
+
+    this.clearTimers();
 
     this.timer = setTimeout(() => {
-      if (this.isPaused || this.isAnalyzing || this.queue.length === 0) return;
+      if (this.isPaused || this.isUserActive || this.isAnalyzing || this.queue.length === 0) return;
 
       if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
         this.idleHandle = window.requestIdleCallback(
           (deadline) => {
-            if (deadline.timeRemaining() > 10 || deadline.didTimeout) {
+            if (this.isPaused || this.isUserActive) return;
+            if (deadline.timeRemaining() > 15 || deadline.didTimeout) {
               this.processOne();
             } else {
-              this.scheduleNext(1000);
+              this.scheduleNext(1500);
             }
           },
-          { timeout: 3000 }
+          { timeout: 5000 }
         );
       } else {
         this.processOne();
@@ -75,17 +108,21 @@ class BackgroundAnalysisQueue {
   }
 
   async processOne() {
-    if (this.isPaused || this.isAnalyzing || this.queue.length === 0) return;
+    if (this.isPaused || this.isUserActive || this.isAnalyzing || this.queue.length === 0) return;
 
     this.isAnalyzing = true;
     const item = this.queue.shift();
+    this.currentItem = item;
 
     try {
       const alreadyCached = getCachedGame(item.id || item.pgn, item.userColor);
       if (!alreadyCached) {
-        const analyzed = await analyzeFullPgn(item.pgn, item.userColor, false, async () => {
-          if (this.isPaused) throw new Error('aborted');
-          await new Promise((r) => setTimeout(r, 12));
+        const analyzed = await analyzeFullPgn(item.pgn, item.userColor, false, async (current, total) => {
+          if (this.isPaused || this.isUserActive) {
+            throw new Error('aborted');
+          }
+          // Cooperative yield: yields main event loop ticks to ensure 60fps animations
+          await new Promise((r) => setTimeout(r, 25));
         });
 
         if (analyzed) {
@@ -102,14 +139,20 @@ class BackgroundAnalysisQueue {
           );
         }
       }
-    } catch {
+      this.currentItem = null;
+    } catch (err) {
+      if (err && err.message === 'aborted' && this.currentItem) {
+        // Return aborted item back to queue so it can complete when idle
+        this.queue.unshift(this.currentItem);
+        this.currentItem = null;
+      }
     } finally {
       this.isAnalyzing = false;
-      if (!this.isPaused && this.queue.length > 0) {
-        this.scheduleNext(2000);
+      if (!this.isPaused && !this.isUserActive && this.queue.length > 0) {
+        this.scheduleNext(2500);
       }
     }
   }
 }
 
-export const backgroundAnalysisQueue = new BackgroundAnalysisQueue();
+var backgroundAnalysisQueue = new BackgroundAnalysisQueue();

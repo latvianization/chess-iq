@@ -18,7 +18,7 @@ function hashString(str) {
   return Math.abs(hash).toString(36);
 }
 
-export function getGameCacheKey(gameIdOrPgn, userColor = 'w') {
+function getGameCacheKey(gameIdOrPgn, userColor = 'w') {
   if (!gameIdOrPgn) return '';
   const clean = typeof gameIdOrPgn === 'string' ? gameIdOrPgn.trim() : '';
   if (clean.length < 64 && !clean.includes('\n') && !clean.includes('1.')) {
@@ -27,7 +27,7 @@ export function getGameCacheKey(gameIdOrPgn, userColor = 'w') {
   return `pgn_${hashString(clean)}_${userColor}`;
 }
 
-export function getCacheIndex() {
+function getCacheIndex() {
   try {
     return JSON.parse(localStorage.getItem(INDEX_KEY) || '[]');
   } catch {
@@ -41,7 +41,7 @@ function saveCacheIndex(index) {
   } catch {}
 }
 
-export function getGameCacheInfo(gameIdOrPgn, userColor = 'w') {
+function getGameCacheInfo(gameIdOrPgn, userColor = 'w') {
   const key = getGameCacheKey(gameIdOrPgn, userColor);
   if (!key) return null;
   const index = getCacheIndex();
@@ -49,7 +49,7 @@ export function getGameCacheInfo(gameIdOrPgn, userColor = 'w') {
   return entry || null;
 }
 
-export function getCachedGame(gameIdOrPgn, userColor = 'w') {
+function getCachedGame(gameIdOrPgn, userColor = 'w') {
   const key = getGameCacheKey(gameIdOrPgn, userColor);
   if (!key) return null;
   try {
@@ -61,7 +61,7 @@ export function getCachedGame(gameIdOrPgn, userColor = 'w') {
   }
 }
 
-export function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
+function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
   if (!gameIdOrPgn || !analyzedGame) return;
   const key = getGameCacheKey(gameIdOrPgn, userColor);
   if (!key) return;
@@ -119,7 +119,7 @@ function pruneOldestGames(count = 5) {
   saveCacheIndex(index);
 }
 
-export function clearGameCache() {
+function clearGameCache() {
   const index = getCacheIndex();
   index.forEach((item) => {
     localStorage.removeItem(`${GAME_PREFIX}${item.key}`);
@@ -128,7 +128,7 @@ export function clearGameCache() {
   window.dispatchEvent(new CustomEvent('chess_iq_cache_cleared'));
 }
 
-export function getCacheStats() {
+function getCacheStats() {
   const index = getCacheIndex();
   return {
     count: index.length,

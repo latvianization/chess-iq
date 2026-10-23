@@ -5,10 +5,6 @@
  * in-check King highlight, and drag-and-drop move interaction.
  */
 
-const Chess = window.Chess;
-import { INLINE_PIECE_DATA_URLS } from './pieceSvgs.js';
-import { getComicBadge, COMIC_DICTIONARY } from '../services/comicBadges.js';
-import { isChessInCheck } from '../services/engine.js';
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
@@ -21,7 +17,7 @@ const THEMES = {
   icy: { light: '#dee3e6', dark: '#587a9f' },
 };
 
-export function getCapturedPiecesAndDiff(fen) {
+function getCapturedPiecesAndDiff(fen) {
   const STARTING = {
     w: { p: 8, n: 2, b: 2, r: 2, q: 1 },
     b: { p: 8, n: 2, b: 2, r: 2, q: 1 }
@@ -72,7 +68,7 @@ export function getCapturedPiecesAndDiff(fen) {
   };
 }
 
-export class Chessboard {
+class Chessboard {
   constructor(containerEl, options = {}) {
     this.container = containerEl;
     this.fen = options.fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -139,6 +135,9 @@ export class Chessboard {
   }
 
   handleSquareClick(square, piece) {
+    if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
+      backgroundAnalysisQueue.notifyUserActivity(5000);
+    }
     if (!this.interactive) return;
 
     if (this.selectedSquare) {
@@ -328,6 +327,9 @@ export class Chessboard {
             img.draggable = true;
 
             img.addEventListener('dragstart', (e) => {
+              if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
+                backgroundAnalysisQueue.notifyUserActivity(5000);
+              }
               if (!this.interactive) {
                 e.preventDefault();
                 return;

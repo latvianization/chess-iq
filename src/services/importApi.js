@@ -1,16 +1,4 @@
-const Chess = window.Chess;
-import {
-  calculateMoveAccuracy,
-  calculatePerformanceElo,
-  classifyMove,
-  cpToWinProb,
-  detectPhase,
-  evaluateFenHybrid,
-  prefetchEvaluations
-} from "./engine.js";
-import { detectThreat, prepareMoveExplanation } from "./engineRefutations.js";
-import { findMatchingEco, isBookMove } from "./ecoDictionary.js";
-export function parseClockToSeconds(clockStr) {
+function parseClockToSeconds(clockStr) {
   const match = clockStr.match(/(\d+):(\d+):?(\d+)?(\.\d+)?/);
   if (!match) return null;
   if (match[3] !== void 0) {
@@ -24,7 +12,7 @@ export function parseClockToSeconds(clockStr) {
     return m * 60 + s;
   }
 }
-export function extractMovesAndClocks(pgn) {
+function extractMovesAndClocks(pgn) {
   const moveText = pgn.replace(/\[[^\]]*\]/g, " ").trim();
   const moves = [];
   const clocks = [];
@@ -57,7 +45,7 @@ export function extractMovesAndClocks(pgn) {
   }
   return { moves, clocks };
 }
-export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, skipExtras = false) {
+async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, skipExtras = false) {
   const chess = new Chess();
   try {
     if (typeof chess.loadPgn === "function") {
@@ -143,8 +131,9 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
   console.log(`[Analysis] Starting: ${white} (${whiteElo}) vs ${black} (${blackElo}) | ${totalPlies} plies | userColor: ${userColor} | deep: ${isDeep}`);
 
   if (onProgress) {
-    onProgress(0, totalPlies);
-    await new Promise((resolve) => setTimeout(resolve, 35));
+    const p = onProgress(0, totalPlies);
+    if (p && typeof p.then === 'function') await p;
+    else await new Promise((resolve) => setTimeout(resolve, 35));
   }
 
   const fensToEvaluate = [];
@@ -154,9 +143,20 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     if (!item.isBook || nextIsEngineMove) fensToEvaluate.push(item.fenAfter);
   });
   console.log(`[Analysis] Collected ${fensToEvaluate.length} positions to evaluate (${bookCount} book moves skipped)`);
-  await prefetchEvaluations(fensToEvaluate, isDeep, (done, total) => {
-    if (onProgress) return onProgress(Math.round((done / total) * totalPlies), totalPlies);
-  });
+  const hasPrefetch = fensToEvaluate.length > 0;
+  let lastReportedPly = 0;
+  if (hasPrefetch) {
+    await prefetchEvaluations(fensToEvaluate, isDeep, async (done, total) => {
+      if (onProgress) {
+        const plyTarget = Math.max(1, Math.min(totalPlies - 1, Math.round((done / total) * totalPlies * 0.88)));
+        if (plyTarget > lastReportedPly) {
+          lastReportedPly = plyTarget;
+          const p = onProgress(lastReportedPly, totalPlies);
+          if (p && typeof p.then === 'function') await p;
+        }
+      }
+    });
+  }
 
   let prevEngine = precomputed.length > 0
     ? await evaluateFenHybrid(precomputed[0].fenBefore, isDeep)
@@ -330,7 +330,18 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
         phase: item.phase
       };
     }
-    if (i % 8 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+    if (onProgress) {
+      const postPly = hasPrefetch
+        ? Math.max(lastReportedPly, Math.min(totalPlies, Math.round((totalPlies * 0.88) + ((i + 1) / totalPlies) * (totalPlies * 0.12))))
+        : i + 1;
+      if (postPly > lastReportedPly || i === totalPlies - 1) {
+        lastReportedPly = postPly;
+        const pRes = onProgress(lastReportedPly, totalPlies);
+        if (pRes && typeof pRes.then === 'function') await pRes;
+      }
+    } else if (i % 8 === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
   }
   const createEmptyCounts = () => ({
     brilliant: 0,
@@ -478,7 +489,7 @@ function mapChessComGame(g, idx) {
   };
 }
 
-export async function fetchChessComGames(username, limit = 15) {
+async function fetchChessComGames(username, limit = 15) {
   const cleanUsername = username.trim().toLowerCase();
   const archivesUrl = `https://api.chess.com/pub/player/${cleanUsername}/games/archives`;
   const archRes = await fetch(archivesUrl);
@@ -503,7 +514,7 @@ export async function fetchChessComGames(username, limit = 15) {
   }
   return collected.slice(0, limit).map(mapChessComGame);
 }
-export async function fetchLichessGames(username, limit = 15) {
+async function fetchLichessGames(username, limit = 15) {
   const cleanUsername = username.trim().toLowerCase();
   const url = `https://lichess.org/api/games/user/${cleanUsername}?max=${limit}&clocks=true&opening=true&pgnInJson=true&perfType=ultraBullet,bullet,blitz,rapid,classical`;
   const res = await fetch(url, {

@@ -239,4 +239,4 @@ class SoundService {
   }
 }
 
-export const soundService = new SoundService();
+var soundService = new SoundService();

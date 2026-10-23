@@ -1,16 +1,3 @@
-const Chess = window.Chess;
-import { isBookMove } from "./ecoDictionary.js";
-import { stockfishService } from "./stockfishWorker.js";
-import {
-  PIECE_VALUES,
-  PST_MG_PAWN,
-  PST_MG_KNIGHT,
-  PST_MG_BISHOP,
-  PST_MG_ROOK,
-  PST_MG_QUEEN,
-  PST_MG_KING
-} from "./engineEvaluationTables.js";
-
 const MAX_FEN_CACHE_SIZE = 4000;
 const PST_BY_TYPE = {
   p: PST_MG_PAWN,
@@ -21,7 +8,7 @@ const PST_BY_TYPE = {
   k: PST_MG_KING
 };
 
-export const FEN_EVAL_CACHE = new Map();
+var FEN_EVAL_CACHE = new Map();
 
 function setFenCache(key, value) {
   if (FEN_EVAL_CACHE.size >= MAX_FEN_CACHE_SIZE && !FEN_EVAL_CACHE.has(key)) {
@@ -31,7 +18,7 @@ function setFenCache(key, value) {
   FEN_EVAL_CACHE.set(key, value);
 }
 
-export function cpToWinProb(cp, mate) {
+function cpToWinProb(cp, mate) {
   if (mate !== void 0 && mate !== null) {
     if (mate > 0) return 1.0;
     if (mate < 0) return 0.0;
@@ -40,13 +27,13 @@ export function cpToWinProb(cp, mate) {
   return 1 / (1 + Math.exp(-0.00368208 * cp));
 }
 
-export function calculateMoveAccuracy(winProbLoss) {
+function calculateMoveAccuracy(winProbLoss) {
   if (winProbLoss <= 0.001) return 100;
   const acc = 103.1668 * Math.exp(-4.354 * winProbLoss) - 3.1669;
   return Math.min(100, Math.max(0, Math.round(acc * 10) / 10));
 }
 
-export function countTotalPieces(chess) {
+function countTotalPieces(chess) {
   let count = 0;
   const board = chess.board();
   for (let r = 0; r < 8; r++) {
@@ -57,7 +44,7 @@ export function countTotalPieces(chess) {
   return count;
 }
 
-export function sumBoardMaterial(chess, color) {
+function sumBoardMaterial(chess, color) {
   let total = 0;
   const board = chess.board();
   for (let r = 0; r < 8; r++) {
@@ -71,7 +58,7 @@ export function sumBoardMaterial(chess, color) {
   return total;
 }
 
-export function countMajorMinorPieces(chess) {
+function countMajorMinorPieces(chess) {
   const board = chess.board();
   let total = 0;
   let whiteBackRank = 0;
@@ -103,7 +90,7 @@ export function countMajorMinorPieces(chess) {
   return { total, whiteBackRank, blackBackRank, whiteQueens, blackQueens, whiteRooks, blackRooks, whiteMinors, blackMinors };
 }
 
-export function detectPhase(ply, chess, moveSansOrIsBook, middlegameStartPly, endgameStartPly) {
+function detectPhase(ply, chess, moveSansOrIsBook, middlegameStartPly, endgameStartPly) {
   if (endgameStartPly !== null && ply >= endgameStartPly) {
     return { phase: "endgame", newMiddlegameStart: middlegameStartPly, newEndgameStart: endgameStartPly };
   }
@@ -128,15 +115,15 @@ export function detectPhase(ply, chess, moveSansOrIsBook, middlegameStartPly, en
   return { phase: "opening", newMiddlegameStart: null, newEndgameStart: null };
 }
 
-export function isChessGameOver(c) {
+function isChessGameOver(c) {
   return typeof c.isGameOver === 'function' ? c.isGameOver() : (typeof c.game_over === 'function' ? c.game_over() : false);
 }
 
-export function isChessCheckmate(c) {
+function isChessCheckmate(c) {
   return typeof c.isCheckmate === 'function' ? c.isCheckmate() : (typeof c.in_checkmate === 'function' ? c.in_checkmate() : false);
 }
 
-export function isChessInCheck(c) {
+function isChessInCheck(c) {
   return typeof c.inCheck === 'function' ? c.inCheck() : (typeof c.in_check === 'function' ? c.in_check() : false);
 }
 
@@ -160,7 +147,7 @@ function evaluateBoardScore(chess) {
   return score;
 }
 
-export function evaluatePositionLocally(fen) {
+function evaluatePositionLocally(fen) {
   const chess = new Chess(fen);
   if (isChessGameOver(chess)) {
     if (isChessCheckmate(chess)) {
@@ -261,7 +248,7 @@ function alphaBeta(chess, depth, alpha, beta, pvArray) {
   return bestScore;
 }
 
-export function findBestMoveLocal(fen, depth = 3) {
+function findBestMoveLocal(fen, depth = 3) {
   const chess = new Chess(fen);
   const moves = chess.moves({ verbose: true });
   if (moves.length === 0) {
@@ -370,7 +357,7 @@ async function fetchSyzygyTablebase(fen) {
   return null;
 }
 
-export function normalizeFenKey(fen) {
+function normalizeFenKey(fen) {
   if (!fen) return "";
   const parts = fen.trim().split(/\s+/);
   return parts.slice(0, 4).join(" ");
@@ -405,7 +392,7 @@ function localEvaluation(fen, depth) {
   };
 }
 
-export async function evaluateFenHybrid(fen, isDeep = false) {
+async function evaluateFenHybrid(fen, isDeep = false) {
   const profileKey = typeof isDeep === "string" ? isDeep : (isDeep ? "deep" : "fast");
   const cacheKey = `${normalizeFenKey(fen)}_${profileKey}`;
   const cached = FEN_EVAL_CACHE.get(cacheKey);
@@ -444,10 +431,12 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
   return localResult;
 }
 
-export async function prefetchEvaluations(fens, isDeep, onEach) {
+async function prefetchEvaluations(fens, isDeep, onEach) {
   const unique = [...new Set(fens)];
   stockfishService.warmUp();
-  const feederCount = Math.max(2, stockfishService.targetSize || stockfishService.size);
+  const feederCount = stockfishService.isAvailable
+    ? Math.max(2, stockfishService.targetSize || stockfishService.size)
+    : 1;
   const profileKey = typeof isDeep === "string" ? isDeep : (isDeep ? "deep" : "fast");
   console.log(`[Engine] Starting prefetch: ${unique.length} positions (profile: ${profileKey}, feeders: ${feederCount})`);
   let next = 0;
@@ -462,8 +451,12 @@ export async function prefetchEvaluations(fens, isDeep, onEach) {
         await evaluateFenHybrid(fen, isDeep);
         done++;
         if (onEach) await onEach(done, unique.length);
+        // Cooperative yield so the browser can process UI events and render
+        await new Promise((r) => setTimeout(r, 0));
       } catch (err) {
-        console.error(`[Engine] Feeder ${feederIdx} error on fen ${fen}:`, err);
+        if (err && err.message !== 'aborted') {
+          console.error(`[Engine] Feeder ${feederIdx} error on fen ${fen}:`, err);
+        }
         failure = err;
       }
     }
@@ -474,7 +467,7 @@ export async function prefetchEvaluations(fens, isDeep, onEach) {
   if (failure) throw failure;
 }
 
-export function isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci = null) {
+function isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci = null) {
   try {
     const cBefore = new Chess(fenBefore);
     const cAfter = new Chess(fenAfter);
@@ -504,7 +497,7 @@ export function isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBes
   }
 }
 
-export function classifyMove(
+function classifyMove(
   playedUci,
   bestMoveUci,
   winProbBefore,
@@ -543,7 +536,7 @@ export function classifyMove(
   return "good";
 }
 
-export function calculatePerformanceElo(baseElo, accuracy, movesCount, result = "*", userColor = "w") {
+function calculatePerformanceElo(baseElo, accuracy, movesCount, result = "*", userColor = "w") {
   if (!movesCount || movesCount < 3) return null;
   const anchor = baseElo && baseElo >= 400 ? baseElo : 1500;
   const acc = typeof accuracy === 'number' && !isNaN(accuracy) ? accuracy : 80;

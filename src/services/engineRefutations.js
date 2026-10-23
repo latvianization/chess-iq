@@ -1,8 +1,4 @@
-const Chess = window.Chess;
-import { stockfishService } from "./stockfishWorker.js";
-import { evaluateFenHybrid, findBestMoveLocal, isChessGameOver, isChessCheckmate, isChessInCheck } from "./engine.js";
-
-export async function detectThreat(fen) {
+async function detectThreat(fen) {
   try {
     const chess = new Chess(fen);
     if (isChessGameOver(chess)) return null;
@@ -68,7 +64,7 @@ export async function detectThreat(fen) {
   return null;
 }
 
-export async function getDeepContinuation(fen, maxPlies = 10) {
+async function getDeepContinuation(fen, maxPlies = 5) {
   const steps = [];
   try {
     const chess = new Chess(fen);
@@ -144,7 +140,7 @@ function getMaterialDiffInPawns(chess, moverColor) {
   return diff;
 }
 
-export function summarizePunishment(fenStart, fenEnd, moverColor) {
+function summarizePunishment(fenStart, fenEnd, moverColor) {
   try {
     const cEnd = new Chess(fenEnd);
     if (isChessCheckmate(cEnd)) {
@@ -163,7 +159,7 @@ export function summarizePunishment(fenStart, fenEnd, moverColor) {
   }
 }
 
-export function replayPv(fen, pvMoves, maxPlies = 10) {
+function replayPv(fen, pvMoves, maxPlies = 5) {
   const steps = [];
   if (!fen || !Array.isArray(pvMoves) || pvMoves.length === 0) return steps;
   try {
@@ -192,9 +188,9 @@ export function replayPv(fen, pvMoves, maxPlies = 10) {
   return steps;
 }
 
-export const MIN_CONTINUATION_PLIES = 6;
+var MIN_CONTINUATION_PLIES = 5;
 
-export async function extendContinuation(startFen, steps, maxPlies = 10) {
+async function extendContinuation(startFen, steps, maxPlies = 5) {
   if (steps.length >= MIN_CONTINUATION_PLIES) return steps;
   const lastFen = steps.length > 0 ? steps[steps.length - 1].fen : startFen;
   const extra = await getDeepContinuation(lastFen, maxPlies - steps.length);
@@ -203,7 +199,7 @@ export async function extendContinuation(startFen, steps, maxPlies = 10) {
   return merged;
 }
 
-export async function prepareMoveExplanation(cur) {
+async function prepareMoveExplanation(cur) {
   if (!cur) return null;
   try {
     const punishmentSteps = [
@@ -212,7 +208,7 @@ export async function prepareMoveExplanation(cur) {
 
     let deepPunish = [];
     if (cur.punishmentPv && cur.punishmentPv.length > 0) {
-      deepPunish = replayPv(cur.fen, cur.punishmentPv, 10);
+      deepPunish = replayPv(cur.fen, cur.punishmentPv, 5);
     }
     punishmentSteps.push(...deepPunish);
 
@@ -225,7 +221,7 @@ export async function prepareMoveExplanation(cur) {
 
     let deepBest = [];
     if (cur.bestPv && cur.bestPv.length > 0) {
-      deepBest = replayPv(cur.fenBefore, cur.bestPv, 10);
+      deepBest = replayPv(cur.fenBefore, cur.bestPv, 5);
     }
     if (deepBest.length === 0) {
       deepBest = replayPv(cur.fenBefore, [cur.bestMoveUci], 1);

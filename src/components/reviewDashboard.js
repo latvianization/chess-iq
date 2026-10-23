@@ -4,18 +4,8 @@
  * eval bar, phase ratings, comic sound effect badges, and tactical refutations.
  */
 
-const Chess = window.Chess;
-import { Chessboard } from './board.js';
-import { soundService } from '../services/sound.js';
-import { getComicBadge, COMIC_DICTIONARY } from '../services/comicBadges.js';
-import { findBestMoveLocal, FEN_EVAL_CACHE, normalizeFenKey } from '../services/engine.js';
-import { renderAdvantageChart, updateAdvantageScrubber } from './reviewAdvantageChart.js';
-import { startRetryMistake, stopRetryMistake } from './reviewRetryMistake.js';
-import { openWhyModal, closeWhyModal } from './reviewWhyModal.js';
-import { getCacheIndex, getCachedGame, clearGameCache } from '../services/gameCacheService.js';
-import { insEscape } from './insightsCharts.js';
 
-export class ReviewDashboard {
+class ReviewDashboard {
   constructor(containerEl, options = {}) {
     this.container = containerEl;
     this.onOpenImport = options.onOpenImport || null;
@@ -33,8 +23,6 @@ export class ReviewDashboard {
     this.analysisStartTime = null;
     this.advantagePoints = [];
     this.advantageMidY = 42;
-    this.isRetryingMistake = false;
-    this.retryHintActive = false;
 
     window.addEventListener('chess_iq_cache_updated', () => {
       if (!this.game && !this.isAnalyzing) this.render();
@@ -52,20 +40,40 @@ export class ReviewDashboard {
 
   initKeyboardNavigation() {
     this.handleKeyDown = (e) => {
-      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
-      if (!this.game || this.isRetryingMistake) return;
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        this.goToPly(this.currentPly - 1);
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        this.goToPly(this.currentPly + 1);
-      } else if (e.key === 'ArrowUp' || e.key === 'Home') {
+      // Don't intercept when user is typing in form controls
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName) || e.target?.isContentEditable) return;
+
+      // Don't intercept if review view is currently hidden (e.g. user in bot mode)
+      const reviewView = document.getElementById('review-view');
+      if (reviewView && reviewView.classList.contains('d-none')) return;
+
+      // Don't intercept if any modal is active (Bootstrap modal or Why-blunder modal)
+      if (document.querySelector('.modal.show') || document.getElementById('why-blunder-modal')) return;
+
+      if (!this.game) return;
+
+      const isPrev = e.key === 'ArrowLeft' || e.key === 'Left' || e.code === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Up' || e.code === 'ArrowUp';
+      const isNext = e.key === 'ArrowRight' || e.key === 'Right' || e.code === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'Down' || e.code === 'ArrowDown';
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+
+      if (isPrev || isNext || e.key === 'Home' || e.key === 'End' || e.key === ' ' || e.code === 'Space') {
+        if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
+          backgroundAnalysisQueue.notifyUserActivity(5000);
+        }
+      }
+
+      if (e.key === 'Home' || (isCtrlOrMeta && isPrev)) {
         e.preventDefault();
         this.goToPly(0);
-      } else if (e.key === 'ArrowDown' || e.key === 'End') {
+      } else if (e.key === 'End' || (isCtrlOrMeta && isNext)) {
         e.preventDefault();
         this.goToPly(this.game.plies.length);
+      } else if (isPrev) {
+        e.preventDefault();
+        this.goToPly(this.currentPly - 1);
+      } else if (isNext) {
+        e.preventDefault();
+        this.goToPly(this.currentPly + 1);
       } else if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
         this.nextKeyMoment();
@@ -78,9 +86,10 @@ export class ReviewDashboard {
     window.addEventListener('keydown', this.handleKeyDown);
   }
 
-  showLoading(current = 0, total = 0) {
-    if (!this.isAnalyzing || current === 0) {
+  async showLoading(current = 0, total = 0) {
+    if (!this.isAnalyzing || !this.analysisStartTime) {
       this.analysisStartTime = Date.now();
+      this.lastUiYieldTime = 0;
     }
     this.isAnalyzing = true;
     this.analysisProgress = { current, total };
@@ -90,6 +99,19 @@ export class ReviewDashboard {
       this.updateLoadingCard(current, total);
     } else {
       this.render();
+    }
+
+    // Cooperative yield: ensures the browser paints DOM updates without freezing
+    const now = Date.now();
+    if (now - (this.lastUiYieldTime || 0) >= 16 || current === 0 || current >= total) {
+      this.lastUiYieldTime = now;
+      await new Promise((resolve) => {
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(() => setTimeout(resolve, 0));
+        } else {
+          setTimeout(resolve, 10);
+        }
+      });
     }
   }
 
@@ -107,15 +129,27 @@ export class ReviewDashboard {
       const elapsedSec = (Date.now() - this.analysisStartTime) / 1000;
       const secPerPly = elapsedSec / current;
       const remainingSec = Math.max(1, Math.round(secPerPly * (total - current)));
-      etaText = `~${remainingSec}s remaining`;
+      if (remainingSec >= 60) {
+        const mins = Math.floor(remainingSec / 60);
+        const secs = remainingSec % 60;
+        etaText = `~${mins}m ${secs}s remaining`;
+      } else {
+        etaText = `~${remainingSec}s remaining`;
+      }
     } else if (current >= total && total > 0) {
       etaText = 'Finalizing report...';
     }
 
     if (subtitleEl) {
-      subtitleEl.textContent = total > 0
-        ? `Evaluating ply ${current} of ${total}...`
-        : 'Starting rapid engine analysis...';
+      if (total > 0) {
+        subtitleEl.textContent = current >= total
+          ? 'Finalizing analysis and tactics...'
+          : current === 0
+          ? `Starting rapid engine analysis (${total} plies)...`
+          : `Evaluating ply ${current} of ${total}...`;
+      } else {
+        subtitleEl.textContent = 'Starting rapid engine analysis...';
+      }
     }
     if (barEl) {
       barEl.style.width = `${pct}%`;
@@ -134,6 +168,7 @@ export class ReviewDashboard {
   hideLoading() {
     this.isAnalyzing = false;
     this.analysisStartTime = null;
+    this.lastUiYieldTime = 0;
   }
 
   setTheme(newTheme) {
@@ -144,10 +179,12 @@ export class ReviewDashboard {
   }
 
   setGame(analyzedGame) {
-    this.isAnalyzing = false;
-    if (this.isRetryingMistake) {
-      this.stopRetryMistake();
+    if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
+      backgroundAnalysisQueue.notifyUserActivity(4000);
     }
+    this.isAnalyzing = false;
+    this.analysisStartTime = null;
+    this.lastUiYieldTime = 0;
     this.game = analyzedGame;
     this.currentPly = analyzedGame && analyzedGame.plies.length > 0 ? 1 : 0;
     this.orientation = analyzedGame ? analyzedGame.userColor : 'w';
@@ -156,10 +193,10 @@ export class ReviewDashboard {
   }
 
   goToPly(ply) {
-    if (!this.game) return;
-    if (this.isRetryingMistake) {
-      this.stopRetryMistake();
+    if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
+      backgroundAnalysisQueue.notifyUserActivity(5000);
     }
+    if (!this.game) return;
     this.currentPly = Math.max(0, Math.min(this.game.plies.length, ply));
 
     // Play move sound
@@ -173,14 +210,6 @@ export class ReviewDashboard {
     }
 
     this.updateBoardAndControls();
-  }
-
-  startRetryMistake() {
-    startRetryMistake(this);
-  }
-
-  stopRetryMistake() {
-    stopRetryMistake(this);
   }
 
   nextKeyMoment() {
@@ -208,9 +237,15 @@ export class ReviewDashboard {
 
   closeWhyModal() {
     closeWhyModal(this);
+    if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
+      backgroundAnalysisQueue.notifyUserActivity(3000);
+    }
   }
 
   openWhyModal(targetEval = null) {
+    if (typeof backgroundAnalysisQueue !== 'undefined') {
+      backgroundAnalysisQueue.pause();
+    }
     return openWhyModal(this, targetEval);
   }
 
@@ -343,18 +378,12 @@ export class ReviewDashboard {
           </div>
           <div class="d-flex align-items-center gap-2">
             ${['inaccuracy', 'mistake', 'blunder'].includes(cur.classification) ? `
-              <button type="button" class="btn btn-sm btn-warning fw-bold comic-btn" id="btn-retry-mistake" title="Practice finding the best move">
-                <i class="bi bi-arrow-counterclockwise me-1"></i>Retry
-              </button>
-            ` : ''}
-            ${['inaccuracy', 'mistake', 'blunder'].includes(cur.classification) ? `
-              <button type="button" class="btn btn-sm btn-outline-danger fw-bold comic-btn" id="btn-show-why" title="Explore what happens in the next 10 moves">
+              <button type="button" class="btn btn-sm btn-outline-danger fw-bold comic-btn" id="btn-show-why" title="Explore what happens in the next 5 moves">
                 <i class="bi bi-question-circle me-1"></i>Why ${cur.classification === 'blunder' ? 'Blunder' : (cur.classification === 'mistake' ? 'Mistake' : 'Inaccuracy')}?
               </button>
             ` : ''}
           </div>
         `;
-        stripEl.querySelector('#btn-retry-mistake')?.addEventListener('click', () => this.startRetryMistake());
         stripEl.querySelector('#btn-show-why')?.addEventListener('click', () => this.openWhyModal());
       } else {
         stripEl.innerHTML = `
@@ -372,13 +401,33 @@ export class ReviewDashboard {
       counterEl.textContent = `${this.currentPly} / ${this.game?.plies.length || 0}`;
     }
 
-    // Update Active Row in Move Table (scroll container only, never whole window)
+    // Update navigation buttons disabled state
+    const isAtStart = this.currentPly === 0;
+    const isAtEnd = !this.game || this.currentPly >= (this.game.plies?.length || 0);
+
+    const btnFirst = this.container.querySelector('#btn-first');
+    const btnPrev = this.container.querySelector('#btn-prev');
+    const btnNext = this.container.querySelector('#btn-next');
+    const btnLast = this.container.querySelector('#btn-last');
+    const tableBtnPrev = this.container.querySelector('#table-btn-prev');
+    const tableBtnNext = this.container.querySelector('#table-btn-next');
+
+    if (btnFirst) btnFirst.disabled = isAtStart;
+    if (btnPrev) btnPrev.disabled = isAtStart;
+    if (tableBtnPrev) tableBtnPrev.disabled = isAtStart;
+    if (btnNext) btnNext.disabled = isAtEnd;
+    if (btnLast) btnLast.disabled = isAtEnd;
+    if (tableBtnNext) tableBtnNext.disabled = isAtEnd;
+
+    // Update Active Row in Move Table (scroll smoothly inside container)
     const scrollContainer = this.container.querySelector('.move-history-container');
     this.container.querySelectorAll('.move-list-row').forEach((row) => {
       const plyNum = parseInt(row.dataset.ply, 10);
       if (plyNum === this.currentPly) {
         row.classList.add('bg-warning-subtle', 'fw-black', 'border', 'border-warning');
-        if (scrollContainer) {
+        if (typeof row.scrollIntoView === 'function') {
+          row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } else if (scrollContainer) {
           const rowTop = row.offsetTop;
           const rowHeight = row.offsetHeight;
           const containerTop = scrollContainer.scrollTop;
@@ -517,21 +566,29 @@ export class ReviewDashboard {
 
   render() {
     if (this.isAnalyzing) {
-      const pct = this.analysisProgress.total > 0
-        ? Math.round((this.analysisProgress.current / this.analysisProgress.total) * 100)
+      const total = this.analysisProgress.total;
+      const current = this.analysisProgress.current;
+      const pct = total > 0
+        ? Math.min(100, Math.round((current / total) * 100))
         : 10;
+      const subtitle = total > 0
+        ? (current >= total
+            ? 'Finalizing analysis and tactics...'
+            : current === 0
+            ? `Starting rapid engine analysis (${total} plies)...`
+            : `Evaluating ply ${current} of ${total}...`)
+        : 'Starting rapid engine analysis...';
+      const stepText = total > 0 ? `${current} / ${total} plies` : 'Initializing...';
       this.container.innerHTML = `
         <div class="d-flex flex-column align-items-center justify-content-center p-4 sm:p-5 text-center comic-card max-w-xl mx-auto my-5 shadow-lg" id="review-analysis-card">
           <div class="spinner-border text-warning mb-3" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
           <h4 class="fw-black mb-1">Analyzing Game with Stockfish...</h4>
-          <p class="fg-secondary small mb-3 fw-bold" id="review-analysis-subtitle">
-            ${this.analysisProgress.total > 0 ? `Evaluating ply ${this.analysisProgress.current} of ${this.analysisProgress.total}...` : 'Starting rapid engine analysis...'}
-          </p>
+          <p class="fg-secondary small mb-3 fw-bold" id="review-analysis-subtitle">${subtitle}</p>
           <div class="progress w-100 max-w-md mx-auto mb-2" style="height: 14px; border: 2px solid #000000; border-radius: 999px; background: rgba(0,0,0,0.08);">
             <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" id="review-analysis-bar" style="width: ${pct}%; transition: width 0.15s ease;"></div>
           </div>
           <div class="d-flex align-items-center justify-content-between w-100 max-w-md fg-secondary small font-monospace fw-bold px-1">
-            <span id="review-analysis-step">${this.analysisProgress.total > 0 ? `${this.analysisProgress.current} / ${this.analysisProgress.total} plies` : 'Initializing...'}</span>
+            <span id="review-analysis-step">${stepText}</span>
             <span class="badge bg-warning text-dark font-monospace" id="review-analysis-eta">Estimating time...</span>
             <span id="review-analysis-pct">${pct}%</span>
           </div>
@@ -753,34 +810,39 @@ export class ReviewDashboard {
           <div class="comic-card-sm p-2 d-flex flex-column gap-2 mb-2">
             <!-- Row 1: Big Thumb-Friendly Step Controls -->
             <div class="d-flex align-items-center justify-content-between gap-1.5">
-              <button type="button" class="btn btn-light arcade-step-btn-sm" id="btn-first" title="First Move">
+              <button type="button" class="btn btn-light arcade-step-btn-sm" id="btn-first" title="First Move (Home / Ctrl+←)">
                 <i class="bi bi-chevron-bar-left fs-6"></i>
               </button>
-              <button type="button" class="btn btn-light arcade-step-btn-lg flex-grow-1" id="btn-prev" title="Previous Move">
+              <button type="button" class="btn btn-light arcade-step-btn-lg flex-grow-1" id="btn-prev" title="Previous Move (← / ↑ Arrow)">
                 <i class="bi bi-chevron-left fs-5 fw-black me-1"></i><span class="small fw-black d-none sm:inline">Prev</span>
               </button>
 
               <span class="badge bg-secondary font-monospace px-2.5 sm:px-3 py-2 fs-6 fw-bold flex-shrink-0" id="ply-counter">0 / 0</span>
 
-              <button type="button" class="btn btn-light arcade-step-btn-lg flex-grow-1" id="btn-next" title="Next Move">
+              <button type="button" class="btn btn-light arcade-step-btn-lg flex-grow-1" id="btn-next" title="Next Move (→ / ↓ Arrow)">
                 <span class="small fw-black d-none sm:inline me-1">Next</span><i class="bi bi-chevron-right fs-5 fw-black"></i>
               </button>
-              <button type="button" class="btn btn-light arcade-step-btn-sm" id="btn-last" title="Last Move">
+              <button type="button" class="btn btn-light arcade-step-btn-sm" id="btn-last" title="Last Move (End / Ctrl+→)">
                 <i class="bi bi-chevron-bar-right fs-6"></i>
               </button>
             </div>
 
             <!-- Row 2: Actions (Key Moment, Threat, Flip) -->
             <div class="d-flex align-items-center justify-content-between gap-2">
-              <button type="button" class="btn btn-warning comic-btn flex-grow-1 py-1.5 fw-black" id="btn-key-moment" title="Next Key Moment">
+              <button type="button" class="btn btn-warning comic-btn flex-grow-1 py-1.5 fw-black" id="btn-key-moment" title="Next Key Moment (Space)">
                 <i class="bi bi-lightning-charge-fill me-1"></i>Key Moment
               </button>
               <button type="button" class="btn btn-outline-danger comic-btn px-2.5 py-1.5" id="btn-toggle-threat" title="Toggle Threat Arrow">
                 <i class="bi bi-shield-slash me-1"></i>Threat
               </button>
-              <button type="button" class="btn btn-light comic-btn px-2.5 py-1.5" id="btn-flip" title="Flip Board">
+              <button type="button" class="btn btn-light comic-btn px-2.5 py-1.5" id="btn-flip" title="Flip Board (F)">
                 <i class="bi bi-arrow-left-right me-1"></i>Flip
               </button>
+            </div>
+
+            <!-- Keyboard Navigation Hint -->
+            <div class="d-flex align-items-center justify-content-center gap-2 text-secondary small fw-semibold pt-1 border-top" style="font-size: 11px; border-color: var(--arcade-border) !important;">
+              <span><i class="bi bi-keyboard me-1 text-warning"></i>Arrow keys: <kbd class="bg-body-secondary text-body px-1">←</kbd> <kbd class="bg-body-secondary text-body px-1">↑</kbd> Prev &nbsp;•&nbsp; <kbd class="bg-body-secondary text-body px-1">→</kbd> <kbd class="bg-body-secondary text-body px-1">↓</kbd> Next</span>
             </div>
           </div>
 
@@ -860,7 +922,15 @@ export class ReviewDashboard {
               <div class="comic-card p-3 h-100 d-flex flex-column">
                 <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
                   <h6 class="mb-0 fw-black"><i class="bi bi-list-ol me-1.5 text-warning"></i>Move History</h6>
-                  <span class="badge bg-body-secondary text-dark fw-bold font-monospace">${this.game.plies.length} Plies</span>
+                  <div class="d-flex align-items-center gap-1.5">
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0.5 px-2 comic-btn" id="table-btn-prev" title="Previous Move (← / ↑)">
+                      <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <span class="badge bg-body-secondary text-dark fw-bold font-monospace">${this.game.plies.length} Plies</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0.5 px-2 comic-btn" id="table-btn-next" title="Next Move (→ / ↓)">
+                      <i class="bi bi-chevron-right"></i>
+                    </button>
+                  </div>
                 </div>
                 <div class="move-history-container flex-grow-1" style="max-height: 480px;">
                   <table class="table table-sm table-hover align-middle mb-0" style="font-size: 13px;">
@@ -996,14 +1066,30 @@ export class ReviewDashboard {
       blackName: this.game.black || 'Black',
     });
 
+    // Instantly pause background analysis on any interaction with review dashboard
+    this.container.addEventListener('pointerdown', () => {
+      if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
+        backgroundAnalysisQueue.notifyUserActivity(4000);
+      }
+    }, { passive: true });
+
     // Bind Navigation Buttons
-    this.container.querySelector('#btn-first')?.addEventListener('click', () => this.goToPly(0));
-    this.container.querySelector('#btn-prev')?.addEventListener('click', () => this.goToPly(this.currentPly - 1));
-    this.container.querySelector('#btn-next')?.addEventListener('click', () => this.goToPly(this.currentPly + 1));
-    this.container.querySelector('#btn-last')?.addEventListener('click', () => this.goToPly(this.game.plies.length));
-    this.container.querySelector('#btn-key-moment')?.addEventListener('click', () => this.nextKeyMoment());
-    this.container.querySelector('#btn-toggle-threat')?.addEventListener('click', () => this.toggleThreat());
-    this.container.querySelector('#btn-flip')?.addEventListener('click', () => {
+    const bindNavBtn = (id, fn) => {
+      this.container.querySelector(id)?.addEventListener('click', (e) => {
+        fn();
+        e.currentTarget?.blur();
+      });
+    };
+
+    bindNavBtn('#btn-first', () => this.goToPly(0));
+    bindNavBtn('#btn-prev', () => this.goToPly(this.currentPly - 1));
+    bindNavBtn('#btn-next', () => this.goToPly(this.currentPly + 1));
+    bindNavBtn('#btn-last', () => this.goToPly(this.game.plies.length));
+    bindNavBtn('#table-btn-prev', () => this.goToPly(this.currentPly - 1));
+    bindNavBtn('#table-btn-next', () => this.goToPly(this.currentPly + 1));
+    bindNavBtn('#btn-key-moment', () => this.nextKeyMoment());
+    bindNavBtn('#btn-toggle-threat', () => this.toggleThreat());
+    bindNavBtn('#btn-flip', () => {
       this.orientation = this.orientation === 'w' ? 'b' : 'w';
       this.updateBoardAndControls();
     });

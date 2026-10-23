@@ -4,13 +4,13 @@
  * Only analyzes user-imported games with live Stockfish progress.
  */
 
-import { fetchChessComGames, fetchLichessGames } from '../services/importApi.js';
-import { getGameCacheInfo, clearGameCache, getCacheStats } from '../services/gameCacheService.js';
-import { backgroundAnalysisQueue } from '../services/backgroundAnalysisQueue.js';
-import { openInsights } from './insightsModal.js';
-import { insEscape } from './insightsCharts.js';
 
-export class ImportModal {
+
+
+
+
+
+class ImportModal {
   constructor(modalEl, options = {}) {
     this.modalEl = modalEl;
     this.onSelectPgn = options.onSelectPgn || null; // (pgn, userColor) => {}

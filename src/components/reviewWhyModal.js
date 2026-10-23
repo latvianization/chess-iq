@@ -1,15 +1,4 @@
-const Chess = window.Chess;
-import { Chessboard } from './board.js';
-import { soundService } from '../services/sound.js';
-import { getComicBadge } from '../services/comicBadges.js';
-import {
-  MIN_CONTINUATION_PLIES,
-  extendContinuation,
-  getDeepContinuation,
-  summarizePunishment
-} from '../services/engineRefutations.js';
-
-export function closeWhyModal(dashboard) {
+function closeWhyModal(dashboard) {
   if (dashboard.whyTimer) {
     clearInterval(dashboard.whyTimer);
     dashboard.whyTimer = null;
@@ -23,7 +12,7 @@ export function closeWhyModal(dashboard) {
   dashboard.whyBoard = null;
 }
 
-export async function openWhyModal(dashboard, targetEval = null) {
+async function openWhyModal(dashboard, targetEval = null) {
   const cur = targetEval || dashboard.getCurrentEval();
   if (!cur) return;
 
@@ -106,7 +95,7 @@ export async function openWhyModal(dashboard, targetEval = null) {
             </div>
 
             <div class="p-2 mb-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border); border-radius: 0.75rem; max-height: 140px; overflow-y: auto;">
-              <div class="small fw-bold text-secondary mb-1.5" style="font-size: 11px;">Tactical Continuation (10 Plies):</div>
+              <div class="small fw-bold text-secondary mb-1.5" style="font-size: 11px;">Tactical Continuation (5 Moves):</div>
               <div class="d-flex flex-wrap gap-1.5" id="why-pills-container">
                 <span class="text-secondary small"><span class="spinner-border spinner-border-sm me-2" role="status"></span>Loading line...</span>
               </div>
@@ -158,14 +147,17 @@ export async function openWhyModal(dashboard, targetEval = null) {
   dashboard.whyKeyHandler = (e) => {
     if (e.key === 'Escape') {
       closeWhyModal(dashboard);
-    } else if (e.key === 'ArrowLeft') {
+    } else if (e.key === 'ArrowLeft' || e.key === 'Left' || e.code === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Up' || e.code === 'ArrowUp') {
       e.preventDefault();
+      e.stopPropagation();
       modal.querySelector('#why-btn-prev')?.click();
-    } else if (e.key === 'ArrowRight') {
+    } else if (e.key === 'ArrowRight' || e.key === 'Right' || e.code === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'Down' || e.code === 'ArrowDown') {
       e.preventDefault();
+      e.stopPropagation();
       modal.querySelector('#why-btn-next')?.click();
-    } else if (e.key === ' ') {
+    } else if (e.key === ' ' || e.code === 'Space') {
       e.preventDefault();
+      e.stopPropagation();
       modal.querySelector('#why-btn-play')?.click();
     }
   };
@@ -185,7 +177,7 @@ export async function openWhyModal(dashboard, targetEval = null) {
     punishmentSteps = [
       { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
     ];
-    const deepPunish = await getDeepContinuation(cur.fen, 10);
+    const deepPunish = await getDeepContinuation(cur.fen, 5);
     punishmentSteps.push(...deepPunish);
     const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
     punishmentSummary = summarizePunishment(cur.fen, endFen, cur.color);
@@ -213,7 +205,7 @@ export async function openWhyModal(dashboard, targetEval = null) {
             fen: cBest.fen(),
             color: m.color
           });
-          const deepBest = await getDeepContinuation(cBest.fen(), 9);
+          const deepBest = await getDeepContinuation(cBest.fen(), 4);
           bestSteps.push(...deepBest);
           bestSummary = `Playing ${cur.bestMoveSan || m.san} retains full equality or advantage with no tactical loss.`;
         }

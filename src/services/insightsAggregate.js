@@ -215,7 +215,7 @@ function insAccuracyHistogram(summaries) {
   }));
 }
 
-export function computeInsights(summaryList) {
+function computeInsights(summaryList) {
   const summaries = [...summaryList].sort((a, b) => a.ts - b.ts);
   if (summaries.length === 0) return null;
 

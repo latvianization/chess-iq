@@ -4,7 +4,7 @@
  * and color tokens for move classifications.
  */
 
-export const COMIC_DICTIONARY = {
+var COMIC_DICTIONARY = {
   brilliant: {
     words: ['Brilliant'],
     symbol: '💎',
@@ -110,7 +110,7 @@ export const COMIC_DICTIONARY = {
 /**
  * Deterministically pick a varied comic word based on ply or string seed
  */
-export function getComicBadge(classification, seed = 0) {
+function getComicBadge(classification, seed = 0) {
   const config = COMIC_DICTIONARY[classification] || COMIC_DICTIONARY.good;
   let hash = 0;
   if (typeof seed === 'number') {

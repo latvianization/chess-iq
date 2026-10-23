@@ -1,9 +1,9 @@
-export function closeGameOverModal() {
+function closeGameOverModal() {
   const existing = document.getElementById('bot-game-over-modal');
   if (existing) existing.remove();
 }
 
-export function getBotRecords() {
+function getBotRecords() {
   try {
     return JSON.parse(localStorage.getItem('chess_iq_bot_records') || '{}');
   } catch {
@@ -11,7 +11,7 @@ export function getBotRecords() {
   }
 }
 
-export function recordBotResult(botId, result) {
+function recordBotResult(botId, result) {
   try {
     const records = getBotRecords();
     if (!records[botId]) records[botId] = { wins: 0, losses: 0, draws: 0 };
@@ -22,7 +22,7 @@ export function recordBotResult(botId, result) {
   } catch {}
 }
 
-export function showGameOverModal(arena, reason = 'Game Completed') {
+function showGameOverModal(arena, reason = 'Game Completed') {
   closeGameOverModal();
 
   const isWin = arena.gameResult === 'win';
@@ -98,8 +98,11 @@ export function showGameOverModal(arena, reason = 'Game Completed') {
           <button type="button" class="btn btn-light comic-btn flex-grow-1 py-2 fw-bold" id="modal-btn-rematch">
             <i class="bi bi-arrow-repeat me-1"></i> Rematch
           </button>
-          <button type="button" class="btn btn-outline-secondary comic-btn flex-grow-1 py-2 fw-bold" id="modal-btn-close">
-            <i class="bi bi-x-lg me-1"></i> Close
+          <button type="button" class="btn btn-outline-warning comic-btn flex-grow-1 py-2 fw-bold" id="modal-btn-change-bot">
+            <i class="bi bi-people-fill me-1"></i> Change Bot
+          </button>
+          <button type="button" class="btn btn-outline-secondary comic-btn py-2 px-3 fw-bold" id="modal-btn-close">
+            <i class="bi bi-x-lg"></i>
           </button>
         </div>
       </div>
@@ -123,6 +126,13 @@ export function showGameOverModal(arena, reason = 'Game Completed') {
   modal.querySelector('#modal-btn-rematch')?.addEventListener('click', () => {
     closeGameOverModal();
     arena.startNewGame();
+  });
+
+  modal.querySelector('#modal-btn-change-bot')?.addEventListener('click', () => {
+    closeGameOverModal();
+    if (typeof arena.resetToPicker === 'function') {
+      arena.resetToPicker();
+    }
   });
 
   modal.querySelector('#modal-btn-close')?.addEventListener('click', () => {

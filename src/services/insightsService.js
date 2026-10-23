@@ -1,8 +1,3 @@
-import { fetchChessComGames, fetchLichessGames, analyzeFullPgn } from './importApi.js';
-import { getCachedGame, saveCachedGame } from './gameCacheService.js';
-import { computeInsights } from './insightsAggregate.js';
-import { backgroundAnalysisQueue } from './backgroundAnalysisQueue.js';
-
 const INSIGHTS_KEY_PREFIX = 'chess_iq_insights_v1_';
 const INSIGHTS_GAME_LIMIT = 100;
 const INSIGHTS_MIN_PLIES = 20;
@@ -83,7 +78,7 @@ function insFetchGames(platform, username) {
   return fetchLichessGames(username, INSIGHTS_GAME_LIMIT);
 }
 
-export function loadInsights(platform, username) {
+function loadInsights(platform, username) {
   try {
     const raw = localStorage.getItem(insStorageKey(platform, username));
     return raw ? JSON.parse(raw) : null;
@@ -98,17 +93,17 @@ function insSave(platform, username, entry) {
   } catch {}
 }
 
-export function isInsightsFresh(entry) {
+function isInsightsFresh(entry) {
   return Boolean(entry && entry.report && entry.generatedAt && Date.now() - entry.generatedAt < INSIGHTS_MAX_AGE_MS);
 }
 
-export function clearInsights(platform, username) {
+function clearInsights(platform, username) {
   try {
     localStorage.removeItem(insStorageKey(platform, username));
   } catch {}
 }
 
-export async function runInsights({ platform, username, force = false, onStatus, shouldCancel }) {
+async function runInsights({ platform, username, force = false, onStatus, shouldCancel }) {
   const previous = loadInsights(platform, username);
   if (!force && isInsightsFresh(previous)) return { entry: previous, cancelled: false };
 

@@ -9,11 +9,6 @@
     <meta property="og:description" content="Web-first chess game analysis app with Stockfish engine evaluation, phase Elo ratings, blunder diagnostics, interactive review dashboard, and 33-bot arena." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
     <!-- Tailwind CSS Engine CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -37,8 +32,8 @@
               }
             },
             fontFamily: {
-              sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
-              mono: ['"JetBrains Mono"', 'monospace'],
+              sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+              mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
             }
           }
         }
@@ -56,7 +51,7 @@
       <div class="container-fluid px-0 d-flex align-items-center justify-content-between flex-nowrap gap-1 sm:gap-3">
         <!-- Brand & Mode Switcher -->
         <div class="d-flex align-items-center gap-1.5 sm:gap-3 flex-shrink-0">
-          <a class="navbar-brand d-flex align-items-center gap-1.5 fw-black mb-0 text-decoration-none logo-hover me-0" href="#">
+          <a class="navbar-brand d-flex align-items-center gap-1.5 fw-black mb-0 text-decoration-none logo-hover me-0" href="#" id="brand-logo" style="cursor: pointer;" title="Back to Home">
             <span class="arcade-badge-logo">⚡</span>
             <span class="fw-black fs-6 sm:fs-5 tracking-tight font-sans">CHESS<span class="fg-warning">IQ</span></span>
           </a>
@@ -117,15 +112,54 @@
     <!-- Bootstrap 5 Import Modal Container -->
     <div class="modal fade" id="import-modal" tabindex="-1" aria-labelledby="import-modal-label" aria-hidden="true"></div>
 
-    <!-- CDNs: Bootstrap 5.3.3 Bundle, Chess.js & Canvas Confetti -->
+    <!-- CDNs: Bootstrap 5.3.3 Bundle & Chess.js -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.4/dist/confetti.browser.min.js"></script>
+    <script>
+      // Polyfill modern chess.js camelCase methods for chess.js 0.10.x compatibility
+      if (window.Chess && window.Chess.prototype) {
+        var proto = window.Chess.prototype;
+        if (!proto.loadPgn && typeof proto.load_pgn === 'function') proto.loadPgn = function(p, o) { return this.load_pgn(p, o); };
+        if (!proto.isGameOver && typeof proto.game_over === 'function') proto.isGameOver = function() { return this.game_over(); };
+        if (!proto.isCheckmate && typeof proto.in_checkmate === 'function') proto.isCheckmate = function() { return this.in_checkmate(); };
+        if (!proto.isDraw && typeof proto.in_draw === 'function') proto.isDraw = function() { return this.in_draw(); };
+        if (!proto.inCheck && typeof proto.in_check === 'function') proto.inCheck = function() { return this.in_check(); };
+        if (!proto.isStalemate && typeof proto.in_stalemate === 'function') proto.isStalemate = function() { return this.in_stalemate(); };
+        if (!proto.isThreefoldRepetition && typeof proto.in_threefold_repetition === 'function') proto.isThreefoldRepetition = function() { return this.in_threefold_repetition(); };
+        if (!proto.isInsufficientMaterial && typeof proto.insufficient_material === 'function') proto.isInsufficientMaterial = function() { return this.insufficient_material(); };
+      }
+    </script>
 
-    <!-- Modular Application Bundles (Runs everywhere including direct file:// with zero CORS errors) -->
-    <script src="./app-data.js"></script>
-    <script src="./app-services.js"></script>
-    <script src="./app-components.js"></script>
-    <script src="./app-main.js"></script>
+    <!-- 1. Piece SVGs, Comic Badges, ECO Dictionary & Bot Profiles -->
+    <script src="./src/components/pieceSvgs.js"></script>
+    <script src="./src/services/comicBadges.js"></script>
+    <script src="./src/services/ecoDictionary.js"></script>
+    <script src="./src/data/botsData.js"></script>
+
+    <!-- 2. Services & Analysis Engine -->
+    <script src="./src/services/sound.js"></script>
+    <script src="./src/services/stockfishWorker.js"></script>
+    <script src="./src/services/engineEvaluationTables.js"></script>
+    <script src="./src/services/engine.js"></script>
+    <script src="./src/services/engineRefutations.js"></script>
+    <script src="./src/services/gameCacheService.js"></script>
+    <script src="./src/services/importApi.js"></script>
+    <script src="./src/services/insightsAggregate.js"></script>
+    <script src="./src/services/backgroundAnalysisQueue.js"></script>
+    <script src="./src/services/insightsService.js"></script>
+
+    <!-- 3. UI Components -->
+    <script src="./src/components/board.js"></script>
+    <script src="./src/components/botGameOverModal.js"></script>
+    <script src="./src/components/botArena.js"></script>
+    <script src="./src/components/reviewAdvantageChart.js"></script>
+    <script src="./src/components/reviewWhyModal.js"></script>
+    <script src="./src/components/insightsCharts.js"></script>
+    <script src="./src/components/insightsModal.js"></script>
+    <script src="./src/components/importModal.js"></script>
+    <script src="./src/components/reviewDashboard.js"></script>
+
+    <!-- 4. Application Coordinator -->
+    <script src="./src/main.js"></script>
   </body>
 </html>

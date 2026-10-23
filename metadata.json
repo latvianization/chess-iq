@@ -1,8 +1,0 @@
-{
-  "name": "Chess Game Analyzer (Chess.com & Lichess)",
-  "description": "Web-first chess game analysis app with Stockfish engine evaluation, phase Elo ratings, blunder diagnostics, interactive review dashboard, and 33-bot arena.",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}

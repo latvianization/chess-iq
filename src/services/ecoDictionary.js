@@ -1,4 +1,4 @@
-export const ECO_DATABASE = [
+var ECO_DATABASE = [
   // Italian & Spanish
   { eco: 'C50', name: 'Italian Game', moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4'] },
   { eco: 'C54', name: 'Giuoco Piano, Main Line', moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'c3', 'Nf6', 'd4'] },
@@ -71,7 +71,7 @@ export const ECO_DATABASE = [
   { eco: 'A00', name: 'Uncommon Opening', moves: [] }
 ];
 
-export function findMatchingEco(moveSans) {
+function findMatchingEco(moveSans) {
   let bestMatch = ECO_DATABASE[ECO_DATABASE.length - 1];
   let maxMatched = 0;
 
@@ -97,7 +97,7 @@ export function findMatchingEco(moveSans) {
   };
 }
 
-export function isBookMove(moveSans, moveIndex) {
+function isBookMove(moveSans, moveIndex) {
   for (const entry of ECO_DATABASE) {
     if (moveIndex < entry.moves.length) {
       let matches = true;

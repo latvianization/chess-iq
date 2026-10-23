@@ -1,7 +1,3 @@
-import { COMIC_DICTIONARY } from '../services/comicBadges.js';
-import { clearInsights, isInsightsFresh, loadInsights, runInsights } from '../services/insightsService.js';
-import { INS_COLORS, insBarChart, insDonut, insEscape, insLineChart, insScatter, insStackedBar } from './insightsCharts.js';
-
 const INSIGHTS_MODAL_ID = 'insights-modal';
 const INSIGHTS_MOVE_CLASSES = ['brilliant', 'great', 'best', 'excellent', 'good', 'inaccuracy', 'mistake', 'blunder', 'missed_win'];
 const INSIGHTS_CARD_STYLE = 'background: var(--arcade-card-hover); border: 1px solid var(--arcade-border); border-radius: 0.75rem;';
@@ -204,11 +200,11 @@ function insProgressHtml(username, hasReport) {
     </div>`;
 }
 
-export function closeInsights() {
+function closeInsights() {
   document.getElementById(INSIGHTS_MODAL_ID)?.remove();
 }
 
-export async function openInsights({ platform, username, onSelectGame }) {
+async function openInsights({ platform, username, onSelectGame }) {
   closeInsights();
 
   const overlay = document.createElement('div');

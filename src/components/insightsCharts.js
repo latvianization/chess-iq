@@ -7,7 +7,7 @@ const INS_COLORS = {
   purple: '#8b5cf6'
 };
 
-export function insEscape(text) {
+function insEscape(text) {
   return String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
@@ -16,7 +16,7 @@ function insScale(value, min, max, outMin, outMax) {
   return outMin + ((value - min) / (max - min)) * (outMax - outMin);
 }
 
-export function insLineChart(series, { height = 160, yFormat = (v) => Math.round(v), xLabels = [] } = {}) {
+function insLineChart(series, { height = 160, yFormat = (v) => Math.round(v), xLabels = [] } = {}) {
   const width = 400;
   const pad = { left: 38, right: 10, top: 10, bottom: 22 };
   const allValues = series.flatMap((s) => s.values).filter((v) => typeof v === 'number');
@@ -51,7 +51,7 @@ export function insLineChart(series, { height = 160, yFormat = (v) => Math.round
   return `<svg viewBox="0 0 ${width} ${height}" width="100%" role="img">${grid}${lines}${labels}</svg>`;
 }
 
-export function insBarChart(items, { height = 150, max = null, unit = '', color = INS_COLORS.accent } = {}) {
+function insBarChart(items, { height = 150, max = null, unit = '', color = INS_COLORS.accent } = {}) {
   if (items.length === 0) return '<div class="text-secondary small">Not enough data.</div>';
   const width = 400;
   const pad = { left: 10, right: 10, top: 18, bottom: 24 };
@@ -72,7 +72,7 @@ export function insBarChart(items, { height = 150, max = null, unit = '', color 
   return `<svg viewBox="0 0 ${width} ${height}" width="100%" role="img">${bars}</svg>`;
 }
 
-export function insDonut(slices, centerLabel = '', centerSub = '') {
+function insDonut(slices, centerLabel = '', centerSub = '') {
   const total = slices.reduce((sum, s) => sum + s.value, 0);
   if (total === 0) return '<div class="text-secondary small">Not enough data.</div>';
   const radius = 42;
@@ -92,7 +92,7 @@ export function insDonut(slices, centerLabel = '', centerSub = '') {
     <text x="60" y="74" text-anchor="middle" font-size="8" fill="currentColor" fill-opacity="0.65">${insEscape(centerSub)}</text></svg>`;
 }
 
-export function insScatter(points, { height = 170, xLabel = '', yLabel = '' } = {}) {
+function insScatter(points, { height = 170, xLabel = '', yLabel = '' } = {}) {
   if (points.length < 2) return '<div class="text-secondary small">Not enough data.</div>';
   const width = 400;
   const pad = { left: 38, right: 10, top: 10, bottom: 26 };
@@ -121,7 +121,7 @@ export function insScatter(points, { height = 170, xLabel = '', yLabel = '' } = 
   return `<svg viewBox="0 0 ${width} ${height}" width="100%" role="img">${axis}${dots}</svg>`;
 }
 
-export function insStackedBar(record) {
+function insStackedBar(record) {
   const total = record.w + record.d + record.l;
   if (total === 0) return '<div class="text-secondary small">—</div>';
   const part = (value, color) => (value > 0
@@ -130,5 +130,3 @@ export function insStackedBar(record) {
   return `<div class="d-flex rounded-pill overflow-hidden" style="height:10px;background:rgba(128,128,128,0.15)">
     ${part(record.w, INS_COLORS.win)}${part(record.d, INS_COLORS.draw)}${part(record.l, INS_COLORS.loss)}</div>`;
 }
-
-export { INS_COLORS };

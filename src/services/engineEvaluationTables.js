@@ -1,4 +1,4 @@
-export const PIECE_VALUES = {
+var PIECE_VALUES = {
   p: 100,
   n: 320,
   b: 330,
@@ -7,7 +7,7 @@ export const PIECE_VALUES = {
   k: 2e4
 };
 
-export const PST_MG_PAWN = [
+var PST_MG_PAWN = [
   0, 0, 0, 0, 0, 0, 0, 0,
   98, 134, 61, 95, 68, 126, 34, -11,
   -6, 7, 26, 31, 65, 56, 25, -20,
@@ -18,7 +18,7 @@ export const PST_MG_PAWN = [
   0, 0, 0, 0, 0, 0, 0, 0
 ];
 
-export const PST_MG_KNIGHT = [
+var PST_MG_KNIGHT = [
   -167, -89, -34, -49, 61, -97, -15, -107,
   -73, -41, 72, 36, 23, 62, 7, -17,
   -47, 60, 37, 65, 84, 129, 73, 44,
@@ -29,7 +29,7 @@ export const PST_MG_KNIGHT = [
   -105, -21, -58, -33, -17, -28, -19, -23
 ];
 
-export const PST_MG_BISHOP = [
+var PST_MG_BISHOP = [
   -29, 4, -82, -37, -25, -42, 7, -8,
   -26, 16, -18, -13, 30, 59, 18, -47,
   -16, 37, 43, 40, 35, 50, 37, -2,
@@ -40,7 +40,7 @@ export const PST_MG_BISHOP = [
   -33, -3, -14, -21, -13, -12, -39, -21
 ];
 
-export const PST_MG_ROOK = [
+var PST_MG_ROOK = [
   32, 42, 32, 51, 63, 9, 31, 43,
   27, 32, 58, 62, 80, 67, 26, 44,
   -5, 19, 26, 36, 17, 45, 61, 16,
@@ -51,7 +51,7 @@ export const PST_MG_ROOK = [
   -19, -13, 1, 17, 16, 7, -37, -26
 ];
 
-export const PST_MG_QUEEN = [
+var PST_MG_QUEEN = [
   -28, 0, 29, 12, 59, 44, 43, 45,
   -24, -39, -5, 1, -16, 57, 28, 54,
   -18, -15, -7, 14, 4, 45, 13, 28,
@@ -62,7 +62,7 @@ export const PST_MG_QUEEN = [
   -18, -9, 7, -3, 3, -18, -15, -22
 ];
 
-export const PST_MG_KING = [
+var PST_MG_KING = [
   -65, 23, 16, -15, -56, -34, 2, 13,
   29, -1, -20, -7, -8, -4, -38, -29,
   -9, 24, 2, -16, -20, 6, 22, -22,

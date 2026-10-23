@@ -30,7 +30,7 @@
 body {
   background-color: var(--arcade-bg);
   color: var(--arcade-text);
-  font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   margin: 0;
   padding: 0;
   min-height: 100vh;
@@ -465,7 +465,7 @@ body {
   width: 100%;
   font-size: 9px;
   font-weight: 900;
-  font-family: "JetBrains Mono", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   text-align: center;
   z-index: 2;
   pointer-events: none;
@@ -775,7 +775,7 @@ body {
 .arcade-bot-elo {
   font-size: 0.68rem;
   font-weight: 800;
-  font-family: "JetBrains Mono", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
   background: rgba(251, 191, 36, 0.2);
@@ -866,6 +866,27 @@ input[type="range"].arcade-range {
   background-color: #10b981;
   box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
   animation: pulseDotAnim 1.6s infinite cubic-bezier(0.66, 0, 0, 1);
+}
+
+/* All-Bots Tier Grid Cards */
+.bot-select-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  border: 1px solid var(--arcade-border);
+}
+
+.bot-select-card:hover {
+  transform: translateY(-3px) scale(1.02);
+  border-color: #fbbf24 !important;
+  box-shadow: 0 8px 24px rgba(251, 191, 36, 0.22);
+}
+
+.bot-select-card .bot-avatar-emoji {
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+
+.bot-select-card:hover .bot-avatar-emoji {
+  transform: scale(1.18) rotate(5deg);
 }
 
 @keyframes pulseDotAnim {

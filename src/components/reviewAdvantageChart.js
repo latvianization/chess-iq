@@ -1,6 +1,4 @@
-import { COMIC_DICTIONARY } from '../services/comicBadges.js';
-
-export function createCurvedPath(points) {
+function createCurvedPath(points) {
   if (!points || points.length === 0) return '';
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
 
@@ -23,7 +21,7 @@ export function createCurvedPath(points) {
   return path;
 }
 
-export function updateAdvantageScrubber(dashboard) {
+function updateAdvantageScrubber(dashboard) {
   if (!dashboard || !dashboard.game || !dashboard.advantagePoints || dashboard.advantagePoints.length === 0) return;
   const group = dashboard.container.querySelector('#advantage-scrubber-group');
   const line = dashboard.container.querySelector('#scrubber-line');
@@ -49,7 +47,7 @@ export function updateAdvantageScrubber(dashboard) {
   }
 }
 
-export function renderAdvantageChart(dashboard) {
+function renderAdvantageChart(dashboard) {
   const chartArea = dashboard.container.querySelector('#advantage-chart-area');
   if (!chartArea || !dashboard.game || !dashboard.game.plies || dashboard.game.plies.length === 0) {
     if (chartArea) chartArea.innerHTML = '';
@@ -88,14 +86,14 @@ export function renderAdvantageChart(dashboard) {
     const mgPt = dashboard.advantagePoints[mgPly - 1];
     phaseMarkersSvg += `
       <line x1="${mgPt.x}" y1="6" x2="${mgPt.x}" y2="${height - 6}" stroke="#60a5fa" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.65" />
-      <text x="${mgPt.x}" y="12" fill="#93c5fd" font-size="9" font-weight="700" font-family="JetBrains Mono, monospace" text-anchor="middle">Middle</text>
+      <text x="${mgPt.x}" y="12" fill="#93c5fd" font-size="9" font-weight="700" font-family="ui-monospace, monospace" text-anchor="middle">Middle</text>
     `;
   }
   if (egPly > 1 && egPly <= totalPlies) {
     const egPt = dashboard.advantagePoints[egPly - 1];
     phaseMarkersSvg += `
       <line x1="${egPt.x}" y1="6" x2="${egPt.x}" y2="${height - 6}" stroke="#34d399" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.65" />
-      <text x="${egPt.x}" y="12" fill="#6ee7b7" font-size="9" font-weight="700" font-family="JetBrains Mono, monospace" text-anchor="middle">Endgame</text>
+      <text x="${egPt.x}" y="12" fill="#6ee7b7" font-size="9" font-weight="700" font-family="ui-monospace, monospace" text-anchor="middle">Endgame</text>
     `;
   }
 
