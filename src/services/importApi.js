@@ -1,4 +1,4 @@
-import { Chess } from "chess.js";
+const Chess = window.Chess;
 import {
   calculateMoveAccuracy,
   calculatePhaseElo,
@@ -7,8 +7,8 @@ import {
   detectPhase,
   detectThreat,
   evaluateFenHybrid
-} from "./engine";
-import { findMatchingEco, isBookMove } from "./ecoDictionary";
+} from "./engine.js";
+import { findMatchingEco, isBookMove } from "./ecoDictionary.js";
 export function parseClockToSeconds(clockStr) {
   const match = clockStr.match(/(\d+):(\d+):?(\d+)?(\.\d+)?/);
   if (!match) return null;
@@ -59,7 +59,11 @@ export function extractMovesAndClocks(pgn) {
 export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) {
   const chess = new Chess();
   try {
-    chess.loadPgn(pgn);
+    if (typeof chess.loadPgn === "function") {
+      chess.loadPgn(pgn);
+    } else if (typeof chess.load_pgn === "function") {
+      chess.load_pgn(pgn);
+    }
   } catch {
   }
   const header = chess.header();
@@ -239,7 +243,7 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
       );
       const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
       let threat = null;
-      if (classification === "blunder" || classification === "mistake" || classification === "inaccuracy" || winProbLoss > 0.03) {
+      if (classification === "blunder" || winProbLoss > 0.15) {
         threat = await detectThreat(item.fenAfter);
       }
       plies[i] = {
@@ -273,9 +277,9 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
         phase: item.phase
       };
     }
-    if (onProgress && (i % 2 === 0 || i === totalPlies - 1)) {
+    if (onProgress && (i % 6 === 0 || i === totalPlies - 1)) {
       onProgress(i + 1, totalPlies);
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
   const createEmptyCounts = () => ({

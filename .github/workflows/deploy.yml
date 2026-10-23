@@ -36,6 +36,7 @@ jobs:
 
       - name: Assemble production bundle
         run: |
+          node build.js
           mkdir -p dist
           cp index.html app.js dist/
           cp -r src dist/

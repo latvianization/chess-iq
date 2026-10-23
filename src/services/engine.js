@@ -1,6 +1,6 @@
-import { Chess } from "chess.js";
-import { isBookMove } from "./ecoDictionary";
-import { stockfishService } from "./stockfishWorker";
+const Chess = window.Chess;
+import { isBookMove } from "./ecoDictionary.js";
+import { stockfishService } from "./stockfishWorker.js";
 const PIECE_VALUES = {
   p: 100,
   n: 320,
@@ -778,7 +778,7 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
   if (cached) return cached;
 
   if (!isDeep) {
-    const localSearch = findBestMoveLocal(fen, 2);
+    const localSearch = findBestMoveLocal(fen, 1);
     const localResult = {
       scoreCp: localSearch.evalCp,
       mate: null,

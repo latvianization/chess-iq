@@ -319,20 +319,26 @@ body {
   background-color: rgba(255, 255, 255, 0.38);
 }
 
-/* Capture Target Highlight */
+/* Clean Red Border around target opponent pieces */
 .board-square.capture-target {
-  box-shadow: inset 0 0 0 3.5px #f43f5e, inset 0 0 14px rgba(244, 63, 94, 0.35);
-  border-radius: 4px;
+  box-shadow: inset 0 0 0 3.5px #ef4444 !important;
+  border-radius: 6px;
   position: relative;
   z-index: 5;
 }
 
-.board-square.capture-target::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle, rgba(244, 63, 94, 0.22) 0%, rgba(244, 63, 94, 0.05) 75%);
-  pointer-events: none;
+.board-square.capture-target img {
+  filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.65));
+}
+
+@keyframes pieceLandingPop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.piece-landing-pop {
+  animation: pieceLandingPop 0.18s cubic-bezier(0.2, 0, 0.2, 1);
 }
 
 /* Comic Sticker Badges on Board Squares */
@@ -608,19 +614,33 @@ body {
   to { opacity: 1; }
 }
 
-/* Imported Game Cards */
+/* Modernized Imported Game Cards */
 .imported-game-card {
-  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.18s ease, border-color 0.18s ease;
   border: 1px solid var(--arcade-border);
   background: var(--arcade-card);
+  border-radius: 0.85rem;
   width: 100%;
   box-sizing: border-box;
 }
 
 .imported-game-card:hover {
-  border-color: #fbbf24;
+  transform: translateY(-2px);
+  border-color: rgba(251, 191, 36, 0.6);
   background: var(--arcade-card-hover);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 24px -5px rgba(0, 0, 0, 0.12);
+}
+
+.imported-game-card.card-win {
+  border-left: 4px solid #10b981;
+}
+
+.imported-game-card.card-loss {
+  border-left: 4px solid #f43f5e;
+}
+
+.imported-game-card.card-draw {
+  border-left: 4px solid #94a3b8;
 }
 
 .player-dot {

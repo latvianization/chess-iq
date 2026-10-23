@@ -4,12 +4,12 @@
  * quick Elo slider, tier tabs, live gameplay, and dynamic personality speech bubbles.
  */
 
-import { Chess } from 'chess.js';
+const Chess = window.Chess;
+const confetti = window.confetti || function() {};
 import { BOTS_33, TIER_CONFIG } from '../data/botsData.js';
 import { Chessboard } from './board.js';
 import { soundService } from '../services/sound.js';
 import { evaluatePositionLocally, findBestMoveLocal } from '../services/engine.js';
-import confetti from 'canvas-confetti';
 
 export class BotArena {
   constructor(containerEl, options = {}) {
@@ -28,6 +28,7 @@ export class BotArena {
     this.isBotThinking = false;
     this.gameResult = null; // 'win' | 'loss' | 'draw' | null
     this.board = null;
+    this.lastSpeechPly = -10;
 
     this.render();
   }
@@ -70,15 +71,17 @@ export class BotArena {
   }
 
   setBotSpeech(text) {
+    if (!text) return;
     this.speechText = text;
     this.isSpeechVisible = true;
+    this.lastSpeechPly = this.chess ? this.chess.history().length : 0;
     this.updateSpeechBubble();
 
     if (this.speechTimeout) clearTimeout(this.speechTimeout);
     this.speechTimeout = setTimeout(() => {
       this.isSpeechVisible = false;
       this.updateSpeechBubble();
-    }, 4500);
+    }, 3800);
   }
 
   handleUserMove(from, to) {
@@ -102,20 +105,22 @@ export class BotArena {
       const postEval = evaluatePositionLocally(this.chess.fen());
       const evalDiff = this.userColor === 'w' ? postEval.cp - prevEval.cp : prevEval.cp - postEval.cp;
 
-      const shouldSpeak = Math.random() < 0.18;
+      const plyCount = this.chess.history().length;
+      const canSpeak = plyCount - this.lastSpeechPly >= 4;
+
       if (evalDiff <= -250) {
         soundService.playBlunder();
-        if (shouldSpeak) {
+        if (canSpeak && Math.random() < 0.22) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserBlunder));
         }
       } else if (evalDiff >= 200) {
         soundService.playBrilliant();
-        if (shouldSpeak) {
+        if (canSpeak && Math.random() < 0.20) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
         }
       } else if (typeof this.chess.inCheck === 'function' ? this.chess.inCheck() : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false)) {
         soundService.playCheck();
-        if (shouldSpeak) {
+        if (canSpeak && Math.random() < 0.15) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
         }
       }
@@ -177,12 +182,15 @@ export class BotArena {
           ? this.chess.inCheck()
           : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false);
 
+        const plyCount = this.chess.history().length;
+        const canSpeak = plyCount - this.lastSpeechPly >= 4;
+
         if (isInCheck) {
           soundService.playCheck();
-          if (Math.random() < 0.20) {
+          if (canSpeak && Math.random() < 0.18) {
             this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotCheck));
           }
-        } else if (Math.random() < 0.08) {
+        } else if (canSpeak && Math.random() < 0.04) {
           const generalQuotes = this.selectedBot.speech.onStart || [];
           if (generalQuotes.length > 0) {
             this.setBotSpeech(this.getRandomQuote(generalQuotes));
@@ -200,18 +208,34 @@ export class BotArena {
     const isUserWhite = this.userColor === 'w';
     const userName = 'You';
     const botName = `${this.selectedBot.name} (${this.selectedBot.elo})`;
-    this.chess.header('White', isUserWhite ? userName : botName);
-    this.chess.header('Black', isUserWhite ? botName : userName);
-    this.chess.header('WhiteElo', isUserWhite ? '1500' : String(this.selectedBot.elo));
-    this.chess.header('BlackElo', isUserWhite ? String(this.selectedBot.elo) : '1500');
-    if (this.gameResult === 'win') {
-      this.chess.header('Result', isUserWhite ? '1-0' : '0-1');
-    } else if (this.gameResult === 'loss') {
-      this.chess.header('Result', isUserWhite ? '0-1' : '1-0');
-    } else if (this.gameResult === 'draw') {
-      this.chess.header('Result', '1/2-1/2');
+    let result = '*';
+    if (this.gameResult === 'win') result = isUserWhite ? '1-0' : '0-1';
+    else if (this.gameResult === 'loss') result = isUserWhite ? '0-1' : '1-0';
+    else if (this.gameResult === 'draw') result = '1/2-1/2';
+
+    try {
+      this.chess.header('White', isUserWhite ? userName : botName);
+      this.chess.header('Black', isUserWhite ? botName : userName);
+      this.chess.header('WhiteElo', isUserWhite ? '1500' : String(this.selectedBot.elo));
+      this.chess.header('BlackElo', isUserWhite ? String(this.selectedBot.elo) : '1500');
+      this.chess.header('Result', result);
+    } catch {}
+
+    let pgn = '';
+    try {
+      pgn = this.chess.pgn();
+    } catch {}
+
+    if (!pgn || pgn.trim() === '') {
+      const moves = this.chess.history();
+      let moveStr = '';
+      for (let i = 0; i < moves.length; i += 2) {
+        const moveNum = Math.floor(i / 2) + 1;
+        moveStr += `${moveNum}. ${moves[i]} ${moves[i + 1] || ''} `;
+      }
+      pgn = `[White "${isUserWhite ? userName : botName}"]\n[Black "${isUserWhite ? botName : userName}"]\n[WhiteElo "${isUserWhite ? '1500' : this.selectedBot.elo}"]\n[BlackElo "${isUserWhite ? this.selectedBot.elo : '1500'}"]\n[Result "${result}"]\n\n${moveStr.trim()} ${result}`;
     }
-    return this.chess.pgn();
+    return pgn;
   }
 
   closeGameOverModal() {
@@ -247,21 +271,23 @@ export class BotArena {
     const modal = document.createElement('div');
     modal.className = 'game-over-modal-backdrop';
     modal.id = 'bot-game-over-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(5,7,12,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;padding:1rem;';
     modal.innerHTML = `
-      <div class="game-over-dialog comic-card p-4 text-center">
+      <div class="game-over-dialog comic-card p-4 text-center border-0 shadow-lg" style="max-width: 460px; width: 100%; border-radius: 1.5rem; background: var(--arcade-card); border: 1px solid var(--arcade-border);">
         <div class="mb-3">
-          <span class="badge ${resultBadgeClass} fs-5 px-3.5 py-2 rounded-pill shadow-sm">
-            ${resultIcon} ${resultTitle}
-          </span>
-          <div class="text-secondary small mt-1 fw-bold">By ${reason}</div>
+          <div class="d-inline-flex align-items-center justify-content-center p-3 rounded-circle mb-2" style="background: ${isWin ? 'rgba(16,185,129,0.15)' : (isLoss ? 'rgba(239,68,68,0.15)' : 'rgba(148,163,184,0.15)')};">
+            <span style="font-size: 3rem; line-height: 1;">${resultIcon}</span>
+          </div>
+          <h2 class="fw-black mb-1 tracking-tight ${isWin ? 'text-success' : (isLoss ? 'text-danger' : 'text-body')}">${resultTitle}</h2>
+          <div class="text-secondary small fw-bold">Game Over · ${reason}</div>
         </div>
 
-        <div class="d-flex align-items-center justify-content-center gap-3 p-3 bg-body-tertiary rounded-3 border mb-3">
+        <div class="d-flex align-items-center justify-content-center gap-3 p-3 rounded-3 mb-3" style="background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.08);">
           <span class="fs-1">${this.selectedBot.avatar}</span>
           <div class="text-start">
             <div class="fw-black fs-5">${this.selectedBot.name}</div>
-            <div class="d-flex align-items-center gap-1.5">
-              <span class="badge bg-warning text-dark fw-bold border border-dark">${this.selectedBot.elo} Elo</span>
+            <div class="d-flex align-items-center gap-1.5 mt-0.5">
+              <span class="badge bg-warning text-dark fw-bold">${this.selectedBot.elo} Elo</span>
               <span class="badge bg-secondary">${this.selectedBot.title}</span>
             </div>
           </div>
@@ -269,34 +295,34 @@ export class BotArena {
 
         <div class="row g-2 mb-4 text-center">
           <div class="col-4">
-            <div class="p-2.5 bg-body rounded-3 border">
+            <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
               <div class="text-secondary small fw-bold">Moves</div>
               <div class="fw-black fs-5">${moveCount}</div>
             </div>
           </div>
           <div class="col-4">
-            <div class="p-2.5 bg-body rounded-3 border">
+            <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
               <div class="text-secondary small fw-bold">Time</div>
               <div class="fw-black fs-5">${durationStr}</div>
             </div>
           </div>
           <div class="col-4">
-            <div class="p-2.5 bg-body rounded-3 border">
-              <div class="text-secondary small fw-bold">Your Side</div>
+            <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
+              <div class="text-secondary small fw-bold">Side</div>
               <div class="fw-black fs-5">${this.userColor === 'w' ? '⚪ White' : '⚫ Black'}</div>
             </div>
           </div>
         </div>
 
         <div class="d-flex flex-column gap-2">
-          <button type="button" class="arcade-btn-primary py-2.5 fw-black fs-6" id="modal-btn-review">
-            <i class="bi bi-lightning-charge-fill me-1.5"></i> Review Game with Stockfish ⚡
+          <button type="button" class="arcade-btn-primary py-2.5 fw-black fs-6 w-100 d-flex align-items-center justify-content-center gap-2" id="modal-btn-review">
+            <i class="bi bi-lightning-charge-fill"></i> Review Game with Stockfish ⚡
           </button>
           <div class="d-flex gap-2">
-            <button type="button" class="btn btn-light comic-btn flex-grow-1 py-2" id="modal-btn-rematch">
+            <button type="button" class="btn btn-light comic-btn flex-grow-1 py-2 fw-bold" id="modal-btn-rematch">
               <i class="bi bi-arrow-repeat me-1"></i> Rematch
             </button>
-            <button type="button" class="btn btn-outline-secondary comic-btn flex-grow-1 py-2" id="modal-btn-close">
+            <button type="button" class="btn btn-outline-secondary comic-btn flex-grow-1 py-2 fw-bold" id="modal-btn-close">
               <i class="bi bi-x-lg me-1"></i> Close
             </button>
           </div>

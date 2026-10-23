@@ -2,6 +2,9 @@
   "use strict";
   const Chess = window.Chess;
   if (Chess && Chess.prototype) {
+    if (!Chess.prototype.loadPgn && typeof Chess.prototype.load_pgn === "function") {
+      Chess.prototype.loadPgn = function(pgn, options) { return this.load_pgn(pgn, options); };
+    }
     if (!Chess.prototype.isGameOver && typeof Chess.prototype.game_over === "function") {
       Chess.prototype.isGameOver = function() { return this.game_over(); };
     }
@@ -27,7 +30,6 @@
   const confetti = window.confetti || function() {};
   const bootstrap = window.bootstrap;
 
-
 /* --- src/components/pieceSvgs.js --- */
 /**
  * Embedded SVG Data URLs for Tournament Vector Pieces.
@@ -47,7 +49,6 @@ const INLINE_PIECE_DATA_URLS = {
   wQ: "data:image/svg+xml;utf8,%3C%3Fxml%20version%3D%221.0%22%20encoding%3D%22UTF-8%22%20standalone%3D%22no%22%3F%3E%0A%3C!DOCTYPE%20svg%20PUBLIC%20%22-%2F%2FW3C%2F%2FDTD%20SVG%201.1%2F%2FEN%22%20%22http%3A%2F%2Fwww.w3.org%2FGraphics%2FSVG%2F1.1%2FDTD%2Fsvg11.dtd%22%3E%0A%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20version%3D%221.1%22%20width%3D%2245%22%20height%3D%2245%22%3E%0A%20%20%3Cg%20style%3D%22fill%3A%23ffffff%3Bstroke%3A%23000000%3Bstroke-width%3A1.5%3Bstroke-linejoin%3Around%22%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%209%2C26%20C%2017.5%2C24.5%2030%2C24.5%2036%2C26%20L%2038.5%2C13.5%20L%2031%2C25%20L%2030.7%2C10.9%20L%2025.5%2C24.5%20L%2022.5%2C10%20L%2019.5%2C24.5%20L%2014.3%2C10.9%20L%2014%2C25%20L%206.5%2C13.5%20L%209%2C26%20z%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%209%2C26%20C%209%2C28%2010.5%2C28%2011.5%2C30%20C%2012.5%2C31.5%2012.5%2C31%2012%2C33.5%20C%2010.5%2C34.5%2011%2C36%2011%2C36%20C%209.5%2C37.5%2011%2C38.5%2011%2C38.5%20C%2017.5%2C39.5%2027.5%2C39.5%2034%2C38.5%20C%2034%2C38.5%2035.5%2C37.5%2034%2C36%20C%2034%2C36%2034.5%2C34.5%2033%2C33.5%20C%2032.5%2C31%2032.5%2C31.5%2033.5%2C30%20C%2034.5%2C28%2036%2C28%2036%2C26%20C%2027.5%2C24.5%2017.5%2C24.5%209%2C26%20z%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%2011.5%2C30%20C%2015%2C29%2030%2C29%2033.5%2C30%22%20style%3D%22fill%3Anone%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M%2012%2C33.5%20C%2018%2C32.5%2027%2C32.5%2033%2C33.5%22%20style%3D%22fill%3Anone%22%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%226%22%20cy%3D%2212%22%20r%3D%222%22%20%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2214%22%20cy%3D%229%22%20r%3D%222%22%20%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2222.5%22%20cy%3D%228%22%20r%3D%222%22%20%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2231%22%20cy%3D%229%22%20r%3D%222%22%20%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2239%22%20cy%3D%2212%22%20r%3D%222%22%20%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E%0A",
   wR: "data:image/svg+xml;utf8,%3C%3Fxml%20version%3D%221.0%22%20encoding%3D%22UTF-8%22%20standalone%3D%22no%22%3F%3E%0D%0A%3C!DOCTYPE%20svg%20PUBLIC%20%22-%2F%2FW3C%2F%2FDTD%20SVG%201.1%2F%2FEN%22%20%22http%3A%2F%2Fwww.w3.org%2FGraphics%2FSVG%2F1.1%2FDTD%2Fsvg11.dtd%22%3E%0D%0A%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20version%3D%221.1%22%20width%3D%2245%22%20height%3D%2245%22%3E%0D%0A%20%20%3Cg%20style%3D%22opacity%3A1%3B%20fill%3A%23ffffff%3B%20fill-opacity%3A1%3B%20fill-rule%3Aevenodd%3B%20stroke%3A%23000000%3B%20stroke-width%3A1.5%3B%20stroke-linecap%3Around%3Bstroke-linejoin%3Around%3Bstroke-miterlimit%3A4%3B%20stroke-dasharray%3Anone%3B%20stroke-opacity%3A1%3B%22%20transform%3D%22translate(0%2C0.3)%22%3E%0D%0A%20%20%20%20%3Cpath%0D%0A%20%20%20%20%20%20d%3D%22M%209%2C39%20L%2036%2C39%20L%2036%2C36%20L%209%2C36%20L%209%2C39%20z%20%22%0D%0A%20%20%20%20%20%20style%3D%22stroke-linecap%3Abutt%3B%22%20%2F%3E%0D%0A%20%20%20%20%3Cpath%0D%0A%20%20%20%20%20%20d%3D%22M%2012%2C36%20L%2012%2C32%20L%2033%2C32%20L%2033%2C36%20L%2012%2C36%20z%20%22%0D%0A%20%20%20%20%20%20style%3D%22stroke-linecap%3Abutt%3B%22%20%2F%3E%0D%0A%20%20%20%20%3Cpath%0D%0A%20%20%20%20%20%20d%3D%22M%2011%2C14%20L%2011%2C9%20L%2015%2C9%20L%2015%2C11%20L%2020%2C11%20L%2020%2C9%20L%2025%2C9%20L%2025%2C11%20L%2030%2C11%20L%2030%2C9%20L%2034%2C9%20L%2034%2C14%22%0D%0A%20%20%20%20%20%20style%3D%22stroke-linecap%3Abutt%3B%22%20%2F%3E%0D%0A%20%20%20%20%3Cpath%0D%0A%20%20%20%20%20%20d%3D%22M%2034%2C14%20L%2031%2C17%20L%2014%2C17%20L%2011%2C14%22%20%2F%3E%0D%0A%20%20%20%20%3Cpath%0D%0A%20%20%20%20%20%20d%3D%22M%2031%2C17%20L%2031%2C29.5%20L%2014%2C29.5%20L%2014%2C17%22%0D%0A%20%20%20%20%20%20style%3D%22stroke-linecap%3Abutt%3B%20stroke-linejoin%3Amiter%3B%22%20%2F%3E%0D%0A%20%20%20%20%3Cpath%0D%0A%20%20%20%20%20%20d%3D%22M%2031%2C29.5%20L%2032.5%2C32%20L%2012.5%2C32%20L%2014%2C29.5%22%20%2F%3E%0D%0A%20%20%20%20%3Cpath%0D%0A%20%20%20%20%20%20d%3D%22M%2011%2C14%20L%2034%2C14%22%0D%0A%20%20%20%20%20%20style%3D%22fill%3Anone%3B%20stroke%3A%23000000%3B%20stroke-linejoin%3Amiter%3B%22%20%2F%3E%0D%0A%20%20%3C%2Fg%3E%0D%0A%3C%2Fsvg%3E%0D%0A",
 };
-
 
 /* --- src/services/comicBadges.js --- */
 /**
@@ -189,7 +190,6 @@ function getComicBadge(classification, seed = 0) {
     starColor: config.starColor,
   };
 }
-
 
 /* --- src/services/sound.js --- */
 class SoundService {
@@ -442,7 +442,6 @@ class SoundService {
 
 const soundService = new SoundService();
 
-
 /* --- src/services/ecoDictionary.js --- */
 const ECO_DATABASE = [
   // Italian & Spanish
@@ -559,14 +558,7 @@ function isBookMove(moveSans, moveIndex) {
   return false;
 }
 
-
 /* --- src/data/botsData.js --- */
-
-
-
-
-
-
 const TIER_CONFIG = {
   rookie: {
     name: 'Rookies',
@@ -1239,7 +1231,6 @@ const BOTS_33 = [
   },
 ];
 
-
 /* --- src/services/stockfishWorker.js --- */
 class StockfishWorkerService {
   constructor() {
@@ -1401,11 +1392,7 @@ class StockfishWorkerService {
 }
 const stockfishService = new StockfishWorkerService();
 
-
 /* --- src/services/engine.js --- */
-
-
-
 const PIECE_VALUES = {
   p: 100,
   n: 320,
@@ -2183,7 +2170,7 @@ async function evaluateFenHybrid(fen, isDeep = false) {
   if (cached) return cached;
 
   if (!isDeep) {
-    const localSearch = findBestMoveLocal(fen, 2);
+    const localSearch = findBestMoveLocal(fen, 1);
     const localResult = {
       scoreCp: localSearch.evalCp,
       mate: null,
@@ -2374,11 +2361,7 @@ function calculatePhaseElo(baseElo, acpl, movesCount, isOverall = false, result 
   return Math.min(3000, Math.max(400, estimated));
 }
 
-
 /* --- src/services/importApi.js --- */
-
-
-
 function parseClockToSeconds(clockStr) {
   const match = clockStr.match(/(\d+):(\d+):?(\d+)?(\.\d+)?/);
   if (!match) return null;
@@ -2429,7 +2412,11 @@ function extractMovesAndClocks(pgn) {
 async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) {
   const chess = new Chess();
   try {
-    chess.loadPgn(pgn);
+    if (typeof chess.loadPgn === "function") {
+      chess.loadPgn(pgn);
+    } else if (typeof chess.load_pgn === "function") {
+      chess.load_pgn(pgn);
+    }
   } catch {
   }
   const header = chess.header();
@@ -2609,7 +2596,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
       );
       const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
       let threat = null;
-      if (classification === "blunder" || classification === "mistake" || classification === "inaccuracy" || winProbLoss > 0.03) {
+      if (classification === "blunder" || winProbLoss > 0.15) {
         threat = await detectThreat(item.fenAfter);
       }
       plies[i] = {
@@ -2643,9 +2630,9 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         phase: item.phase
       };
     }
-    if (onProgress && (i % 2 === 0 || i === totalPlies - 1)) {
+    if (onProgress && (i % 6 === 0 || i === totalPlies - 1)) {
       onProgress(i + 1, totalPlies);
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
   const createEmptyCounts = () => ({
@@ -2861,13 +2848,13 @@ async function fetchLichessGames(username) {
   }).filter(Boolean);
 }
 
-
 /* --- src/components/board.js --- */
 /**
  * Vanilla JS Chessboard Component
  * Renders an interactive 8x8 chessboard with SVG piece rendering,
  * move highlights, arrows, and comic sound effect badges.
  */
+
 
 
 
@@ -2960,7 +2947,6 @@ class Chessboard {
         const from = this.selectedSquare;
         this.selectedSquare = null;
         this.possibleDests = [];
-        this.render();
         if (this.onMove) {
           this.onMove(from, square);
         }
@@ -2993,6 +2979,7 @@ class Chessboard {
     const files = this.orientation === 'w' ? FILES : [...FILES].reverse();
     const ranks = this.orientation === 'w' ? RANKS : [...RANKS].reverse();
     const themeColors = THEMES[this.theme] || THEMES.green;
+    const pendingAnimations = [];
 
     ranks.forEach((rank, rIdx) => {
       files.forEach((file, fIdx) => {
@@ -3068,15 +3055,9 @@ class Chessboard {
                 const deltaY = (fromY - toY) * 100;
                 img.style.transform = `translate(${deltaX}%, ${deltaY}%)`;
                 img.style.transition = 'none';
-                img.style.zIndex = '10';
+                img.style.zIndex = '20';
                 this.lastAnimatedMoveKey = currentMoveKey;
-                const raf = typeof window !== 'undefined' && window.requestAnimationFrame ? window.requestAnimationFrame : (cb) => setTimeout(cb, 16);
-                raf(() => {
-                  raf(() => {
-                    img.style.transition = 'transform 180ms cubic-bezier(0.2, 0, 0.2, 1)';
-                    img.style.transform = 'translate(0, 0)';
-                  });
-                });
+                pendingAnimations.push(img);
               }
             }
           }
@@ -3187,6 +3168,22 @@ class Chessboard {
     });
 
     this.container.appendChild(boardWrapper);
+
+    if (pendingAnimations.length > 0) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          pendingAnimations.forEach((imgEl) => {
+            imgEl.style.transition = 'transform 220ms cubic-bezier(0.25, 1, 0.5, 1)';
+            imgEl.style.transform = 'translate(0, 0)';
+            setTimeout(() => {
+              imgEl.style.zIndex = '';
+              imgEl.classList.add('piece-landing-pop');
+              setTimeout(() => imgEl.classList.remove('piece-landing-pop'), 200);
+            }, 220);
+          });
+        });
+      });
+    }
   }
 
   drawArrow(svg, fromSq, toSq, color, dashed = false, idPrefix = 'arrow', strokeWidth = 3.5) {
@@ -3261,17 +3258,12 @@ class Chessboard {
   }
 }
 
-
 /* --- src/components/botArena.js --- */
 /**
  * Vanilla JS Bot Arena Component
  * Provides 33 tiered bots (400–2000 Elo in 50-point increments),
  * quick Elo slider, tier tabs, live gameplay, and dynamic personality speech bubbles.
  */
-
-
-
-
 
 
 
@@ -3292,6 +3284,7 @@ class BotArena {
     this.isBotThinking = false;
     this.gameResult = null; // 'win' | 'loss' | 'draw' | null
     this.board = null;
+    this.lastSpeechPly = -10;
 
     this.render();
   }
@@ -3334,15 +3327,17 @@ class BotArena {
   }
 
   setBotSpeech(text) {
+    if (!text) return;
     this.speechText = text;
     this.isSpeechVisible = true;
+    this.lastSpeechPly = this.chess ? this.chess.history().length : 0;
     this.updateSpeechBubble();
 
     if (this.speechTimeout) clearTimeout(this.speechTimeout);
     this.speechTimeout = setTimeout(() => {
       this.isSpeechVisible = false;
       this.updateSpeechBubble();
-    }, 4500);
+    }, 3800);
   }
 
   handleUserMove(from, to) {
@@ -3366,20 +3361,22 @@ class BotArena {
       const postEval = evaluatePositionLocally(this.chess.fen());
       const evalDiff = this.userColor === 'w' ? postEval.cp - prevEval.cp : prevEval.cp - postEval.cp;
 
-      const shouldSpeak = Math.random() < 0.18;
+      const plyCount = this.chess.history().length;
+      const canSpeak = plyCount - this.lastSpeechPly >= 4;
+
       if (evalDiff <= -250) {
         soundService.playBlunder();
-        if (shouldSpeak) {
+        if (canSpeak && Math.random() < 0.22) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserBlunder));
         }
       } else if (evalDiff >= 200) {
         soundService.playBrilliant();
-        if (shouldSpeak) {
+        if (canSpeak && Math.random() < 0.20) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
         }
       } else if (typeof this.chess.inCheck === 'function' ? this.chess.inCheck() : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false)) {
         soundService.playCheck();
-        if (shouldSpeak) {
+        if (canSpeak && Math.random() < 0.15) {
           this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onUserGreat));
         }
       }
@@ -3441,12 +3438,15 @@ class BotArena {
           ? this.chess.inCheck()
           : (typeof this.chess.in_check === 'function' ? this.chess.in_check() : false);
 
+        const plyCount = this.chess.history().length;
+        const canSpeak = plyCount - this.lastSpeechPly >= 4;
+
         if (isInCheck) {
           soundService.playCheck();
-          if (Math.random() < 0.20) {
+          if (canSpeak && Math.random() < 0.18) {
             this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotCheck));
           }
-        } else if (Math.random() < 0.08) {
+        } else if (canSpeak && Math.random() < 0.04) {
           const generalQuotes = this.selectedBot.speech.onStart || [];
           if (generalQuotes.length > 0) {
             this.setBotSpeech(this.getRandomQuote(generalQuotes));
@@ -3464,18 +3464,34 @@ class BotArena {
     const isUserWhite = this.userColor === 'w';
     const userName = 'You';
     const botName = `${this.selectedBot.name} (${this.selectedBot.elo})`;
-    this.chess.header('White', isUserWhite ? userName : botName);
-    this.chess.header('Black', isUserWhite ? botName : userName);
-    this.chess.header('WhiteElo', isUserWhite ? '1500' : String(this.selectedBot.elo));
-    this.chess.header('BlackElo', isUserWhite ? String(this.selectedBot.elo) : '1500');
-    if (this.gameResult === 'win') {
-      this.chess.header('Result', isUserWhite ? '1-0' : '0-1');
-    } else if (this.gameResult === 'loss') {
-      this.chess.header('Result', isUserWhite ? '0-1' : '1-0');
-    } else if (this.gameResult === 'draw') {
-      this.chess.header('Result', '1/2-1/2');
+    let result = '*';
+    if (this.gameResult === 'win') result = isUserWhite ? '1-0' : '0-1';
+    else if (this.gameResult === 'loss') result = isUserWhite ? '0-1' : '1-0';
+    else if (this.gameResult === 'draw') result = '1/2-1/2';
+
+    try {
+      this.chess.header('White', isUserWhite ? userName : botName);
+      this.chess.header('Black', isUserWhite ? botName : userName);
+      this.chess.header('WhiteElo', isUserWhite ? '1500' : String(this.selectedBot.elo));
+      this.chess.header('BlackElo', isUserWhite ? String(this.selectedBot.elo) : '1500');
+      this.chess.header('Result', result);
+    } catch {}
+
+    let pgn = '';
+    try {
+      pgn = this.chess.pgn();
+    } catch {}
+
+    if (!pgn || pgn.trim() === '') {
+      const moves = this.chess.history();
+      let moveStr = '';
+      for (let i = 0; i < moves.length; i += 2) {
+        const moveNum = Math.floor(i / 2) + 1;
+        moveStr += `${moveNum}. ${moves[i]} ${moves[i + 1] || ''} `;
+      }
+      pgn = `[White "${isUserWhite ? userName : botName}"]\n[Black "${isUserWhite ? botName : userName}"]\n[WhiteElo "${isUserWhite ? '1500' : this.selectedBot.elo}"]\n[BlackElo "${isUserWhite ? this.selectedBot.elo : '1500'}"]\n[Result "${result}"]\n\n${moveStr.trim()} ${result}`;
     }
-    return this.chess.pgn();
+    return pgn;
   }
 
   closeGameOverModal() {
@@ -3511,21 +3527,23 @@ class BotArena {
     const modal = document.createElement('div');
     modal.className = 'game-over-modal-backdrop';
     modal.id = 'bot-game-over-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(5,7,12,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;padding:1rem;';
     modal.innerHTML = `
-      <div class="game-over-dialog comic-card p-4 text-center">
+      <div class="game-over-dialog comic-card p-4 text-center border-0 shadow-lg" style="max-width: 460px; width: 100%; border-radius: 1.5rem; background: var(--arcade-card); border: 1px solid var(--arcade-border);">
         <div class="mb-3">
-          <span class="badge ${resultBadgeClass} fs-5 px-3.5 py-2 rounded-pill shadow-sm">
-            ${resultIcon} ${resultTitle}
-          </span>
-          <div class="text-secondary small mt-1 fw-bold">By ${reason}</div>
+          <div class="d-inline-flex align-items-center justify-content-center p-3 rounded-circle mb-2" style="background: ${isWin ? 'rgba(16,185,129,0.15)' : (isLoss ? 'rgba(239,68,68,0.15)' : 'rgba(148,163,184,0.15)')};">
+            <span style="font-size: 3rem; line-height: 1;">${resultIcon}</span>
+          </div>
+          <h2 class="fw-black mb-1 tracking-tight ${isWin ? 'text-success' : (isLoss ? 'text-danger' : 'text-body')}">${resultTitle}</h2>
+          <div class="text-secondary small fw-bold">Game Over · ${reason}</div>
         </div>
 
-        <div class="d-flex align-items-center justify-content-center gap-3 p-3 bg-body-tertiary rounded-3 border mb-3">
+        <div class="d-flex align-items-center justify-content-center gap-3 p-3 rounded-3 mb-3" style="background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.08);">
           <span class="fs-1">${this.selectedBot.avatar}</span>
           <div class="text-start">
             <div class="fw-black fs-5">${this.selectedBot.name}</div>
-            <div class="d-flex align-items-center gap-1.5">
-              <span class="badge bg-warning text-dark fw-bold border border-dark">${this.selectedBot.elo} Elo</span>
+            <div class="d-flex align-items-center gap-1.5 mt-0.5">
+              <span class="badge bg-warning text-dark fw-bold">${this.selectedBot.elo} Elo</span>
               <span class="badge bg-secondary">${this.selectedBot.title}</span>
             </div>
           </div>
@@ -3533,34 +3551,34 @@ class BotArena {
 
         <div class="row g-2 mb-4 text-center">
           <div class="col-4">
-            <div class="p-2.5 bg-body rounded-3 border">
+            <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
               <div class="text-secondary small fw-bold">Moves</div>
               <div class="fw-black fs-5">${moveCount}</div>
             </div>
           </div>
           <div class="col-4">
-            <div class="p-2.5 bg-body rounded-3 border">
+            <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
               <div class="text-secondary small fw-bold">Time</div>
               <div class="fw-black fs-5">${durationStr}</div>
             </div>
           </div>
           <div class="col-4">
-            <div class="p-2.5 bg-body rounded-3 border">
-              <div class="text-secondary small fw-bold">Your Side</div>
+            <div class="p-2.5 rounded-3" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.06);">
+              <div class="text-secondary small fw-bold">Side</div>
               <div class="fw-black fs-5">${this.userColor === 'w' ? '⚪ White' : '⚫ Black'}</div>
             </div>
           </div>
         </div>
 
         <div class="d-flex flex-column gap-2">
-          <button type="button" class="arcade-btn-primary py-2.5 fw-black fs-6" id="modal-btn-review">
-            <i class="bi bi-lightning-charge-fill me-1.5"></i> Review Game with Stockfish ⚡
+          <button type="button" class="arcade-btn-primary py-2.5 fw-black fs-6 w-100 d-flex align-items-center justify-content-center gap-2" id="modal-btn-review">
+            <i class="bi bi-lightning-charge-fill"></i> Review Game with Stockfish ⚡
           </button>
           <div class="d-flex gap-2">
-            <button type="button" class="btn btn-light comic-btn flex-grow-1 py-2" id="modal-btn-rematch">
+            <button type="button" class="btn btn-light comic-btn flex-grow-1 py-2 fw-bold" id="modal-btn-rematch">
               <i class="bi bi-arrow-repeat me-1"></i> Rematch
             </button>
-            <button type="button" class="btn btn-outline-secondary comic-btn flex-grow-1 py-2" id="modal-btn-close">
+            <button type="button" class="btn btn-outline-secondary comic-btn flex-grow-1 py-2 fw-bold" id="modal-btn-close">
               <i class="bi bi-x-lg me-1"></i> Close
             </button>
           </div>
@@ -3887,17 +3905,12 @@ class BotArena {
   }
 }
 
-
 /* --- src/components/reviewDashboard.js --- */
 /**
  * Vanilla JS Game Review Dashboard Component
  * Displays Stockfish tournament analysis, interactive move history,
  * eval bar, phase ratings, comic sound effect badges, and tactical refutations.
  */
-
-
-
-
 
 
 function createCurvedPath(points) {
@@ -5136,13 +5149,13 @@ Result: ${this.game.result || '*'}`;
   }
 }
 
-
 /* --- src/components/importModal.js --- */
 /**
- * Vanilla JS Import Dialog Component
- * Bootstrap 6 Dialog supporting Chess.com, Lichess, and custom PGN imports.
+ * Vanilla JS Import Modal Component
+ * Bootstrap 5 modal supporting Chess.com, Lichess, and custom PGN imports.
  * Only analyzes user-imported games with live Stockfish progress.
  */
+
 
 
 class ImportModal {
@@ -5405,41 +5418,43 @@ class ImportModal {
                     tcIcon = 'bi-lightning-charge-fill';
                   }
 
+                  const cardStatusClass = userWon ? 'card-win' : (userLost ? 'card-loss' : (isDraw ? 'card-draw' : ''));
+
                   return `
-                    <div class="imported-game-card comic-card-sm p-2.5 p-sm-3 cursor-pointer w-100" data-game-id="${g.id}">
-                      <div class="d-flex align-items-center justify-content-between mb-2 gap-2 flex-nowrap">
-                        <div class="d-flex align-items-center gap-1.5 overflow-hidden me-auto" style="min-width: 0;">
-                          <span class="badge bg-warning-subtle text-dark border border-warning-subtle fw-bold flex-shrink-0" style="font-size: 11px;">
+                    <div class="imported-game-card ${cardStatusClass} p-3 cursor-pointer w-100 mb-1" data-game-id="${g.id}">
+                      <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-light-subtle gap-2 flex-nowrap">
+                        <div class="d-flex align-items-center gap-2 overflow-hidden me-auto" style="min-width: 0;">
+                          <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold flex-shrink-0" style="font-size: 11px;">
                             <i class="bi ${tcIcon} me-1"></i>${g.timeControl}
                           </span>
                           ${this.formatOpeningBadge(g.eco)}
                         </div>
-                        <div class="d-flex align-items-center gap-2 flex-shrink-0 ms-1">
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
                           <span class="text-secondary small font-monospace text-nowrap" style="font-size: 11px;">${g.date}</span>
                           ${resultBadge}
                         </div>
                       </div>
 
-                      <div class="d-flex align-items-center justify-content-between gap-2" style="min-width: 0;">
-                        <div class="d-flex flex-column gap-1 flex-grow-1" style="min-width: 0; overflow: hidden;">
-                          <div class="d-flex align-items-center gap-1.5 ${isUserWhite ? 'fw-black text-warning' : 'fw-semibold text-body'}" style="min-width: 0;">
-                            <span class="player-dot white-dot flex-shrink-0"></span>
-                            <span class="text-truncate" style="max-width: 140px;">${g.white}</span>
-                            <span class="badge bg-body-secondary text-secondary font-monospace flex-shrink-0" style="font-size: 10px;">${g.whiteElo}</span>
-                            ${isUserWhite ? '<span class="badge bg-warning text-dark fw-bold flex-shrink-0" style="font-size: 9px;">YOU</span>' : ''}
+                      <div class="d-flex align-items-center justify-content-between gap-3" style="min-width: 0;">
+                        <div class="d-flex flex-column gap-1.5 flex-grow-1" style="min-width: 0; overflow: hidden;">
+                          <div class="d-flex align-items-center gap-2 ${isUserWhite ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
+                            <span class="fs-6 lh-1">⚪</span>
+                            <span class="text-truncate" style="max-width: 170px;">${g.white}</span>
+                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${g.whiteElo}</span>
+                            ${isUserWhite ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
                           </div>
 
-                          <div class="d-flex align-items-center gap-1.5 ${isUserBlack ? 'fw-black text-warning' : 'fw-semibold text-body'}" style="min-width: 0;">
-                            <span class="player-dot black-dot flex-shrink-0"></span>
-                            <span class="text-truncate" style="max-width: 140px;">${g.black}</span>
-                            <span class="badge bg-body-secondary text-secondary font-monospace flex-shrink-0" style="font-size: 10px;">${g.blackElo}</span>
-                            ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold flex-shrink-0" style="font-size: 9px;">YOU</span>' : ''}
+                          <div class="d-flex align-items-center gap-2 ${isUserBlack ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
+                            <span class="fs-6 lh-1">⚫</span>
+                            <span class="text-truncate" style="max-width: 170px;">${g.black}</span>
+                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${g.blackElo}</span>
+                            ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
                           </div>
                         </div>
 
-                        <div class="d-flex align-items-center ms-2 flex-shrink-0">
-                          <button type="button" class="btn btn-sm btn-outline-warning comic-btn px-2.5 py-1 text-nowrap btn-analyze-card">
-                            Analyze <i class="bi bi-chevron-right ms-0.5"></i>
+                        <div class="flex-shrink-0">
+                          <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5" style="border-radius: 0.65rem; font-size: 13px !important;">
+                            <span>Analyze</span> <i class="bi bi-chevron-right" style="font-size: 11px;"></i>
                           </button>
                         </div>
                       </div>
@@ -5601,7 +5616,6 @@ class ImportModal {
   }
 }
 
-
 /* --- src/main.js --- */
 /**
  * Vanilla JS Application Entry Point
@@ -5610,19 +5624,13 @@ class ImportModal {
  */
 
 
-
-
-window.bootstrap = bootstrap;
-
-
-
-
-
-
 function ensureChessCompat() {
   if (typeof window === 'undefined' || !window.Chess) return;
   const proto = window.Chess.prototype;
   if (!proto) return;
+  if (!proto.loadPgn && typeof proto.load_pgn === 'function') {
+    proto.loadPgn = function(pgn, options) { return this.load_pgn(pgn, options); };
+  }
   if (!proto.isGameOver && typeof proto.game_over === 'function') {
     proto.isGameOver = function() { return this.game_over(); };
   }
@@ -5826,6 +5834,5 @@ if (document.readyState === 'loading') {
 } else {
   window.chessApp = new App();
 }
-
 
 })();

@@ -266,41 +266,43 @@ export class ImportModal {
                     tcIcon = 'bi-lightning-charge-fill';
                   }
 
+                  const cardStatusClass = userWon ? 'card-win' : (userLost ? 'card-loss' : (isDraw ? 'card-draw' : ''));
+
                   return `
-                    <div class="imported-game-card comic-card-sm p-2.5 p-sm-3 cursor-pointer w-100" data-game-id="${g.id}">
-                      <div class="d-flex align-items-center justify-content-between mb-2 gap-2 flex-nowrap">
-                        <div class="d-flex align-items-center gap-1.5 overflow-hidden me-auto" style="min-width: 0;">
-                          <span class="badge bg-warning-subtle text-dark border border-warning-subtle fw-bold flex-shrink-0" style="font-size: 11px;">
+                    <div class="imported-game-card ${cardStatusClass} p-3 cursor-pointer w-100 mb-1" data-game-id="${g.id}">
+                      <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-light-subtle gap-2 flex-nowrap">
+                        <div class="d-flex align-items-center gap-2 overflow-hidden me-auto" style="min-width: 0;">
+                          <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold flex-shrink-0" style="font-size: 11px;">
                             <i class="bi ${tcIcon} me-1"></i>${g.timeControl}
                           </span>
                           ${this.formatOpeningBadge(g.eco)}
                         </div>
-                        <div class="d-flex align-items-center gap-2 flex-shrink-0 ms-1">
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
                           <span class="text-secondary small font-monospace text-nowrap" style="font-size: 11px;">${g.date}</span>
                           ${resultBadge}
                         </div>
                       </div>
 
-                      <div class="d-flex align-items-center justify-content-between gap-2" style="min-width: 0;">
-                        <div class="d-flex flex-column gap-1 flex-grow-1" style="min-width: 0; overflow: hidden;">
-                          <div class="d-flex align-items-center gap-1.5 ${isUserWhite ? 'fw-black text-warning' : 'fw-semibold text-body'}" style="min-width: 0;">
-                            <span class="player-dot white-dot flex-shrink-0"></span>
-                            <span class="text-truncate" style="max-width: 140px;">${g.white}</span>
-                            <span class="badge bg-body-secondary text-secondary font-monospace flex-shrink-0" style="font-size: 10px;">${g.whiteElo}</span>
-                            ${isUserWhite ? '<span class="badge bg-warning text-dark fw-bold flex-shrink-0" style="font-size: 9px;">YOU</span>' : ''}
+                      <div class="d-flex align-items-center justify-content-between gap-3" style="min-width: 0;">
+                        <div class="d-flex flex-column gap-1.5 flex-grow-1" style="min-width: 0; overflow: hidden;">
+                          <div class="d-flex align-items-center gap-2 ${isUserWhite ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
+                            <span class="fs-6 lh-1">⚪</span>
+                            <span class="text-truncate" style="max-width: 170px;">${g.white}</span>
+                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${g.whiteElo}</span>
+                            ${isUserWhite ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
                           </div>
 
-                          <div class="d-flex align-items-center gap-1.5 ${isUserBlack ? 'fw-black text-warning' : 'fw-semibold text-body'}" style="min-width: 0;">
-                            <span class="player-dot black-dot flex-shrink-0"></span>
-                            <span class="text-truncate" style="max-width: 140px;">${g.black}</span>
-                            <span class="badge bg-body-secondary text-secondary font-monospace flex-shrink-0" style="font-size: 10px;">${g.blackElo}</span>
-                            ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold flex-shrink-0" style="font-size: 9px;">YOU</span>' : ''}
+                          <div class="d-flex align-items-center gap-2 ${isUserBlack ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
+                            <span class="fs-6 lh-1">⚫</span>
+                            <span class="text-truncate" style="max-width: 170px;">${g.black}</span>
+                            <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${g.blackElo}</span>
+                            ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
                           </div>
                         </div>
 
-                        <div class="d-flex align-items-center ms-2 flex-shrink-0">
-                          <button type="button" class="btn btn-sm btn-outline-warning comic-btn px-2.5 py-1 text-nowrap btn-analyze-card">
-                            Analyze <i class="bi bi-chevron-right ms-0.5"></i>
+                        <div class="flex-shrink-0">
+                          <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5" style="border-radius: 0.65rem; font-size: 13px !important;">
+                            <span>Analyze</span> <i class="bi bi-chevron-right" style="font-size: 11px;"></i>
                           </button>
                         </div>
                       </div>

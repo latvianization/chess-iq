@@ -4,11 +4,7 @@
  * Bootstrap 5 Light/Dark theming, and Stockfish analysis pipeline.
  */
 
-import 'bootstrap/dist/css/bootstrap.min.css';
-import 'bootstrap-icons/font/bootstrap-icons.css';
-import * as bootstrap from 'bootstrap';
-window.bootstrap = bootstrap;
-import './styles/comic-bootstrap.css';
+const bootstrap = window.bootstrap;
 
 import { ReviewDashboard } from './components/reviewDashboard.js';
 import { BotArena } from './components/botArena.js';
@@ -20,6 +16,9 @@ function ensureChessCompat() {
   if (typeof window === 'undefined' || !window.Chess) return;
   const proto = window.Chess.prototype;
   if (!proto) return;
+  if (!proto.loadPgn && typeof proto.load_pgn === 'function') {
+    proto.loadPgn = function(pgn, options) { return this.load_pgn(pgn, options); };
+  }
   if (!proto.isGameOver && typeof proto.game_over === 'function') {
     proto.isGameOver = function() { return this.game_over(); };
   }

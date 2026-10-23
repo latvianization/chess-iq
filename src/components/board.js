@@ -96,7 +96,6 @@ export class Chessboard {
         const from = this.selectedSquare;
         this.selectedSquare = null;
         this.possibleDests = [];
-        this.render();
         if (this.onMove) {
           this.onMove(from, square);
         }
@@ -129,6 +128,7 @@ export class Chessboard {
     const files = this.orientation === 'w' ? FILES : [...FILES].reverse();
     const ranks = this.orientation === 'w' ? RANKS : [...RANKS].reverse();
     const themeColors = THEMES[this.theme] || THEMES.green;
+    const pendingAnimations = [];
 
     ranks.forEach((rank, rIdx) => {
       files.forEach((file, fIdx) => {
@@ -204,15 +204,9 @@ export class Chessboard {
                 const deltaY = (fromY - toY) * 100;
                 img.style.transform = `translate(${deltaX}%, ${deltaY}%)`;
                 img.style.transition = 'none';
-                img.style.zIndex = '10';
+                img.style.zIndex = '20';
                 this.lastAnimatedMoveKey = currentMoveKey;
-                const raf = typeof window !== 'undefined' && window.requestAnimationFrame ? window.requestAnimationFrame : (cb) => setTimeout(cb, 16);
-                raf(() => {
-                  raf(() => {
-                    img.style.transition = 'transform 180ms cubic-bezier(0.2, 0, 0.2, 1)';
-                    img.style.transform = 'translate(0, 0)';
-                  });
-                });
+                pendingAnimations.push(img);
               }
             }
           }
@@ -323,6 +317,22 @@ export class Chessboard {
     });
 
     this.container.appendChild(boardWrapper);
+
+    if (pendingAnimations.length > 0) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          pendingAnimations.forEach((imgEl) => {
+            imgEl.style.transition = 'transform 220ms cubic-bezier(0.25, 1, 0.5, 1)';
+            imgEl.style.transform = 'translate(0, 0)';
+            setTimeout(() => {
+              imgEl.style.zIndex = '';
+              imgEl.classList.add('piece-landing-pop');
+              setTimeout(() => imgEl.classList.remove('piece-landing-pop'), 200);
+            }, 220);
+          });
+        });
+      });
+    }
   }
 
   drawArrow(svg, fromSq, toSq, color, dashed = false, idPrefix = 'arrow', strokeWidth = 3.5) {

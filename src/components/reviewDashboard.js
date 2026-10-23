@@ -4,7 +4,7 @@
  * eval bar, phase ratings, comic sound effect badges, and tactical refutations.
  */
 
-import { Chess } from 'chess.js';
+const Chess = window.Chess;
 import { Chessboard } from './board.js';
 import { soundService } from '../services/sound.js';
 import { getComicBadge, COMIC_DICTIONARY } from '../services/comicBadges.js';
