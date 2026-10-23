@@ -1883,7 +1883,7 @@ async function evaluateFenHybrid(fen, isDeep = false) {
       pv: sfEval.pv,
       bestMoveUci: sfEval.bestMoveUci,
       secondBestMoveUci: fallback.secondBestMoveUci,
-      multiPv2ScoreCp: sfEval.multiPv2ScoreCp,
+      multiPv2ScoreCp: sfEval.multiPv2ScoreCp ?? fallback.multiPv2Cp,
       source: "stockfish"
     };
     FEN_EVAL_CACHE.set(cacheKey, sfResult);
@@ -1931,7 +1931,7 @@ function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter, winPr
         return "brilliant";
       }
     }
-    if (multiPv2WinProb !== void 0 && multiPv1WinProb - multiPv2WinProb >= 0.15) {
+    if (multiPv2WinProb !== void 0 && multiPv1WinProb - multiPv2WinProb >= 0.10) {
       return "great";
     }
     return "best";
@@ -2129,6 +2129,226 @@ function summarizePunishment(fenStart, fenEnd, moverColor) {
   } catch {
     return "Opponent gains a decisive tactical advantage";
   }
+}
+
+function replayPv(fen, pvMoves, maxPlies = 10) {
+  const steps = [];
+  if (!fen || !Array.isArray(pvMoves) || pvMoves.length === 0) return steps;
+  try {
+    const chess = new Chess(fen);
+    for (let i = 0; i < Math.min(pvMoves.length, maxPlies); i++) {
+      if (isChessGameOver(chess)) break;
+      const uci = pvMoves[i];
+      if (!uci || uci.length < 4) break;
+      const from = uci.slice(0, 2);
+      const to = uci.slice(2, 4);
+      const promotion = uci.length > 4 ? uci[4] : void 0;
+      const m = chess.move({ from, to, promotion });
+      if (!m) break;
+      steps.push({
+        ply: i + 1,
+        san: m.san,
+        uci,
+        from: m.from,
+        to: m.to,
+        fen: chess.fen(),
+        color: m.color,
+        piece: m.piece
+      });
+    }
+  } catch {}
+  return steps;
+}
+
+async function prepareMoveExplanation(cur) {
+  if (!cur) return null;
+  try {
+    const punishmentSteps = [
+      { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
+    ];
+
+    let deepPunish = [];
+    if (cur.punishmentPv && cur.punishmentPv.length > 0) {
+      deepPunish = replayPv(cur.fen, cur.punishmentPv, 10);
+    }
+    if (deepPunish.length === 0) {
+      deepPunish = await getDeepContinuation(cur.fen, 10);
+    }
+    punishmentSteps.push(...deepPunish);
+
+    const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
+    const punishmentSummary = summarizePunishment(cur.fen, endFen, cur.color);
+
+    const bestSteps = [
+      { ply: 0, fen: cur.fenBefore, from: null, to: null, san: 'Start' }
+    ];
+
+    let deepBest = [];
+    if (cur.bestPv && cur.bestPv.length > 0) {
+      deepBest = replayPv(cur.fenBefore, cur.bestPv, 10);
+    }
+    if (deepBest.length === 0) {
+      const cBest = new Chess(cur.fenBefore);
+      const bUci = cur.bestMoveUci;
+      if (bUci && bUci.length >= 4) {
+        const from = bUci.slice(0, 2);
+        const to = bUci.slice(2, 4);
+        const promotion = bUci.length > 4 ? bUci[4] : void 0;
+        const m = cBest.move({ from, to, promotion });
+        if (m) {
+          deepBest.push({
+            ply: 1,
+            san: m.san,
+            uci: bUci,
+            from: m.from,
+            to: m.to,
+            fen: cBest.fen(),
+            color: m.color
+          });
+          const further = await getDeepContinuation(cBest.fen(), 9);
+          deepBest.push(...further);
+        }
+      }
+    }
+    bestSteps.push(...deepBest);
+
+    const bestSan = cur.bestMoveSan || bestSteps[1]?.san || 'the suggested move';
+    const bestSummary = `Playing ${bestSan} retains full equality or advantage with no tactical loss.`;
+
+    return {
+      punishmentSteps,
+      punishmentSummary,
+      bestSteps,
+      bestSummary
+    };
+  } catch {
+    return null;
+  }
+}
+
+/* --- src/services/gameCacheService.js --- */
+const INDEX_KEY = 'chess_iq_analyzed_index_v1';
+const GAME_PREFIX = 'chess_iq_game_v1_';
+const MAX_CACHED_GAMES = 30;
+
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function getGameCacheKey(gameIdOrPgn, userColor = 'w') {
+  if (!gameIdOrPgn) return '';
+  const clean = typeof gameIdOrPgn === 'string' ? gameIdOrPgn.trim() : '';
+  if (clean.length < 64 && !clean.includes('\n') && !clean.includes('1.')) {
+    return `id_${clean}_${userColor}`;
+  }
+  return `pgn_${hashString(clean)}_${userColor}`;
+}
+
+function getCacheIndex() {
+  try {
+    return JSON.parse(localStorage.getItem(INDEX_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveCacheIndex(index) {
+  try {
+    localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+  } catch {}
+}
+
+function getGameCacheInfo(gameIdOrPgn, userColor = 'w') {
+  const key = getGameCacheKey(gameIdOrPgn, userColor);
+  if (!key) return null;
+  const index = getCacheIndex();
+  const entry = index.find((item) => item.key === key);
+  return entry || null;
+}
+
+function getCachedGame(gameIdOrPgn, userColor = 'w') {
+  const key = getGameCacheKey(gameIdOrPgn, userColor);
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(`${GAME_PREFIX}${key}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
+  if (!gameIdOrPgn || !analyzedGame) return;
+  const key = getGameCacheKey(gameIdOrPgn, userColor);
+  if (!key) return;
+
+  try {
+    const serialized = JSON.stringify(analyzedGame);
+    localStorage.setItem(`${GAME_PREFIX}${key}`, serialized);
+
+    let index = getCacheIndex().filter((item) => item.key !== key);
+    index.unshift({
+      key,
+      id: analyzedGame.id || key,
+      white: analyzedGame.white || 'White',
+      black: analyzedGame.black || 'Black',
+      date: analyzedGame.date || '',
+      userColor: analyzedGame.userColor || userColor,
+      accuracy: analyzedGame.userAccuracy ?? analyzedGame.accuracy ?? 85,
+      elo: analyzedGame.overallGameElo || 1500,
+      savedAt: Date.now()
+    });
+
+    while (index.length > MAX_CACHED_GAMES) {
+      const removed = index.pop();
+      if (removed) {
+        localStorage.removeItem(`${GAME_PREFIX}${removed.key}`);
+      }
+    }
+
+    saveCacheIndex(index);
+    window.dispatchEvent(new CustomEvent('chess_iq_cache_updated', { detail: { key } }));
+  } catch (err) {
+    if (err && (err.name === 'QuotaExceededError' || err.code === 22)) {
+      pruneOldestGames(10);
+      try {
+        localStorage.setItem(`${GAME_PREFIX}${key}`, JSON.stringify(analyzedGame));
+      } catch {}
+    }
+  }
+}
+
+function pruneOldestGames(count = 5) {
+  let index = getCacheIndex();
+  for (let i = 0; i < count && index.length > 0; i++) {
+    const removed = index.pop();
+    if (removed) {
+      localStorage.removeItem(`${GAME_PREFIX}${removed.key}`);
+    }
+  }
+  saveCacheIndex(index);
+}
+
+function clearGameCache() {
+  const index = getCacheIndex();
+  index.forEach((item) => {
+    localStorage.removeItem(`${GAME_PREFIX}${item.key}`);
+  });
+  localStorage.removeItem(INDEX_KEY);
+  window.dispatchEvent(new CustomEvent('chess_iq_cache_cleared'));
+}
+
+function getCacheStats() {
+  const index = getCacheIndex();
+  return {
+    count: index.length,
+    index
+  };
 }
 
 /* --- src/services/importApi.js --- */
@@ -2357,7 +2577,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         moverWinProbBefore,
         moverWinProbAfter,
         winProbLoss,
-        false,
+        item.isBook,
         moverWinProbBefore,
         multiPv2WinProb,
         item.fenBefore,
@@ -2366,8 +2586,23 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
       );
       const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
       let threat = null;
+      let explanation = null;
       if (classification === "blunder" || winProbLoss > 0.15) {
         threat = await detectThreat(item.fenAfter);
+      }
+      if (classification === "blunder" || classification === "mistake" || classification === "inaccuracy") {
+        explanation = await prepareMoveExplanation({
+          fen: item.fenAfter,
+          fenBefore: item.fenBefore,
+          from: item.moveObj.from,
+          to: item.moveObj.to,
+          san: item.moveObj.san,
+          color: item.side,
+          bestMoveUci,
+          bestMoveSan: bestMoveSan || item.moveObj.san,
+          punishmentPv: engineAfter.pv,
+          bestPv: engineBefore.pv
+        });
       }
       plies[i] = {
         ply: item.plyNum,
@@ -2397,11 +2632,12 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         secondBestMoveSan,
         pv: engineBefore.pv,
         threat,
+        explanation,
         phase: item.phase
       };
     }
-    if (onProgress && (i % 6 === 0 || i === totalPlies - 1)) {
-      onProgress(i + 1, totalPlies);
+    if (onProgress && (i % 2 === 0 || i === totalPlies - 1)) {
+      await onProgress(i + 1, totalPlies);
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
@@ -2437,6 +2673,16 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     endgame: [],
     overall: []
   };
+  const userPhaseAcc = {
+    opening: [],
+    middlegame: [],
+    endgame: []
+  };
+  const oppPhaseAcc = {
+    opening: [],
+    middlegame: [],
+    endgame: []
+  };
   plies.forEach((p) => {
     if (!p) return;
     const cpLoss = (p.classification === 'best' || p.classification === 'book')
@@ -2452,18 +2698,32 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
       }
       userPhaseLosses[p.phase].push(cpLoss);
       userPhaseLosses.overall.push(cpLoss);
+      if (userPhaseAcc[p.phase]) userPhaseAcc[p.phase].push(p.accuracy);
     } else {
       opponentCounts[p.classification] = (opponentCounts[p.classification] || 0) + 1;
       oppAccuracySum += p.accuracy;
       oppMovesCount++;
       oppPhaseLosses[p.phase].push(cpLoss);
       oppPhaseLosses.overall.push(cpLoss);
+      if (oppPhaseAcc[p.phase]) oppPhaseAcc[p.phase].push(p.accuracy);
     }
   });
   const userAccuracy = userMovesCount > 0 ? Math.round(userAccuracySum / userMovesCount * 10) / 10 : 85;
   const opponentAccuracy = oppMovesCount > 0 ? Math.round(oppAccuracySum / oppMovesCount * 10) / 10 : 85;
   const overallAccuracy = Math.round((userAccuracy + opponentAccuracy) / 2 * 10) / 10;
   const calcAcpl = (arr) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 25;
+  const calcAvgAcc = (arr) => arr.length > 0 ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10 : null;
+
+  const userPhaseAccuracy = {
+    opening: calcAvgAcc(userPhaseAcc.opening),
+    middlegame: calcAvgAcc(userPhaseAcc.middlegame),
+    endgame: calcAvgAcc(userPhaseAcc.endgame)
+  };
+  const opponentPhaseAccuracy = {
+    opening: calcAvgAcc(oppPhaseAcc.opening),
+    middlegame: calcAvgAcc(oppPhaseAcc.middlegame),
+    endgame: calcAvgAcc(oppPhaseAcc.endgame)
+  };
 
   const oppColor = userColor === "w" ? "b" : "w";
   const oppBaseElo = userColor === "w" ? blackElo : whiteElo;
@@ -2509,6 +2769,8 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     overallAccuracy,
     userAccuracy,
     opponentAccuracy,
+    userPhaseAccuracy,
+    opponentPhaseAccuracy,
     overallGameElo,
     openingElo,
     middlegameElo,
@@ -2617,6 +2879,134 @@ async function fetchLichessGames(username) {
     }
   }).filter(Boolean);
 }
+
+/* --- src/services/backgroundAnalysisQueue.js --- */
+class BackgroundAnalysisQueue {
+  constructor() {
+    this.queue = [];
+    this.isAnalyzing = false;
+    this.isPaused = true;
+    this.idleHandle = null;
+    this.timer = null;
+  }
+
+  setQueue(games, username = '') {
+    if (!games || !Array.isArray(games)) return;
+    const cleanUser = username.trim().toLowerCase();
+
+    games.forEach((g) => {
+      if (!g || !g.pgn) return;
+      const isWhite = g.white && cleanUser && g.white.toLowerCase() === cleanUser;
+      const userColor = isWhite ? 'w' : (g.userColor || 'w');
+      const cacheKey = g.id || g.pgn;
+
+      if (!getCachedGame(cacheKey, userColor)) {
+        if (!this.queue.some((item) => item.id === g.id && item.userColor === userColor)) {
+          this.queue.push({
+            id: g.id || `game_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            pgn: g.pgn,
+            userColor
+          });
+        }
+      }
+    });
+  }
+
+  enqueueGames(games, username = '') {
+    this.setQueue(games, username);
+  }
+
+  startIdleProcessing() {
+    this.isPaused = false;
+    this.scheduleNext(1000);
+  }
+
+  pause() {
+    this.isPaused = true;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (this.idleHandle && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+      window.cancelIdleCallback(this.idleHandle);
+      this.idleHandle = null;
+    }
+  }
+
+  resume() {
+    this.startIdleProcessing();
+  }
+
+  scheduleNext(delayMs = 1500) {
+    if (this.isPaused || this.isAnalyzing || this.queue.length === 0) return;
+
+    if (this.timer) clearTimeout(this.timer);
+
+    this.timer = setTimeout(() => {
+      if (this.isPaused || this.isAnalyzing || this.queue.length === 0) return;
+
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        this.idleHandle = window.requestIdleCallback(
+          (deadline) => {
+            if (deadline.timeRemaining() > 10 || deadline.didTimeout) {
+              this.processOne();
+            } else {
+              this.scheduleNext(1000);
+            }
+          },
+          { timeout: 3000 }
+        );
+      } else {
+        this.processOne();
+      }
+    }, delayMs);
+  }
+
+  async processOne() {
+    if (this.isPaused || this.isAnalyzing || this.queue.length === 0) return;
+
+    this.isAnalyzing = true;
+    const item = this.queue.shift();
+
+    try {
+      const alreadyCached = getCachedGame(item.id || item.pgn, item.userColor);
+      if (!alreadyCached) {
+        const analyzed = await analyzeFullPgn(item.pgn, item.userColor, false, async () => {
+          if (this.isPaused) throw new Error('aborted');
+          await new Promise((r) => setTimeout(r, 12));
+        });
+
+        if (analyzed) {
+          saveCachedGame(item.id || item.pgn, item.userColor, analyzed);
+          window.dispatchEvent(
+            new CustomEvent('chess_iq_game_analyzed', {
+              detail: {
+                id: item.id,
+                userColor: item.userColor,
+                accuracy: analyzed.userAccuracy ?? analyzed.accuracy,
+                elo: analyzed.overallGameElo
+              }
+            })
+          );
+        }
+      }
+    } catch {
+    } finally {
+      this.isAnalyzing = false;
+      if (!this.isPaused && this.queue.length > 0) {
+        this.scheduleNext(2000);
+      }
+    }
+  }
+
+  clear() {
+    this.queue = [];
+    this.pause();
+    this.isAnalyzing = false;
+  }
+}
+
+const backgroundAnalysisQueue = new BackgroundAnalysisQueue();
 
 /* --- src/components/board.js --- */
 /**
@@ -4123,45 +4513,52 @@ async function openWhyModal(dashboard, targetEval = null) {
     interactive: false,
   });
 
-  const punishmentSteps = [
-    { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
-  ];
+  let punishmentSteps = cur.explanation?.punishmentSteps;
+  let punishmentSummary = cur.explanation?.punishmentSummary;
+  let bestSteps = cur.explanation?.bestSteps;
+  let bestSummary = cur.explanation?.bestSummary;
 
-  const deepPunish = await getDeepContinuation(cur.fen, 10);
-  punishmentSteps.push(...deepPunish);
+  if (!punishmentSteps || !bestSteps) {
+    punishmentSteps = [
+      { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
+    ];
+    const deepPunish = await getDeepContinuation(cur.fen, 10);
+    punishmentSteps.push(...deepPunish);
+    const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
+    punishmentSummary = summarizePunishment(cur.fen, endFen, cur.color);
 
-  const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
-  const punishmentSummary = summarizePunishment(cur.fen, endFen, cur.color);
+    bestSteps = [
+      { ply: 0, fen: cur.fenBefore, from: null, to: null, san: 'Start' }
+    ];
+    bestSummary = 'Maintains a solid position and prevents opponent tactical counterplay.';
 
-  const bestSteps = [
-    { ply: 0, fen: cur.fenBefore, from: null, to: null, san: 'Start' }
-  ];
-  let bestSummary = 'Maintains a solid position and prevents opponent tactical counterplay.';
-
-  try {
-    const cBest = new Chess(cur.fenBefore);
-    const bUci = cur.bestMoveUci;
-    if (bUci && bUci.length >= 4) {
-      const from = bUci.slice(0, 2);
-      const to = bUci.slice(2, 4);
-      const promotion = bUci.length > 4 ? bUci[4] : void 0;
-      const m = cBest.move({ from, to, promotion });
-      if (m) {
-        bestSteps.push({
-          ply: 1,
-          san: m.san,
-          uci: bUci,
-          from: m.from,
-          to: m.to,
-          fen: cBest.fen(),
-          color: m.color
-        });
-        const deepBest = await getDeepContinuation(cBest.fen(), 9);
-        bestSteps.push(...deepBest);
-        bestSummary = `Playing ${cur.bestMoveSan || m.san} retains full equality or advantage with no tactical loss.`;
+    try {
+      const cBest = new Chess(cur.fenBefore);
+      const bUci = cur.bestMoveUci;
+      if (bUci && bUci.length >= 4) {
+        const from = bUci.slice(0, 2);
+        const to = bUci.slice(2, 4);
+        const promotion = bUci.length > 4 ? bUci[4] : void 0;
+        const m = cBest.move({ from, to, promotion });
+        if (m) {
+          bestSteps.push({
+            ply: 1,
+            san: m.san,
+            uci: bUci,
+            from: m.from,
+            to: m.to,
+            fen: cBest.fen(),
+            color: m.color
+          });
+          const deepBest = await getDeepContinuation(cBest.fen(), 9);
+          bestSteps.push(...deepBest);
+          bestSummary = `Playing ${cur.bestMoveSan || m.san} retains full equality or advantage with no tactical loss.`;
+        }
       }
+    } catch {
     }
-  } catch {
+
+    cur.explanation = { punishmentSteps, punishmentSummary, bestSteps, bestSummary };
   }
 
   let activeTab = 'punishment';
@@ -4899,6 +5296,17 @@ class ReviewDashboard {
     const userPhases = this.game.userPhaseElos || this.game.phaseElos || {};
     const oppPhases = this.game.opponentPhaseElos || {};
 
+    const userPhaseAcc = this.game.userPhaseAccuracy || {};
+    const oppPhaseAcc = this.game.opponentPhaseAccuracy || {};
+
+    const userOpeningAcc = userPhaseAcc.opening !== null && userPhaseAcc.opening !== undefined ? `${userPhaseAcc.opening}%` : '—';
+    const userMiddleAcc = userPhaseAcc.middlegame !== null && userPhaseAcc.middlegame !== undefined ? `${userPhaseAcc.middlegame}%` : '—';
+    const userEndAcc = userPhaseAcc.endgame !== null && userPhaseAcc.endgame !== undefined ? `${userPhaseAcc.endgame}%` : '—';
+
+    const oppOpeningAcc = oppPhaseAcc.opening !== null && oppPhaseAcc.opening !== undefined ? `${oppPhaseAcc.opening}%` : '—';
+    const oppMiddleAcc = oppPhaseAcc.middlegame !== null && oppPhaseAcc.middlegame !== undefined ? `${oppPhaseAcc.middlegame}%` : '—';
+    const oppEndAcc = oppPhaseAcc.endgame !== null && oppPhaseAcc.endgame !== undefined ? `${oppPhaseAcc.endgame}%` : '—';
+
     const userOpeningElo = userPhases.opening ?? 1500;
     const userMiddlegameElo = userPhases.middlegame ?? 1500;
     const userEndgameElo = userPhases.endgame ?? 1500;
@@ -5047,52 +5455,58 @@ class ReviewDashboard {
                   </div>
                 </div>
 
-                <!-- Phase Rating Comparison (Opening, Middle, Endgame) -->
+                <!-- Phase Rating & Accuracy Comparison (Opening, Middle, Endgame) -->
                 <div class="row g-2 text-center">
                   <div class="col-4">
                     <div class="arcade-stat-chip p-2">
-                      <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
+                      <span class="text-secondary small d-block fw-bold mb-1"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
                       <div class="d-flex justify-content-around align-items-baseline">
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
-                          <span class="fw-black fs-6 text-primary font-monospace">${userOpeningElo}</span>
+                          <span class="fw-black fs-6 text-primary font-monospace">${userOpeningAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${userOpeningElo}</span>
                         </div>
-                        <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                        <div class="vr opacity-25 my-auto" style="height: 28px;"></div>
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
-                          <span class="fw-black fs-6 text-secondary font-monospace">${oppOpeningElo}</span>
+                          <span class="fw-black fs-6 text-secondary font-monospace">${oppOpeningAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${oppOpeningElo}</span>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div class="col-4">
                     <div class="arcade-stat-chip p-2">
-                      <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
+                      <span class="text-secondary small d-block fw-bold mb-1"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
                       <div class="d-flex justify-content-around align-items-baseline">
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
-                          <span class="fw-black fs-6 text-warning font-monospace">${userMiddlegameElo}</span>
+                          <span class="fw-black fs-6 text-warning font-monospace">${userMiddleAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${userMiddlegameElo}</span>
                         </div>
-                        <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                        <div class="vr opacity-25 my-auto" style="height: 28px;"></div>
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
-                          <span class="fw-black fs-6 text-secondary font-monospace">${oppMiddlegameElo}</span>
+                          <span class="fw-black fs-6 text-secondary font-monospace">${oppMiddleAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${oppMiddlegameElo}</span>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div class="col-4">
                     <div class="arcade-stat-chip p-2">
-                      <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
+                      <span class="text-secondary small d-block fw-bold mb-1"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
                       <div class="d-flex justify-content-around align-items-baseline">
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
-                          <span class="fw-black fs-6 text-success font-monospace">${userEndgameElo}</span>
+                          <span class="fw-black fs-6 text-success font-monospace">${userEndAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${userEndgameElo}</span>
                         </div>
-                        <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                        <div class="vr opacity-25 my-auto" style="height: 28px;"></div>
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
-                          <span class="fw-black fs-6 text-secondary font-monospace">${oppEndgameElo}</span>
+                          <span class="fw-black fs-6 text-secondary font-monospace">${oppEndAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${oppEndgameElo}</span>
                         </div>
                       </div>
                     </div>
@@ -5282,6 +5696,8 @@ Result: ${this.game.result || '*'}`;
 
 
 
+
+
 class ImportModal {
   constructor(modalEl, options = {}) {
     this.modalEl = modalEl;
@@ -5298,6 +5714,16 @@ class ImportModal {
     this.isAnalyzing = false;
     this.analysisProgress = { current: 0, total: 0 };
     this.bsModal = null;
+
+    window.addEventListener('chess_iq_game_analyzed', () => {
+      if (this.fetchedGames.length > 0) this.renderTabContent();
+    });
+    window.addEventListener('chess_iq_cache_cleared', () => {
+      if (this.fetchedGames.length > 0) this.renderTabContent();
+    });
+    window.addEventListener('chess_iq_cache_updated', () => {
+      if (this.fetchedGames.length > 0) this.renderTabContent();
+    });
 
     this.render();
   }
@@ -5417,10 +5843,12 @@ class ImportModal {
         const games = await fetchChessComGames(this.username);
         this.fetchedGames = games;
         if (games.length === 0) this.fetchError = 'No recent games found for this player.';
+        else backgroundAnalysisQueue.setQueue(games, this.username);
       } else if (this.activeTab === 'lichess') {
         const games = await fetchLichessGames(this.username);
         this.fetchedGames = games;
         if (games.length === 0) this.fetchError = 'No recent games found for this player.';
+        else backgroundAnalysisQueue.setQueue(games, this.username);
       }
     } catch (err) {
       this.fetchError = err.message || 'Failed to fetch games.';
@@ -5509,11 +5937,22 @@ class ImportModal {
 
           ${this.fetchedGames.length > 0 ? `
             <div class="d-flex flex-column gap-2 mt-1 w-100">
-              <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
+              <div class="d-flex align-items-center justify-content-between">
+                <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
+                ${getCacheStats().count > 0 ? `
+                  <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-clear-game-cache" style="font-size: 11px;">
+                    <i class="bi bi-trash3 me-1"></i>Clear Cache (${getCacheStats().count})
+                  </button>
+                ` : ''}
+              </div>
               <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden pe-1 w-100" style="max-height: 280px; scrollbar-width: thin;">
                 ${this.fetchedGames.map((g) => {
                   const isUserWhite = g.white.toLowerCase() === this.username.trim().toLowerCase();
                   const isUserBlack = g.black.toLowerCase() === this.username.trim().toLowerCase();
+                  const userColor = isUserWhite ? 'w' : (isUserBlack ? 'b' : 'w');
+                  const cacheInfo = getGameCacheInfo(g.id || g.pgn, userColor);
+                  const isReviewed = Boolean(cacheInfo);
+
                   let userWon = false;
                   let userLost = false;
                   const isDraw = g.result === '1/2-1/2';
@@ -5554,13 +5993,18 @@ class ImportModal {
                           ${this.formatOpeningBadge(g.eco)}
                         </div>
                         <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                          ${isReviewed ? `
+                            <span class="badge bg-success-subtle text-success border border-success-subtle fw-bold font-monospace" style="font-size: 10px;">
+                              <i class="bi bi-lightning-charge-fill me-0.5"></i>Reviewed
+                            </span>
+                          ` : ''}
                           <span class="text-secondary small font-monospace text-nowrap" style="font-size: 11px;">${g.date}</span>
                           ${resultBadge}
                         </div>
                       </div>
 
                       <div class="d-flex align-items-center justify-content-between gap-3" style="min-width: 0;">
-                        <div class="d-flex flex-column gap-1.5 flex-grow-1" style="min-width: 0; overflow: hidden;">
+                        <div class="d-flex flex-column gap-1 flex-grow-1" style="min-width: 0; overflow: hidden;">
                           <div class="d-flex align-items-center gap-2 ${isUserWhite ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
                             <span class="fs-6 lh-1">⚪</span>
                             <span class="text-truncate" style="max-width: 170px;">${g.white}</span>
@@ -5574,11 +6018,18 @@ class ImportModal {
                             <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${g.blackElo}</span>
                             ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
                           </div>
+
+                          ${isReviewed ? `
+                            <div class="d-flex align-items-center gap-1.5 mt-0.5">
+                              <span class="badge bg-success-subtle text-success font-monospace fw-bold" style="font-size: 10px;">🎯 ${cacheInfo.accuracy}% acc</span>
+                              <span class="badge bg-primary-subtle text-primary font-monospace fw-bold" style="font-size: 10px;">⭐ ${cacheInfo.elo} Elo</span>
+                            </div>
+                          ` : ''}
                         </div>
 
                         <div class="flex-shrink-0">
-                          <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5" style="border-radius: 0.65rem; font-size: 13px !important;">
-                            <span>Analyze</span> <i class="bi bi-chevron-right" style="font-size: 11px;"></i>
+                          <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5 ${isReviewed ? 'bg-success border-success' : ''}" style="border-radius: 0.65rem; font-size: 13px !important;">
+                            <span>${isReviewed ? 'View Review' : 'Analyze'}</span> <i class="bi ${isReviewed ? 'bi-lightning-charge-fill' : 'bi-chevron-right'}" style="font-size: 11px;"></i>
                           </button>
                         </div>
                       </div>
@@ -5596,14 +6047,28 @@ class ImportModal {
       input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.handleFetch(); });
       container.querySelector('#btn-fetch-platform')?.addEventListener('click', () => this.handleFetch());
 
+      container.querySelector('#btn-clear-game-cache')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearGameCache();
+        this.renderTabContent();
+      });
+
       container.querySelectorAll('[data-game-id]').forEach((card) => {
         card.addEventListener('click', (e) => {
           if (this.isAnalyzing) return;
           const gameId = e.currentTarget.getAttribute('data-game-id');
           const game = this.fetchedGames.find((g) => g.id === gameId);
           if (game && this.onSelectPgn) {
-            this.isAnalyzing = true;
             const isWhite = game.white.toLowerCase() === this.username.trim().toLowerCase();
+            const userColor = isWhite ? 'w' : 'b';
+            const cacheInfo = getGameCacheInfo(game.id || game.pgn, userColor);
+
+            if (cacheInfo) {
+              this.onSelectPgn(game.pgn, userColor);
+              return;
+            }
+
+            this.isAnalyzing = true;
             const btn = card.querySelector('.btn-analyze-card');
             if (btn) {
               btn.innerHTML = `<span class="spinner-border spinner-border-sm text-warning me-1"></span>Analyzing...`;
@@ -5616,7 +6081,7 @@ class ImportModal {
             card.style.opacity = '1';
             card.classList.add('border-warning');
             setTimeout(() => {
-              this.onSelectPgn(game.pgn, isWhite ? 'w' : 'b');
+              this.onSelectPgn(game.pgn, userColor);
             }, 40);
           }
         });
@@ -5869,7 +6334,11 @@ class App {
       botView?.classList.add('d-none');
       btnReview?.classList.add('active');
       btnBot?.classList.remove('active');
+      if (this.reviewDashboard?.game && !this.reviewDashboard?.isAnalyzing) {
+        backgroundAnalysisQueue.startIdleProcessing();
+      }
     } else {
+      backgroundAnalysisQueue.pause();
       reviewView?.classList.add('d-none');
       botView?.classList.remove('d-none');
       btnBot?.classList.add('active');
@@ -5881,7 +6350,10 @@ class App {
     this.updateSoundIcon();
     document.getElementById('nav-mode-review')?.addEventListener('click', () => this.switchMode('review'));
     document.getElementById('nav-mode-bot')?.addEventListener('click', () => this.switchMode('bot'));
-    document.getElementById('nav-btn-import')?.addEventListener('click', () => this.importModal?.show());
+    document.getElementById('nav-btn-import')?.addEventListener('click', () => {
+      backgroundAnalysisQueue.pause();
+      this.importModal?.show();
+    });
     document.getElementById('nav-btn-theme')?.addEventListener('click', () => this.toggleTheme());
     document.getElementById('nav-btn-sound')?.addEventListener('click', () => {
       soundService.toggleMute();
@@ -5916,12 +6388,23 @@ class App {
   async runAnalysis(pgn, userColor) {
     this.switchMode('review');
     window.scrollTo({ top: 0, behavior: 'instant' });
-    this.reviewDashboard?.showLoading(0, 0);
-    this.importModal?.hide();
 
     // Clean up any lingering backdrops
+    this.importModal?.hide();
     document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
     document.body.classList.remove('modal-open');
+
+    const cachedGame = getCachedGame(pgn, userColor);
+    if (cachedGame) {
+      this.reviewDashboard?.setGame(cachedGame);
+      soundService.playSuccess();
+      this.importModal?.setAnalyzing(false, 0, 0);
+      backgroundAnalysisQueue.startIdleProcessing();
+      return;
+    }
+
+    backgroundAnalysisQueue.pause();
+    this.reviewDashboard?.showLoading(0, 0);
 
     // Allow modal hide and review loading view to paint before computation begins
     await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 50)));
@@ -5936,8 +6419,10 @@ class App {
         }
       );
 
+      saveCachedGame(pgn, userColor, analyzedGame);
       this.reviewDashboard?.setGame(analyzedGame);
       soundService.playSuccess();
+      backgroundAnalysisQueue.startIdleProcessing();
     } catch (err) {
       console.error('Analysis failed:', err);
       this.reviewDashboard?.hideLoading();

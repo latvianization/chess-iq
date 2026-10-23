@@ -8,6 +8,7 @@ import {
   detectThreat,
   evaluateFenHybrid
 } from "./engine.js";
+import { prepareMoveExplanation } from "./engineRefutations.js";
 import { findMatchingEco, isBookMove } from "./ecoDictionary.js";
 export function parseClockToSeconds(clockStr) {
   const match = clockStr.match(/(\d+):(\d+):?(\d+)?(\.\d+)?/);
@@ -234,7 +235,7 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
         moverWinProbBefore,
         moverWinProbAfter,
         winProbLoss,
-        false,
+        item.isBook,
         moverWinProbBefore,
         multiPv2WinProb,
         item.fenBefore,
@@ -243,8 +244,23 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
       );
       const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
       let threat = null;
+      let explanation = null;
       if (classification === "blunder" || winProbLoss > 0.15) {
         threat = await detectThreat(item.fenAfter);
+      }
+      if (classification === "blunder" || classification === "mistake" || classification === "inaccuracy") {
+        explanation = await prepareMoveExplanation({
+          fen: item.fenAfter,
+          fenBefore: item.fenBefore,
+          from: item.moveObj.from,
+          to: item.moveObj.to,
+          san: item.moveObj.san,
+          color: item.side,
+          bestMoveUci,
+          bestMoveSan: bestMoveSan || item.moveObj.san,
+          punishmentPv: engineAfter.pv,
+          bestPv: engineBefore.pv
+        });
       }
       plies[i] = {
         ply: item.plyNum,
@@ -274,11 +290,12 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
         secondBestMoveSan,
         pv: engineBefore.pv,
         threat,
+        explanation,
         phase: item.phase
       };
     }
-    if (onProgress && (i % 6 === 0 || i === totalPlies - 1)) {
-      onProgress(i + 1, totalPlies);
+    if (onProgress && (i % 2 === 0 || i === totalPlies - 1)) {
+      await onProgress(i + 1, totalPlies);
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
@@ -314,6 +331,16 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     endgame: [],
     overall: []
   };
+  const userPhaseAcc = {
+    opening: [],
+    middlegame: [],
+    endgame: []
+  };
+  const oppPhaseAcc = {
+    opening: [],
+    middlegame: [],
+    endgame: []
+  };
   plies.forEach((p) => {
     if (!p) return;
     const cpLoss = (p.classification === 'best' || p.classification === 'book')
@@ -329,18 +356,32 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
       }
       userPhaseLosses[p.phase].push(cpLoss);
       userPhaseLosses.overall.push(cpLoss);
+      if (userPhaseAcc[p.phase]) userPhaseAcc[p.phase].push(p.accuracy);
     } else {
       opponentCounts[p.classification] = (opponentCounts[p.classification] || 0) + 1;
       oppAccuracySum += p.accuracy;
       oppMovesCount++;
       oppPhaseLosses[p.phase].push(cpLoss);
       oppPhaseLosses.overall.push(cpLoss);
+      if (oppPhaseAcc[p.phase]) oppPhaseAcc[p.phase].push(p.accuracy);
     }
   });
   const userAccuracy = userMovesCount > 0 ? Math.round(userAccuracySum / userMovesCount * 10) / 10 : 85;
   const opponentAccuracy = oppMovesCount > 0 ? Math.round(oppAccuracySum / oppMovesCount * 10) / 10 : 85;
   const overallAccuracy = Math.round((userAccuracy + opponentAccuracy) / 2 * 10) / 10;
   const calcAcpl = (arr) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 25;
+  const calcAvgAcc = (arr) => arr.length > 0 ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10 : null;
+
+  const userPhaseAccuracy = {
+    opening: calcAvgAcc(userPhaseAcc.opening),
+    middlegame: calcAvgAcc(userPhaseAcc.middlegame),
+    endgame: calcAvgAcc(userPhaseAcc.endgame)
+  };
+  const opponentPhaseAccuracy = {
+    opening: calcAvgAcc(oppPhaseAcc.opening),
+    middlegame: calcAvgAcc(oppPhaseAcc.middlegame),
+    endgame: calcAvgAcc(oppPhaseAcc.endgame)
+  };
 
   const oppColor = userColor === "w" ? "b" : "w";
   const oppBaseElo = userColor === "w" ? blackElo : whiteElo;
@@ -386,6 +427,8 @@ export async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onPro
     overallAccuracy,
     userAccuracy,
     opponentAccuracy,
+    userPhaseAccuracy,
+    opponentPhaseAccuracy,
     overallGameElo,
     openingElo,
     middlegameElo,

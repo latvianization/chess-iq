@@ -548,6 +548,17 @@ export class ReviewDashboard {
     const userPhases = this.game.userPhaseElos || this.game.phaseElos || {};
     const oppPhases = this.game.opponentPhaseElos || {};
 
+    const userPhaseAcc = this.game.userPhaseAccuracy || {};
+    const oppPhaseAcc = this.game.opponentPhaseAccuracy || {};
+
+    const userOpeningAcc = userPhaseAcc.opening !== null && userPhaseAcc.opening !== undefined ? `${userPhaseAcc.opening}%` : '—';
+    const userMiddleAcc = userPhaseAcc.middlegame !== null && userPhaseAcc.middlegame !== undefined ? `${userPhaseAcc.middlegame}%` : '—';
+    const userEndAcc = userPhaseAcc.endgame !== null && userPhaseAcc.endgame !== undefined ? `${userPhaseAcc.endgame}%` : '—';
+
+    const oppOpeningAcc = oppPhaseAcc.opening !== null && oppPhaseAcc.opening !== undefined ? `${oppPhaseAcc.opening}%` : '—';
+    const oppMiddleAcc = oppPhaseAcc.middlegame !== null && oppPhaseAcc.middlegame !== undefined ? `${oppPhaseAcc.middlegame}%` : '—';
+    const oppEndAcc = oppPhaseAcc.endgame !== null && oppPhaseAcc.endgame !== undefined ? `${oppPhaseAcc.endgame}%` : '—';
+
     const userOpeningElo = userPhases.opening ?? 1500;
     const userMiddlegameElo = userPhases.middlegame ?? 1500;
     const userEndgameElo = userPhases.endgame ?? 1500;
@@ -696,52 +707,58 @@ export class ReviewDashboard {
                   </div>
                 </div>
 
-                <!-- Phase Rating Comparison (Opening, Middle, Endgame) -->
+                <!-- Phase Rating & Accuracy Comparison (Opening, Middle, Endgame) -->
                 <div class="row g-2 text-center">
                   <div class="col-4">
                     <div class="arcade-stat-chip p-2">
-                      <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
+                      <span class="text-secondary small d-block fw-bold mb-1"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
                       <div class="d-flex justify-content-around align-items-baseline">
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
-                          <span class="fw-black fs-6 text-primary font-monospace">${userOpeningElo}</span>
+                          <span class="fw-black fs-6 text-primary font-monospace">${userOpeningAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${userOpeningElo}</span>
                         </div>
-                        <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                        <div class="vr opacity-25 my-auto" style="height: 28px;"></div>
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
-                          <span class="fw-black fs-6 text-secondary font-monospace">${oppOpeningElo}</span>
+                          <span class="fw-black fs-6 text-secondary font-monospace">${oppOpeningAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${oppOpeningElo}</span>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div class="col-4">
                     <div class="arcade-stat-chip p-2">
-                      <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
+                      <span class="text-secondary small d-block fw-bold mb-1"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
                       <div class="d-flex justify-content-around align-items-baseline">
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
-                          <span class="fw-black fs-6 text-warning font-monospace">${userMiddlegameElo}</span>
+                          <span class="fw-black fs-6 text-warning font-monospace">${userMiddleAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${userMiddlegameElo}</span>
                         </div>
-                        <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                        <div class="vr opacity-25 my-auto" style="height: 28px;"></div>
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
-                          <span class="fw-black fs-6 text-secondary font-monospace">${oppMiddlegameElo}</span>
+                          <span class="fw-black fs-6 text-secondary font-monospace">${oppMiddleAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${oppMiddlegameElo}</span>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div class="col-4">
                     <div class="arcade-stat-chip p-2">
-                      <span class="text-secondary small d-block fw-bold mb-1.5"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
+                      <span class="text-secondary small d-block fw-bold mb-1"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
                       <div class="d-flex justify-content-around align-items-baseline">
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">YOU</span>
-                          <span class="fw-black fs-6 text-success font-monospace">${userEndgameElo}</span>
+                          <span class="fw-black fs-6 text-success font-monospace">${userEndAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${userEndgameElo}</span>
                         </div>
-                        <div class="vr opacity-25 my-auto" style="height: 22px;"></div>
+                        <div class="vr opacity-25 my-auto" style="height: 28px;"></div>
                         <div class="text-center">
                           <span class="d-block text-secondary" style="font-size: 10px; font-weight: 700;">OPP</span>
-                          <span class="fw-black fs-6 text-secondary font-monospace">${oppEndgameElo}</span>
+                          <span class="fw-black fs-6 text-secondary font-monospace">${oppEndAcc}</span>
+                          <span class="d-block text-secondary font-monospace" style="font-size: 9px;">${oppEndgameElo}</span>
                         </div>
                       </div>
                     </div>

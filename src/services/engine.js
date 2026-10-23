@@ -442,7 +442,7 @@ export async function evaluateFenHybrid(fen, isDeep = false) {
       pv: sfEval.pv,
       bestMoveUci: sfEval.bestMoveUci,
       secondBestMoveUci: fallback.secondBestMoveUci,
-      multiPv2ScoreCp: sfEval.multiPv2ScoreCp,
+      multiPv2ScoreCp: sfEval.multiPv2ScoreCp ?? fallback.multiPv2Cp,
       source: "stockfish"
     };
     FEN_EVAL_CACHE.set(cacheKey, sfResult);
@@ -490,7 +490,7 @@ export function classifyMove(playedUci, bestMoveUci, winProbBefore, winProbAfter
         return "brilliant";
       }
     }
-    if (multiPv2WinProb !== void 0 && multiPv1WinProb - multiPv2WinProb >= 0.15) {
+    if (multiPv2WinProb !== void 0 && multiPv1WinProb - multiPv2WinProb >= 0.10) {
       return "great";
     }
     return "best";

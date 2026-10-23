@@ -11,6 +11,8 @@ import { BotArena } from './components/botArena.js';
 import { ImportModal } from './components/importModal.js';
 import { analyzeFullPgn } from './services/importApi.js';
 import { soundService } from './services/sound.js';
+import { getCachedGame, saveCachedGame } from './services/gameCacheService.js';
+import { backgroundAnalysisQueue } from './services/backgroundAnalysisQueue.js';
 
 function ensureChessCompat() {
   if (typeof window === 'undefined' || !window.Chess) return;
@@ -133,7 +135,11 @@ class App {
       botView?.classList.add('d-none');
       btnReview?.classList.add('active');
       btnBot?.classList.remove('active');
+      if (this.reviewDashboard?.game && !this.reviewDashboard?.isAnalyzing) {
+        backgroundAnalysisQueue.startIdleProcessing();
+      }
     } else {
+      backgroundAnalysisQueue.pause();
       reviewView?.classList.add('d-none');
       botView?.classList.remove('d-none');
       btnBot?.classList.add('active');
@@ -145,7 +151,10 @@ class App {
     this.updateSoundIcon();
     document.getElementById('nav-mode-review')?.addEventListener('click', () => this.switchMode('review'));
     document.getElementById('nav-mode-bot')?.addEventListener('click', () => this.switchMode('bot'));
-    document.getElementById('nav-btn-import')?.addEventListener('click', () => this.importModal?.show());
+    document.getElementById('nav-btn-import')?.addEventListener('click', () => {
+      backgroundAnalysisQueue.pause();
+      this.importModal?.show();
+    });
     document.getElementById('nav-btn-theme')?.addEventListener('click', () => this.toggleTheme());
     document.getElementById('nav-btn-sound')?.addEventListener('click', () => {
       soundService.toggleMute();
@@ -180,12 +189,23 @@ class App {
   async runAnalysis(pgn, userColor) {
     this.switchMode('review');
     window.scrollTo({ top: 0, behavior: 'instant' });
-    this.reviewDashboard?.showLoading(0, 0);
-    this.importModal?.hide();
 
     // Clean up any lingering backdrops
+    this.importModal?.hide();
     document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
     document.body.classList.remove('modal-open');
+
+    const cachedGame = getCachedGame(pgn, userColor);
+    if (cachedGame) {
+      this.reviewDashboard?.setGame(cachedGame);
+      soundService.playSuccess();
+      this.importModal?.setAnalyzing(false, 0, 0);
+      backgroundAnalysisQueue.startIdleProcessing();
+      return;
+    }
+
+    backgroundAnalysisQueue.pause();
+    this.reviewDashboard?.showLoading(0, 0);
 
     // Allow modal hide and review loading view to paint before computation begins
     await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 50)));
@@ -200,8 +220,10 @@ class App {
         }
       );
 
+      saveCachedGame(pgn, userColor, analyzedGame);
       this.reviewDashboard?.setGame(analyzedGame);
       soundService.playSuccess();
+      backgroundAnalysisQueue.startIdleProcessing();
     } catch (err) {
       console.error('Analysis failed:', err);
       this.reviewDashboard?.hideLoading();

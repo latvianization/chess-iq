@@ -165,3 +165,98 @@ export function summarizePunishment(fenStart, fenEnd, moverColor) {
     return "Opponent gains a decisive tactical advantage";
   }
 }
+
+export function replayPv(fen, pvMoves, maxPlies = 10) {
+  const steps = [];
+  if (!fen || !Array.isArray(pvMoves) || pvMoves.length === 0) return steps;
+  try {
+    const chess = new Chess(fen);
+    for (let i = 0; i < Math.min(pvMoves.length, maxPlies); i++) {
+      if (isChessGameOver(chess)) break;
+      const uci = pvMoves[i];
+      if (!uci || uci.length < 4) break;
+      const from = uci.slice(0, 2);
+      const to = uci.slice(2, 4);
+      const promotion = uci.length > 4 ? uci[4] : void 0;
+      const m = chess.move({ from, to, promotion });
+      if (!m) break;
+      steps.push({
+        ply: i + 1,
+        san: m.san,
+        uci,
+        from: m.from,
+        to: m.to,
+        fen: chess.fen(),
+        color: m.color,
+        piece: m.piece
+      });
+    }
+  } catch {}
+  return steps;
+}
+
+export async function prepareMoveExplanation(cur) {
+  if (!cur) return null;
+  try {
+    const punishmentSteps = [
+      { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
+    ];
+
+    let deepPunish = [];
+    if (cur.punishmentPv && cur.punishmentPv.length > 0) {
+      deepPunish = replayPv(cur.fen, cur.punishmentPv, 10);
+    }
+    if (deepPunish.length === 0) {
+      deepPunish = await getDeepContinuation(cur.fen, 10);
+    }
+    punishmentSteps.push(...deepPunish);
+
+    const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
+    const punishmentSummary = summarizePunishment(cur.fen, endFen, cur.color);
+
+    const bestSteps = [
+      { ply: 0, fen: cur.fenBefore, from: null, to: null, san: 'Start' }
+    ];
+
+    let deepBest = [];
+    if (cur.bestPv && cur.bestPv.length > 0) {
+      deepBest = replayPv(cur.fenBefore, cur.bestPv, 10);
+    }
+    if (deepBest.length === 0) {
+      const cBest = new Chess(cur.fenBefore);
+      const bUci = cur.bestMoveUci;
+      if (bUci && bUci.length >= 4) {
+        const from = bUci.slice(0, 2);
+        const to = bUci.slice(2, 4);
+        const promotion = bUci.length > 4 ? bUci[4] : void 0;
+        const m = cBest.move({ from, to, promotion });
+        if (m) {
+          deepBest.push({
+            ply: 1,
+            san: m.san,
+            uci: bUci,
+            from: m.from,
+            to: m.to,
+            fen: cBest.fen(),
+            color: m.color
+          });
+          const further = await getDeepContinuation(cBest.fen(), 9);
+          deepBest.push(...further);
+        }
+      }
+    }
+    bestSteps.push(...deepBest);
+
+    const bestSan = cur.bestMoveSan || bestSteps[1]?.san || 'the suggested move';
+    const bestSummary = `Playing ${bestSan} retains full equality or advantage with no tactical loss.`;
+
+    return {
+      punishmentSteps,
+      punishmentSummary,
+      bestSteps,
+      bestSummary
+    };
+  } catch {
+    return null;
+  }
+}

@@ -119,45 +119,52 @@ export async function openWhyModal(dashboard, targetEval = null) {
     interactive: false,
   });
 
-  const punishmentSteps = [
-    { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
-  ];
+  let punishmentSteps = cur.explanation?.punishmentSteps;
+  let punishmentSummary = cur.explanation?.punishmentSummary;
+  let bestSteps = cur.explanation?.bestSteps;
+  let bestSummary = cur.explanation?.bestSummary;
 
-  const deepPunish = await getDeepContinuation(cur.fen, 10);
-  punishmentSteps.push(...deepPunish);
+  if (!punishmentSteps || !bestSteps) {
+    punishmentSteps = [
+      { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
+    ];
+    const deepPunish = await getDeepContinuation(cur.fen, 10);
+    punishmentSteps.push(...deepPunish);
+    const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
+    punishmentSummary = summarizePunishment(cur.fen, endFen, cur.color);
 
-  const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
-  const punishmentSummary = summarizePunishment(cur.fen, endFen, cur.color);
+    bestSteps = [
+      { ply: 0, fen: cur.fenBefore, from: null, to: null, san: 'Start' }
+    ];
+    bestSummary = 'Maintains a solid position and prevents opponent tactical counterplay.';
 
-  const bestSteps = [
-    { ply: 0, fen: cur.fenBefore, from: null, to: null, san: 'Start' }
-  ];
-  let bestSummary = 'Maintains a solid position and prevents opponent tactical counterplay.';
-
-  try {
-    const cBest = new Chess(cur.fenBefore);
-    const bUci = cur.bestMoveUci;
-    if (bUci && bUci.length >= 4) {
-      const from = bUci.slice(0, 2);
-      const to = bUci.slice(2, 4);
-      const promotion = bUci.length > 4 ? bUci[4] : void 0;
-      const m = cBest.move({ from, to, promotion });
-      if (m) {
-        bestSteps.push({
-          ply: 1,
-          san: m.san,
-          uci: bUci,
-          from: m.from,
-          to: m.to,
-          fen: cBest.fen(),
-          color: m.color
-        });
-        const deepBest = await getDeepContinuation(cBest.fen(), 9);
-        bestSteps.push(...deepBest);
-        bestSummary = `Playing ${cur.bestMoveSan || m.san} retains full equality or advantage with no tactical loss.`;
+    try {
+      const cBest = new Chess(cur.fenBefore);
+      const bUci = cur.bestMoveUci;
+      if (bUci && bUci.length >= 4) {
+        const from = bUci.slice(0, 2);
+        const to = bUci.slice(2, 4);
+        const promotion = bUci.length > 4 ? bUci[4] : void 0;
+        const m = cBest.move({ from, to, promotion });
+        if (m) {
+          bestSteps.push({
+            ply: 1,
+            san: m.san,
+            uci: bUci,
+            from: m.from,
+            to: m.to,
+            fen: cBest.fen(),
+            color: m.color
+          });
+          const deepBest = await getDeepContinuation(cBest.fen(), 9);
+          bestSteps.push(...deepBest);
+          bestSummary = `Playing ${cur.bestMoveSan || m.san} retains full equality or advantage with no tactical loss.`;
+        }
       }
+    } catch {
     }
-  } catch {
+
+    cur.explanation = { punishmentSteps, punishmentSummary, bestSteps, bestSummary };
   }
 
   let activeTab = 'punishment';

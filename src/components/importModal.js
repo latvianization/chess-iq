@@ -5,6 +5,8 @@
  */
 
 import { fetchChessComGames, fetchLichessGames } from '../services/importApi.js';
+import { getGameCacheInfo, clearGameCache, getCacheStats } from '../services/gameCacheService.js';
+import { backgroundAnalysisQueue } from '../services/backgroundAnalysisQueue.js';
 
 export class ImportModal {
   constructor(modalEl, options = {}) {
@@ -22,6 +24,16 @@ export class ImportModal {
     this.isAnalyzing = false;
     this.analysisProgress = { current: 0, total: 0 };
     this.bsModal = null;
+
+    window.addEventListener('chess_iq_game_analyzed', () => {
+      if (this.fetchedGames.length > 0) this.renderTabContent();
+    });
+    window.addEventListener('chess_iq_cache_cleared', () => {
+      if (this.fetchedGames.length > 0) this.renderTabContent();
+    });
+    window.addEventListener('chess_iq_cache_updated', () => {
+      if (this.fetchedGames.length > 0) this.renderTabContent();
+    });
 
     this.render();
   }
@@ -141,10 +153,12 @@ export class ImportModal {
         const games = await fetchChessComGames(this.username);
         this.fetchedGames = games;
         if (games.length === 0) this.fetchError = 'No recent games found for this player.';
+        else backgroundAnalysisQueue.setQueue(games, this.username);
       } else if (this.activeTab === 'lichess') {
         const games = await fetchLichessGames(this.username);
         this.fetchedGames = games;
         if (games.length === 0) this.fetchError = 'No recent games found for this player.';
+        else backgroundAnalysisQueue.setQueue(games, this.username);
       }
     } catch (err) {
       this.fetchError = err.message || 'Failed to fetch games.';
@@ -233,11 +247,22 @@ export class ImportModal {
 
           ${this.fetchedGames.length > 0 ? `
             <div class="d-flex flex-column gap-2 mt-1 w-100">
-              <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
+              <div class="d-flex align-items-center justify-content-between">
+                <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
+                ${getCacheStats().count > 0 ? `
+                  <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-clear-game-cache" style="font-size: 11px;">
+                    <i class="bi bi-trash3 me-1"></i>Clear Cache (${getCacheStats().count})
+                  </button>
+                ` : ''}
+              </div>
               <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden pe-1 w-100" style="max-height: 280px; scrollbar-width: thin;">
                 ${this.fetchedGames.map((g) => {
                   const isUserWhite = g.white.toLowerCase() === this.username.trim().toLowerCase();
                   const isUserBlack = g.black.toLowerCase() === this.username.trim().toLowerCase();
+                  const userColor = isUserWhite ? 'w' : (isUserBlack ? 'b' : 'w');
+                  const cacheInfo = getGameCacheInfo(g.id || g.pgn, userColor);
+                  const isReviewed = Boolean(cacheInfo);
+
                   let userWon = false;
                   let userLost = false;
                   const isDraw = g.result === '1/2-1/2';
@@ -278,13 +303,18 @@ export class ImportModal {
                           ${this.formatOpeningBadge(g.eco)}
                         </div>
                         <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                          ${isReviewed ? `
+                            <span class="badge bg-success-subtle text-success border border-success-subtle fw-bold font-monospace" style="font-size: 10px;">
+                              <i class="bi bi-lightning-charge-fill me-0.5"></i>Reviewed
+                            </span>
+                          ` : ''}
                           <span class="text-secondary small font-monospace text-nowrap" style="font-size: 11px;">${g.date}</span>
                           ${resultBadge}
                         </div>
                       </div>
 
                       <div class="d-flex align-items-center justify-content-between gap-3" style="min-width: 0;">
-                        <div class="d-flex flex-column gap-1.5 flex-grow-1" style="min-width: 0; overflow: hidden;">
+                        <div class="d-flex flex-column gap-1 flex-grow-1" style="min-width: 0; overflow: hidden;">
                           <div class="d-flex align-items-center gap-2 ${isUserWhite ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
                             <span class="fs-6 lh-1">⚪</span>
                             <span class="text-truncate" style="max-width: 170px;">${g.white}</span>
@@ -298,11 +328,18 @@ export class ImportModal {
                             <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${g.blackElo}</span>
                             ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
                           </div>
+
+                          ${isReviewed ? `
+                            <div class="d-flex align-items-center gap-1.5 mt-0.5">
+                              <span class="badge bg-success-subtle text-success font-monospace fw-bold" style="font-size: 10px;">🎯 ${cacheInfo.accuracy}% acc</span>
+                              <span class="badge bg-primary-subtle text-primary font-monospace fw-bold" style="font-size: 10px;">⭐ ${cacheInfo.elo} Elo</span>
+                            </div>
+                          ` : ''}
                         </div>
 
                         <div class="flex-shrink-0">
-                          <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5" style="border-radius: 0.65rem; font-size: 13px !important;">
-                            <span>Analyze</span> <i class="bi bi-chevron-right" style="font-size: 11px;"></i>
+                          <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5 ${isReviewed ? 'bg-success border-success' : ''}" style="border-radius: 0.65rem; font-size: 13px !important;">
+                            <span>${isReviewed ? 'View Review' : 'Analyze'}</span> <i class="bi ${isReviewed ? 'bi-lightning-charge-fill' : 'bi-chevron-right'}" style="font-size: 11px;"></i>
                           </button>
                         </div>
                       </div>
@@ -320,14 +357,28 @@ export class ImportModal {
       input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.handleFetch(); });
       container.querySelector('#btn-fetch-platform')?.addEventListener('click', () => this.handleFetch());
 
+      container.querySelector('#btn-clear-game-cache')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearGameCache();
+        this.renderTabContent();
+      });
+
       container.querySelectorAll('[data-game-id]').forEach((card) => {
         card.addEventListener('click', (e) => {
           if (this.isAnalyzing) return;
           const gameId = e.currentTarget.getAttribute('data-game-id');
           const game = this.fetchedGames.find((g) => g.id === gameId);
           if (game && this.onSelectPgn) {
-            this.isAnalyzing = true;
             const isWhite = game.white.toLowerCase() === this.username.trim().toLowerCase();
+            const userColor = isWhite ? 'w' : 'b';
+            const cacheInfo = getGameCacheInfo(game.id || game.pgn, userColor);
+
+            if (cacheInfo) {
+              this.onSelectPgn(game.pgn, userColor);
+              return;
+            }
+
+            this.isAnalyzing = true;
             const btn = card.querySelector('.btn-analyze-card');
             if (btn) {
               btn.innerHTML = `<span class="spinner-border spinner-border-sm text-warning me-1"></span>Analyzing...`;
@@ -340,7 +391,7 @@ export class ImportModal {
             card.style.opacity = '1';
             card.classList.add('border-warning');
             setTimeout(() => {
-              this.onSelectPgn(game.pgn, isWhite ? 'w' : 'b');
+              this.onSelectPgn(game.pgn, userColor);
             }, 40);
           }
         });
