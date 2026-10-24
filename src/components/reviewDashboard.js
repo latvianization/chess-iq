@@ -405,9 +405,7 @@ class ReviewDashboard {
       const plyNum = parseInt(row.dataset.ply, 10);
       if (plyNum === this.currentPly) {
         row.classList.add('bg-warning-subtle', 'fw-black', 'border', 'border-warning');
-        if (typeof row.scrollIntoView === 'function') {
-          row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        } else if (scrollContainer) {
+        if (scrollContainer) {
           const rowTop = row.offsetTop;
           const rowHeight = row.offsetHeight;
           const containerTop = scrollContainer.scrollTop;
