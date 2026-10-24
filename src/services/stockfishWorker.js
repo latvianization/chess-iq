@@ -5,12 +5,32 @@ function getCandidateWorkerUrls() {
   if (typeof window !== "undefined" && window.__STOCKFISH_URL__) {
     return [window.__STOCKFISH_URL__];
   }
+  const isFileProtocol = typeof window !== "undefined" && window.location && window.location.protocol === "file:";
+  const cdnBlobCandidates = [
+    "blob:https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js",
+    "blob:https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js"
+  ];
+  if (isFileProtocol) {
+    return cdnBlobCandidates;
+  }
   const base = (typeof window !== "undefined" && window.__BASE_URL__) || "./";
   const normalizedBase = base.endsWith("/") ? base : `${base}/`;
   return [
     `${normalizedBase}public/stockfish.js`,
-    "./public/stockfish.js"
+    "./public/stockfish.js",
+    ...cdnBlobCandidates
   ];
+}
+
+function instantiateWorkerFromSpec(specUrl) {
+  if (typeof specUrl === "string" && specUrl.startsWith("blob:")) {
+    const remoteUrl = specUrl.slice(5);
+    const workerCode = `importScripts(${JSON.stringify(remoteUrl)});`;
+    const blob = new Blob([workerCode], { type: "application/javascript" });
+    const objectUrl = URL.createObjectURL(blob);
+    return { worker: new Worker(objectUrl), objectUrl };
+  }
+  return { worker: new Worker(specUrl), objectUrl: null };
 }
 
 class StockfishWorkerService {
@@ -18,6 +38,7 @@ class StockfishWorkerService {
     this.id = id;
     this.onReadyCallback = onReadyCallback || (() => {});
     this.worker = null;
+    this.objectUrl = null;
     this.isInitialized = false;
     this.isReady = false;
     this.isAvailable = true;
@@ -30,20 +51,34 @@ class StockfishWorkerService {
     this.currentDepth = 0;
     this.secondBestCp = void 0;
     this.secondBestMove = "";
+    this.secondBestPv = [];
+    this.initTimeoutId = null;
     this.softTimeoutId = null;
     this.hardTimeoutId = null;
     this.candidateIndex = 0;
     this.initWorker();
   }
 
+  cleanupWorkerInstance() {
+    if (this.initTimeoutId) {
+      clearTimeout(this.initTimeoutId);
+      this.initTimeoutId = null;
+    }
+    try {
+      if (this.worker) this.worker.terminate();
+    } catch {}
+    this.worker = null;
+    if (this.objectUrl) {
+      try {
+        URL.revokeObjectURL(this.objectUrl);
+      } catch {}
+      this.objectUrl = null;
+    }
+  }
+
   initWorker() {
     if (typeof window === "undefined" || typeof Worker === "undefined") {
       this.isAvailable = false;
-      return;
-    }
-    if (window.location && window.location.protocol === "file:") {
-      this.isAvailable = false;
-      this.abortCurrentTask();
       return;
     }
 
@@ -52,15 +87,31 @@ class StockfishWorkerService {
     this.workerUrl = workerUrl;
 
     try {
-      this.worker = new Worker(workerUrl);
+      const created = instantiateWorkerFromSpec(workerUrl);
+      this.worker = created.worker;
+      this.objectUrl = created.objectUrl;
+      this.initTimeoutId = setTimeout(() => {
+        this.initTimeoutId = null;
+        if (this.isReady) return;
+        if (!this.isInitialized && !resolvedStockfishUrl && this.candidateIndex + 1 < candidates.length) {
+          this.cleanupWorkerInstance();
+          this.candidateIndex++;
+          this.initWorker();
+          return;
+        }
+        console.warn(`[StockfishPool][${this.id}] Init timed out`);
+        this.isAvailable = false;
+        this.isReady = false;
+        this.abortCurrentTask();
+        this.cleanupWorkerInstance();
+        this.onReadyCallback();
+      }, 2500);
       this.worker.onmessage = (event) => {
         this.handleMessage(event.data);
       };
       this.worker.onerror = (err) => {
         if (!this.isInitialized && !resolvedStockfishUrl && this.candidateIndex + 1 < candidates.length) {
-          try {
-            this.worker.terminate();
-          } catch {}
+          this.cleanupWorkerInstance();
           this.candidateIndex++;
           this.initWorker();
           return;
@@ -71,13 +122,12 @@ class StockfishWorkerService {
         this.isAvailable = false;
         this.isReady = false;
         this.abortCurrentTask();
-        try {
-          this.worker.terminate();
-        } catch {}
+        this.cleanupWorkerInstance();
         this.onReadyCallback();
       };
       this.worker.postMessage("uci");
     } catch (err) {
+      this.cleanupWorkerInstance();
       if (!this.isInitialized && !resolvedStockfishUrl && this.candidateIndex + 1 < candidates.length) {
         this.candidateIndex++;
         this.initWorker();
@@ -130,12 +180,19 @@ class StockfishWorkerService {
     }
 
     if (line === "readyok") {
+      if (this.initTimeoutId) {
+        clearTimeout(this.initTimeoutId);
+        this.initTimeoutId = null;
+      }
       this.isReady = true;
       this.onReadyCallback();
       return;
     }
 
     if (line.startsWith("info depth")) {
+      const isBound = line.includes("upperbound") || line.includes("lowerbound");
+      if (isBound && this.currentBestMove) return;
+
       const depthMatch = line.match(/depth\s+(\d+)/);
       if (depthMatch) {
         this.currentDepth = parseInt(depthMatch[1], 10);
@@ -167,6 +224,7 @@ class StockfishWorkerService {
         const pvMoves = pvMatch[1].trim().split(/\s+/);
         if (isMultiPv2) {
           this.secondBestMove = pvMoves[0] || "";
+          this.secondBestPv = pvMoves;
         } else {
           this.currentPv = pvMoves;
           if (pvMoves.length > 0) {
@@ -193,7 +251,8 @@ class StockfishWorkerService {
         pv: this.currentPv.length > 0 ? this.currentPv : (bestMove ? [bestMove] : []),
         depth: this.currentDepth,
         multiPv2ScoreCp: this.secondBestCp,
-        secondBestMoveUci: this.secondBestMove
+        secondBestMoveUci: this.secondBestMove,
+        secondBestPv: this.secondBestPv
       };
       const task = this.currentTask;
       this.currentTask = null;
@@ -218,8 +277,9 @@ class StockfishWorkerService {
     this.currentDepth = 0;
     this.secondBestCp = void 0;
     this.secondBestMove = "";
+    this.secondBestPv = [];
 
-    const waitMs = task.maxWaitMs || 300;
+    const waitMs = task.maxWaitMs || 800;
     this.softTimeoutId = setTimeout(() => {
       this.softTimeoutId = null;
       if (!this.currentTask) return;
@@ -240,22 +300,20 @@ class StockfishWorkerService {
               depth: this.currentDepth,
               multiPv2ScoreCp: this.secondBestCp,
               secondBestMoveUci: this.secondBestMove,
+              secondBestPv: this.secondBestPv,
               timedOut: true
             }
           : null;
 
-        try {
-          if (this.worker) this.worker.terminate();
-        } catch {}
-        this.worker = null;
+        this.cleanupWorkerInstance();
         this.isInitialized = false;
         this.isReady = false;
 
         this.abortCurrentTask(fallback);
         this.initWorker();
         this.onReadyCallback();
-      }, 800);
-    }, waitMs + 300);
+      }, 1500);
+    }, waitMs + 450);
 
     try {
       this.worker.postMessage(`position fen ${task.fen}`);
@@ -285,24 +343,16 @@ class StockfishPool {
     this.queue = [];
     this.workers = [];
 
-    if (typeof window !== "undefined" && window.location && window.location.protocol === "file:") {
-      this.isPermanentlyDisabled = true;
-      return;
-    }
-
     this.warmUp();
   }
 
   cleanDeadWorkers() {
     const dead = this.workers.filter((w) => !w.isAvailable);
     if (dead.length > 0) {
-      const failedDuringInit = dead.some((w) => !w.isInitialized);
-      if (failedDuringInit) {
-        this.consecutiveFailures += dead.length;
-      }
+      this.consecutiveFailures += dead.length;
       this.workers = this.workers.filter((w) => w.isAvailable);
     }
-    if (this.consecutiveFailures >= MAX_CONSECUTIVE_INIT_FAILURES && this.workers.length === 0) {
+    if (this.workers.length === 0 && (this.consecutiveFailures >= MAX_CONSECUTIVE_INIT_FAILURES || dead.length > 0)) {
       this.isPermanentlyDisabled = true;
       this.drainPoolQueue();
     }
@@ -355,7 +405,7 @@ class StockfishPool {
     return !this.isPermanentlyDisabled && this.workers.some((w) => w.isEngineReady());
   }
 
-  evaluate(fen, depth = 10, maxWaitMs = 250) {
+  evaluate(fen, depth = 16, maxWaitMs = 1100) {
     if (this.isPermanentlyDisabled) {
       return Promise.resolve(null);
     }

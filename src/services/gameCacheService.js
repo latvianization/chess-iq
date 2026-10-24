@@ -1,11 +1,17 @@
-const INDEX_KEY = 'chess_iq_analyzed_index_v2';
-const GAME_PREFIX = 'chess_iq_game_v2_';
+const INDEX_KEY = 'chess_iq_analyzed_index_v3';
+const GAME_PREFIX = 'chess_iq_game_v3_';
 const MAX_CACHED_GAMES = 30;
 
 (function removeLegacyCache() {
   try {
     Object.keys(localStorage)
-      .filter((k) => k.startsWith('chess_iq_game_v1_') || k === 'chess_iq_analyzed_index_v1' || k.startsWith('chess_iq_insights_'))
+      .filter((k) =>
+        k.startsWith('chess_iq_game_v1_') ||
+        k === 'chess_iq_analyzed_index_v1' ||
+        k.startsWith('chess_iq_game_v2_') ||
+        k === 'chess_iq_analyzed_index_v2' ||
+        k.startsWith('chess_iq_insights_')
+      )
       .forEach((k) => localStorage.removeItem(k));
   } catch {}
 })();

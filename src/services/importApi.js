@@ -71,7 +71,7 @@ function extractMovesAndClocks(pgn) {
 
   return { moves, clocks };
 }
-async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) {
+async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
   const chess = new Chess();
   try {
     if (typeof chess.loadPgn === "function") {
@@ -82,6 +82,8 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
   } catch {
   }
   const header = chess.header();
+  const customStartFen = header["FEN"] || null;
+  const initialFen = customStartFen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
   const white = header["White"] || "White";
   const black = header["Black"] || "Black";
   const whiteElo = parseInt(header["WhiteElo"] || "1500", 10) || 1500;
@@ -93,7 +95,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
   const { moves: parsedMoves, clocks } = extractMovesAndClocks(pgn);
   let moveHistory = chess.history({ verbose: true });
   if (moveHistory.length === 0 && parsedMoves.length > 0) {
-    const fallbackChess = new Chess();
+    const fallbackChess = customStartFen ? new Chess(customStartFen) : new Chess();
     for (const san of parsedMoves) {
       try {
         fallbackChess.move(san);
@@ -104,23 +106,36 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
   const moveSans = moveHistory.length > 0 ? moveHistory.map((m) => m.san) : parsedMoves;
   const userColor = userColorTarget || "w";
   const userBaseElo = userColor === "w" ? whiteElo : blackElo;
-  const ecoMatch = findMatchingEco(moveSans);
+  const ecoMatch = customStartFen ? { eco: "FEN", name: "Custom Position", bookLength: 0 } : findMatchingEco(moveSans);
   const ecoCode = header["ECO"] || ecoMatch.eco;
   const ecoName = ecoMatch.name;
-  const replayChess = new Chess();
+  const replayChess = customStartFen ? new Chess(customStartFen) : new Chess();
   const precomputed = [];
   let middlegameStartPly = null;
   let endgameStartPly = null;
   let lastWhiteClock = null;
   let lastBlackClock = null;
   let bookCount = 0;
+  let openingDeviation = null;
   for (let i = 0; i < moveHistory.length; i++) {
     const moveObj = moveHistory[i];
     const fenBefore = replayChess.fen();
     const side = replayChess.turn();
     const plyNum = i + 1;
-    const isBook = isBookMove(moveSans, i);
-    if (isBook) bookCount++;
+    const isBook = !customStartFen && isBookMove(moveSans, i);
+    if (isBook) {
+      bookCount++;
+    } else if (!customStartFen && !openingDeviation && (i === 0 || precomputed[i - 1].isBook)) {
+      const bookMoves = typeof getBookContinuations === "function" ? getBookContinuations(moveSans, i) : [];
+      if (bookMoves.length > 0) {
+        openingDeviation = {
+          ply: plyNum,
+          san: moveObj.san,
+          color: side,
+          bookMoves
+        };
+      }
+    }
     const phaseInfo = detectPhase(plyNum, replayChess, isBook, middlegameStartPly, endgameStartPly);
     if (phaseInfo.newMiddlegameStart && !middlegameStartPly) middlegameStartPly = phaseInfo.newMiddlegameStart;
     if (phaseInfo.newEndgameStart && !endgameStartPly) endgameStartPly = phaseInfo.newEndgameStart;
@@ -163,28 +178,69 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
   }
 
   const fensToEvaluate = [];
-  if (totalPlies > 0) fensToEvaluate.push(precomputed[0].fenBefore);
+  if (totalPlies > 0 && !precomputed[0].isBook) fensToEvaluate.push(precomputed[0].fenBefore);
   precomputed.forEach((item, idx) => {
     const nextIsEngineMove = idx + 1 < totalPlies && !precomputed[idx + 1].isBook;
     if (!item.isBook || nextIsEngineMove) fensToEvaluate.push(item.fenAfter);
   });
-  console.log(`[Analysis] Collected ${fensToEvaluate.length} positions to evaluate (${bookCount} book moves skipped)`);
+  console.log(`[Analysis] Pass 1: Evaluating ${fensToEvaluate.length} positions (${bookCount} book moves skipped)`);
   const hasPrefetch = fensToEvaluate.length > 0;
   let lastReportedPly = 0;
+  const reportScaledProgress = async (fraction) => {
+    if (!onProgress || totalPlies <= 0) return;
+    const plyTarget = Math.max(1, Math.min(totalPlies, Math.round(fraction * totalPlies)));
+    if (plyTarget > lastReportedPly) {
+      lastReportedPly = plyTarget;
+      const p = onProgress(lastReportedPly, totalPlies);
+      if (p && typeof p.then === "function") await p;
+    }
+  };
+
   if (hasPrefetch) {
     await prefetchEvaluations(fensToEvaluate, isDeep, async (done, total) => {
-      if (onProgress) {
-        const plyTarget = Math.max(1, Math.min(totalPlies, Math.round((done / total) * totalPlies)));
-        if (plyTarget > lastReportedPly) {
-          lastReportedPly = plyTarget;
-          const p = onProgress(lastReportedPly, totalPlies);
-          if (p && typeof p.then === "function") await p;
-        }
-      }
+      await reportScaledProgress((done / total) * 0.85);
     });
   }
 
-  let prevEngine = precomputed.length > 0
+  // Pass 2: Identify top critical moments (blunders/mistakes/sacrifices) and verify at ultra depth
+  if (isDeep && totalPlies > 0 && stockfishService && stockfishService.isEngineReady()) {
+    const criticalCandidates = [];
+    for (let i = 0; i < totalPlies; i++) {
+      const item = precomputed[i];
+      if (item.isBook) continue;
+      const eb = await evaluateFenHybrid(item.fenBefore, isDeep);
+      const ea = await evaluateFenHybrid(item.fenAfter, isDeep);
+      const wBefore = cpToWinProb(eb.scoreCp, eb.mate);
+      const wAfter = cpToWinProb(ea.scoreCp, ea.mate);
+      const mBefore = item.side === "w" ? wBefore : 1 - wBefore;
+      const mAfter = item.side === "w" ? wAfter : 1 - wAfter;
+      const loss = Math.max(0, mBefore - mAfter);
+      const playedUciCheck = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
+      const bestUciCheck = (eb.pv && eb.pv[0]) || eb.bestMoveUci || "";
+      const isSacCandidate = playedUciCheck.toLowerCase() === bestUciCheck.toLowerCase() &&
+        isMaterialSacrifice(item.fenBefore, item.fenAfter, item.side, (ea.pv && ea.pv[0]) || ea.bestMoveUci || "");
+
+      if (loss >= 0.14 || isSacCandidate) {
+        criticalCandidates.push({ loss: isSacCandidate ? 1.0 : loss, fenBefore: item.fenBefore, fenAfter: item.fenAfter });
+      }
+    }
+
+    criticalCandidates.sort((a, b) => b.loss - a.loss);
+    const criticalFens = [];
+    for (const cand of criticalCandidates.slice(0, 4)) {
+      criticalFens.push(cand.fenBefore, cand.fenAfter);
+    }
+
+    const uniqueCritical = [...new Set(criticalFens)];
+    if (uniqueCritical.length > 0) {
+      console.log(`[Analysis] Pass 2: Ultra-deep verification on ${uniqueCritical.length} critical positions`);
+      await prefetchEvaluations(uniqueCritical, "ultra", async (done, total) => {
+        await reportScaledProgress(0.85 + (done / total) * 0.14);
+      });
+    }
+  }
+
+  let prevEngine = precomputed.length > 0 && !precomputed[0].isBook
     ? await evaluateFenHybrid(precomputed[0].fenBefore, isDeep)
     : { scoreCp: 20, mate: null, pv: [] };
 
@@ -209,6 +265,10 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     if (item.isBook) {
       const playedUci2 = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
       const isImpulsive2 = item.timeSpent !== null && item.timeSpent < 2 && !item.isTimeTrouble;
+      const bookStatic = typeof evaluatePositionLocally === "function" ? evaluatePositionLocally(item.fenAfter) : { cp: 20, mate: null };
+      const bookScoreCp = Math.max(-60, Math.min(60, bookStatic.cp || 20));
+      const bookWinProb = cpToWinProb(bookScoreCp, null);
+      const prevBookWinProb = prevEngine ? cpToWinProb(prevEngine.scoreCp ?? 20, null) : 0.52;
       plies[i] = {
         ply: item.plyNum,
         san: item.moveObj.san,
@@ -221,13 +281,18 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         fen: item.fenAfter,
         fenBefore: item.fenBefore,
         clock: item.rawClock,
+        clockSeconds: item.clockSeconds,
         timeSpent: item.timeSpent,
         isTimeTrouble: item.isTimeTrouble,
         isImpulsive: isImpulsive2,
-        scoreCp: 20,
+        scoreBefore: prevEngine?.scoreCp ?? 20,
+        scoreAfter: bookScoreCp,
+        scoreCp: bookScoreCp,
         mate: null,
-        winProb: 0.52,
-        winProbBefore: 0.5,
+        winProb: bookWinProb,
+        winProbBefore: prevBookWinProb,
+        moverWinProbBefore: item.side === "w" ? prevBookWinProb : 1 - prevBookWinProb,
+        moverWinProbAfter: item.side === "w" ? bookWinProb : 1 - bookWinProb,
         winProbLoss: 0,
         accuracy: 100,
         classification: "book",
@@ -237,9 +302,11 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         secondBestMoveSan: "",
         pv: [playedUci2],
         threat: null,
+        explanation: null,
+        motifs: [],
         phase: item.phase
       };
-      prevEngine = { scoreCp: 20, mate: null, pv: [playedUci2] };
+      prevEngine = { scoreCp: bookScoreCp, mate: null, pv: [playedUci2] };
     } else {
       let engineBefore = prevEngine;
       if (!engineBefore || !engineBefore.bestMoveUci || (i > 0 && precomputed[i - 1].isBook)) {
@@ -254,10 +321,16 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
       const whiteWinProbAfter = cpToWinProb(whiteScoreAfter, engineAfter.mate);
       const moverWinProbBefore = item.side === "w" ? whiteWinProbBefore : 1 - whiteWinProbBefore;
       const moverWinProbAfter = item.side === "w" ? whiteWinProbAfter : 1 - whiteWinProbAfter;
-      const winProbLoss = Math.max(0, moverWinProbBefore - moverWinProbAfter);
-      const accuracy = calculateMoveAccuracy(winProbLoss);
+
       const bestMoveUci = (engineBefore.pv && engineBefore.pv[0]) || engineBefore.bestMoveUci || "";
       const secondBestMoveUci = engineBefore.secondBestMoveUci || "";
+      const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
+      const isExactBest = Boolean(bestMoveUci && playedUci && playedUci.toLowerCase() === bestMoveUci.toLowerCase());
+
+      const rawWinProbLoss = Math.max(0, moverWinProbBefore - moverWinProbAfter);
+      const winProbLoss = isExactBest ? 0 : rawWinProbLoss;
+      const accuracy = isExactBest ? 100 : calculateMoveAccuracy(winProbLoss);
+
       let bestMoveSan = "";
       let secondBestMoveSan = "";
       if (bestMoveUci || (secondBestMoveUci && secondBestMoveUci !== bestMoveUci)) {
@@ -272,12 +345,13 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
           secondBestMoveSan = secondBestMoveUci !== bestMoveUci ? secondBestMoveUci : "";
         }
       }
-      const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
+
       const oppBestUci = (engineAfter.pv && engineAfter.pv[0]) || engineAfter.bestMoveUci || "";
       const multiPv2WinProb = engineBefore.multiPv2ScoreCp !== void 0 ? cpToWinProb(engineBefore.multiPv2ScoreCp) : void 0;
       const moverMultiPv2WinProb = multiPv2WinProb !== void 0
         ? (item.side === "w" ? multiPv2WinProb : 1 - multiPv2WinProb)
         : void 0;
+
       const classification = classifyMove(
         playedUci,
         bestMoveUci,
@@ -292,11 +366,12 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         item.side,
         oppBestUci
       );
+
       const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
       let threat = null;
       let explanation = null;
-      if (classification === "blunder" || winProbLoss > 0.15) {
-        threat = detectThreat(item.fenAfter, oppBestUci);
+      if (classification === "blunder" || classification === "mistake" || classification === "missed_win" || winProbLoss > 0.12) {
+        threat = detectThreat(item.fenAfter, oppBestUci, engineAfter.mate, engineAfter.pv);
       }
       if (classification === "blunder" || classification === "mistake" || classification === "inaccuracy" || classification === "missed_win" || classification === "brilliant") {
         explanation = prepareMoveExplanation({
@@ -310,6 +385,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
           bestMoveSan: bestMoveSan || item.moveObj.san,
           secondBestMoveUci,
           secondBestMoveSan,
+          secondBestPv: engineBefore.secondBestPv || [],
           punishmentPv: engineAfter.pv,
           bestPv: engineBefore.pv,
           winProbBefore: moverWinProbBefore,
@@ -319,6 +395,22 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
           classification
         });
       }
+      let motifs = [];
+      try {
+        if (typeof detectTacticalMotifs === "function") {
+          motifs = detectTacticalMotifs(
+            item.fenBefore,
+            item.fenAfter,
+            item.moveObj,
+            bestMoveUci,
+            engineAfter.pv,
+            engineAfter.mate,
+            classification,
+            item.plyNum
+          );
+        }
+      } catch {}
+
       plies[i] = {
         ply: item.plyNum,
         san: item.moveObj.san,
@@ -331,6 +423,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         fen: item.fenAfter,
         fenBefore: item.fenBefore,
         clock: item.rawClock,
+        clockSeconds: item.clockSeconds,
         timeSpent: item.timeSpent,
         isTimeTrouble: item.isTimeTrouble,
         isImpulsive,
@@ -350,12 +443,15 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         secondBestMoveUci,
         secondBestMoveSan,
         pv: engineBefore.pv,
+        depth: engineAfter.depth || engineBefore.depth || 14,
         threat,
         explanation,
+        motifs,
         phase: item.phase
       };
     }
   }
+
   if (onProgress && lastReportedPly < totalPlies) {
     const pRes = onProgress(totalPlies, totalPlies);
     if (pRes && typeof pRes.then === "function") await pRes;
@@ -390,8 +486,32 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     middlegame: [],
     endgame: []
   };
+  let turningPoint = null;
+  let brightestMove = null;
+  const userMotifCounts = {};
+
   plies.forEach((p) => {
     if (!p) return;
+    const prevWhiteWp = p.winProbBefore ?? 0.5;
+    const currWhiteWp = p.winProb ?? 0.5;
+    const wpSwing = Math.abs(currWhiteWp - prevWhiteWp);
+    if (wpSwing >= 0.15 && (!turningPoint || wpSwing > turningPoint.swing)) {
+      turningPoint = {
+        ply: p.ply,
+        san: p.san,
+        color: p.color,
+        isUserMove: p.color === userColor,
+        swing: wpSwing,
+        swingPct: Math.round(wpSwing * 100),
+        prevWinProb: prevWhiteWp,
+        winProb: currWhiteWp,
+        winProbBefore: p.moverWinProbBefore ?? p.winProbBefore,
+        winProbAfter: p.moverWinProbAfter ?? p.winProb,
+        winProbLoss: p.winProbLoss,
+        classification: p.classification,
+        bestMoveSan: p.bestMoveSan
+      };
+    }
     if (p.color === userColor) {
       userCounts[p.classification] = (userCounts[p.classification] || 0) + 1;
       userAccuracySum += p.accuracy;
@@ -401,6 +521,25 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
         timeTroubleBlunders++;
       }
       if (userPhaseAcc[p.phase]) userPhaseAcc[p.phase].push(p.accuracy);
+
+      if (["inaccuracy", "mistake", "blunder", "missed_win"].includes(p.classification) && Array.isArray(p.motifs)) {
+        p.motifs.forEach((m) => {
+          if (m && m.id) userMotifCounts[m.id] = (userMotifCounts[m.id] || 0) + 1;
+        });
+      }
+
+      if (["brilliant", "great", "best"].includes(p.classification) && p.ply > 8) {
+        const score = (p.classification === "brilliant" ? 200 : p.classification === "great" ? 150 : 100) + (p.accuracy || 0);
+        if (!brightestMove || score > brightestMove.rankScore) {
+          brightestMove = {
+            ply: p.ply,
+            san: p.san,
+            classification: p.classification,
+            phase: p.phase,
+            rankScore: score
+          };
+        }
+      }
     } else {
       opponentCounts[p.classification] = (opponentCounts[p.classification] || 0) + 1;
       oppAccuracySum += p.accuracy;
@@ -438,6 +577,38 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
   const oppMiddlegameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.middlegame ?? opponentAccuracy, oppPhaseAcc.middlegame.length, "*", oppColor) ?? oppBaseElo;
   const oppEndgameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.endgame ?? opponentAccuracy, oppPhaseAcc.endgame.length, "*", oppColor) ?? oppBaseElo;
 
+  // Build Coach's Study Plan Summary
+  let topMotifId = null;
+  let topMotifCount = 0;
+  Object.entries(userMotifCounts).forEach(([id, cnt]) => {
+    if (cnt > topMotifCount) {
+      topMotifId = id;
+      topMotifCount = cnt;
+    }
+  });
+
+  let weakestPhase = "middlegame";
+  let lowestPhaseAcc = 101;
+  ["opening", "middlegame", "endgame"].forEach((ph) => {
+    const val = userPhaseAccuracy[ph];
+    if (val !== null && val !== undefined && val < lowestPhaseAcc) {
+      lowestPhaseAcc = val;
+      weakestPhase = ph;
+    }
+  });
+
+  const gameCoachSummary = {
+    topMotifId,
+    topMotifCount,
+    userMotifCounts,
+    weakestPhase,
+    weakestPhaseAcc: lowestPhaseAcc <= 100 ? lowestPhaseAcc : userAccuracy,
+    impulsiveBlunders,
+    timeTroubleBlunders,
+    brightestMove,
+    practicePly: turningPoint?.ply || endgameStartPly || middlegameStartPly || 1
+  };
+
   const analyzedResult = {
     id: `game_${Date.now()}`,
     platform: "pgn",
@@ -452,8 +623,11 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     timeControl,
     ecoCode,
     ecoName,
-    initialFen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    initialFen,
     plies,
+    openingDeviation,
+    turningPoint,
+    gameCoachSummary,
     overallAccuracy,
     userAccuracy,
     opponentAccuracy,
@@ -478,6 +652,11 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) 
     impulsiveBlunders,
     timeTroubleBlunders
   };
+
+  if (typeof syncGameToBlunderBank === "function") {
+    try { syncGameToBlunderBank(analyzedResult); } catch {}
+  }
+
   const totalDuration = Date.now() - analysisStart;
   console.log(`[Analysis] Finished in ${totalDuration}ms: User accuracy ${userAccuracy}%, Opponent ${opponentAccuracy}%, Performance ${overallGameElo} Elo`);
   return analyzedResult;

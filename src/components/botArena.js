@@ -27,6 +27,7 @@ class BotArena {
     this.speechTimeout = null;
     this.gameStartTime = Date.now();
     this.isBotThinking = false;
+    this.botMoveTimeout = null;
     this.gameResult = null; // 'win' | 'loss' | 'draw' | null
     this.board = null;
     this.lastSpeechPly = -10;
@@ -42,6 +43,39 @@ class BotArena {
     }
   }
 
+  clearBotMoveTimeout() {
+    if (this.botMoveTimeout) {
+      clearTimeout(this.botMoveTimeout);
+      this.botMoveTimeout = null;
+    }
+  }
+
+  canUndo() {
+    if (!this.chess) return false;
+    const history = this.chess.history({ verbose: true });
+    return history.some((m) => m.color === this.userColor);
+  }
+
+  undoMove() {
+    if (!this.canUndo()) return;
+
+    this.clearBotMoveTimeout();
+    this.isBotThinking = false;
+
+    let undone = this.chess.undo();
+    while (undone && undone.color !== this.userColor) {
+      undone = this.chess.undo();
+    }
+
+    this.gameResult = null;
+    this.closeGameOverModal();
+    soundService.playMove();
+
+    this.updateBoard();
+    this.updateControls();
+    this.updateStatusText();
+  }
+
   selectBotAndPlay(bot) {
     this.selectedBot = bot;
     this.activeTier = bot.tier;
@@ -52,10 +86,13 @@ class BotArena {
   }
 
   startNewGame(color = this.userColor) {
+    this.clearBotMoveTimeout();
     this.isPlaying = true;
     this.userColor = color;
+    this.customStartFen = null;
     this.chess.reset();
     this.gameResult = null;
+    this.isBotThinking = false;
     this.gameStartTime = Date.now();
     this.closeGameOverModal();
     this.speechText = this.getRandomQuote(this.selectedBot.speech.onStart);
@@ -72,11 +109,46 @@ class BotArena {
     }, 3800);
 
     if (this.userColor === 'b') {
-      setTimeout(() => this.triggerBotMove(), 600);
+      this.botMoveTimeout = setTimeout(() => this.triggerBotMove(), 600);
+    }
+  }
+
+  startFromPosition(fen, userColor = 'w', targetElo = 1200) {
+    this.clearBotMoveTimeout();
+    if (Array.isArray(BOTS_33) && BOTS_33.length > 0) {
+      this.selectedBot = BOTS_33.reduce((best, b) =>
+        Math.abs(b.elo - targetElo) < Math.abs(best.elo - targetElo) ? b : best
+      );
+      this.activeTier = this.selectedBot.tier;
+    }
+    this.isPlaying = true;
+    this.userColor = userColor;
+    this.customStartFen = fen;
+    this.chess = new Chess(fen);
+    this.gameResult = null;
+    this.isBotThinking = false;
+    this.gameStartTime = Date.now();
+    this.closeGameOverModal();
+    this.speechText = `Playing from custom position! Let's see how you play this out!`;
+    this.isSpeechVisible = true;
+    this.lastSpeechPly = 0;
+
+    this.render();
+    soundService.playSuccess();
+
+    if (this.speechTimeout) clearTimeout(this.speechTimeout);
+    this.speechTimeout = setTimeout(() => {
+      this.isSpeechVisible = false;
+      this.updateSpeechBubble();
+    }, 3800);
+
+    if (!isChessGameOver(this.chess) && this.chess.turn() !== this.userColor) {
+      this.botMoveTimeout = setTimeout(() => this.triggerBotMove(), 600);
     }
   }
 
   resetToPicker() {
+    this.clearBotMoveTimeout();
     this.isPlaying = false;
     this.isBotThinking = false;
     this.gameResult = null;
@@ -149,6 +221,7 @@ class BotArena {
       }
 
       this.updateBoard();
+      this.updateControls();
       this.checkGameOver();
 
       if (!this.gameResult) {
@@ -160,12 +233,15 @@ class BotArena {
   }
 
   triggerBotMove() {
+    this.clearBotMoveTimeout();
     this.isBotThinking = true;
     this.updateStatusText();
+    this.updateControls();
 
     const thinkTime = Math.min(1200, Math.max(350, 200 + (this.selectedBot.elo - 400) * 0.5));
 
-    setTimeout(() => {
+    this.botMoveTimeout = setTimeout(() => {
+      this.botMoveTimeout = null;
       if (isChessGameOver(this.chess)) return;
 
       const legalMoves = this.chess.moves({ verbose: true });
@@ -217,6 +293,7 @@ class BotArena {
       }
 
       this.updateBoard();
+      this.updateControls();
       this.updateStatusText();
       this.checkGameOver();
     }, thinkTime);
@@ -237,6 +314,10 @@ class BotArena {
       this.chess.header('WhiteElo', isUserWhite ? '1500' : String(this.selectedBot.elo));
       this.chess.header('BlackElo', isUserWhite ? String(this.selectedBot.elo) : '1500');
       this.chess.header('Result', result);
+      if (this.customStartFen) {
+        this.chess.header('SetUp', '1');
+        this.chess.header('FEN', this.customStartFen);
+      }
     } catch {}
 
     let pgn = '';
@@ -251,7 +332,8 @@ class BotArena {
         const moveNum = Math.floor(i / 2) + 1;
         moveStr += `${moveNum}. ${moves[i]} ${moves[i + 1] || ''} `;
       }
-      pgn = `[White "${isUserWhite ? userName : botName}"]\n[Black "${isUserWhite ? botName : userName}"]\n[WhiteElo "${isUserWhite ? '1500' : this.selectedBot.elo}"]\n[BlackElo "${isUserWhite ? this.selectedBot.elo : '1500'}"]\n[Result "${result}"]\n\n${moveStr.trim()} ${result}`;
+      const fenHeaders = this.customStartFen ? `[SetUp "1"]\n[FEN "${this.customStartFen}"]\n` : '';
+      pgn = `[White "${isUserWhite ? userName : botName}"]\n[Black "${isUserWhite ? botName : userName}"]\n[WhiteElo "${isUserWhite ? '1500' : this.selectedBot.elo}"]\n[BlackElo "${isUserWhite ? this.selectedBot.elo : '1500'}"]\n[Result "${result}"]\n${fenHeaders}\n${moveStr.trim()} ${result}`;
     }
     return pgn;
   }
@@ -316,6 +398,7 @@ class BotArena {
       fen: this.chess.fen(),
       orientation: this.userColor,
       lastMove,
+      selectedSquare: null,
       whiteName: isUserWhite ? 'You' : this.selectedBot.name,
       blackName: isUserWhite ? this.selectedBot.name : 'You',
       showPlayerBars: true,
@@ -375,11 +458,16 @@ class BotArena {
     const actionArea = this.container.querySelector('.bot-game-actions');
     if (!actionArea) return;
 
+    const canUndo = this.canUndo();
+
     if (this.gameResult && this.onAnalyzeGame) {
       actionArea.innerHTML = `
         <div class="d-flex align-items-center flex-wrap justify-content-center gap-2">
           <button type="button" class="arcade-btn-primary px-4 py-2" id="bot-btn-review">
             <i class="bi bi-lightning-charge-fill me-1"></i> Review Game with Stockfish ⚡
+          </button>
+          <button type="button" class="btn btn-light comic-btn px-3 py-2" id="bot-btn-undo" ${!canUndo ? 'disabled' : ''}>
+            <i class="bi bi-arrow-counterclockwise me-1"></i> Undo
           </button>
           <button type="button" class="btn btn-light comic-btn px-3 py-2" id="bot-btn-rematch">
             <i class="bi bi-arrow-repeat me-1"></i> Rematch
@@ -393,6 +481,9 @@ class BotArena {
       actionArea.querySelector('#bot-btn-review')?.addEventListener('click', () => {
         this.onAnalyzeGame(this.getEnrichedPgn(), this.userColor);
       });
+      actionArea.querySelector('#bot-btn-undo')?.addEventListener('click', () => {
+        this.undoMove();
+      });
       actionArea.querySelector('#bot-btn-rematch')?.addEventListener('click', () => {
         const randomSide = Math.random() < 0.5 ? 'w' : 'b';
         this.startNewGame(randomSide);
@@ -405,6 +496,9 @@ class BotArena {
         <div class="d-flex align-items-center flex-wrap justify-content-center gap-2">
           <button type="button" class="btn btn-light comic-btn px-3 py-1.5" id="bot-btn-new">
             <i class="bi bi-plus-circle me-1"></i> New Game
+          </button>
+          <button type="button" class="btn btn-light comic-btn px-3 py-1.5" id="bot-btn-undo" ${!canUndo ? 'disabled' : ''}>
+            <i class="bi bi-arrow-counterclockwise me-1"></i> Undo
           </button>
           <button type="button" class="btn btn-light comic-btn px-3 py-1.5" id="bot-btn-flip">
             <i class="bi bi-arrow-left-right me-1"></i> Flip Sides
@@ -422,11 +516,16 @@ class BotArena {
         const randomSide = Math.random() < 0.5 ? 'w' : 'b';
         this.startNewGame(randomSide);
       });
+      actionArea.querySelector('#bot-btn-undo')?.addEventListener('click', () => {
+        this.undoMove();
+      });
       actionArea.querySelector('#bot-btn-flip')?.addEventListener('click', () => {
         this.startNewGame(this.userColor === 'w' ? 'b' : 'w');
       });
       actionArea.querySelector('#bot-btn-resign')?.addEventListener('click', () => {
         if (!this.gameResult && this.chess.history().length > 0) {
+          this.clearBotMoveTimeout();
+          this.isBotThinking = false;
           this.gameResult = 'loss';
           this.setBotSpeech('GG! You resigned. Ready for another round?');
           this.updateControls();

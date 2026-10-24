@@ -112,3 +112,24 @@ function isBookMove(moveSans, moveIndex) {
   }
   return false;
 }
+
+function getBookContinuations(moveSans, plyIndex) {
+  const continuations = [];
+  const seenMoves = new Set();
+  for (const entry of ECO_DATABASE) {
+    if (entry.moves.length <= plyIndex) continue;
+    let matchesPrefix = true;
+    for (let i = 0; i < plyIndex; i++) {
+      if (moveSans[i] !== entry.moves[i]) {
+        matchesPrefix = false;
+        break;
+      }
+    }
+    const nextMove = entry.moves[plyIndex];
+    if (matchesPrefix && nextMove && !seenMoves.has(nextMove)) {
+      seenMoves.add(nextMove);
+      continuations.push({ san: nextMove, eco: entry.eco, name: entry.name });
+    }
+  }
+  return continuations.slice(0, 3);
+}

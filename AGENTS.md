@@ -14,6 +14,7 @@
   - `engineRefutations.js`: Tactical threats, continuation lines (5 moves), blunder refutations.
   - `importApi.js`: Game fetching (Chess.com) and PGN parsing/analysis.
   - `gameCacheService.js`: Per-game analysis cache in localStorage.
+  - `blunderBankService.js`: Persistent spaced-repetition blunder/mistake trainer bank in localStorage.
   - `sound.js`: Web Audio synthesized sound effects.
 - **`src/components/`**:
   - `board.js`: Interactive SVG chessboard, captured piece bars, drag-and-drop, check highlight.

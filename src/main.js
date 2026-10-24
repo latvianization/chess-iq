@@ -41,7 +41,7 @@ class App {
     this.appMode = 'review'; // 'review' | 'bot'
     this.isDarkMode = false;
     this.boardTheme = 'green';
-    this.isDeepReview = false;
+    this.isDeepReview = true;
 
     this.reviewDashboard = null;
     this.botArena = null;
@@ -61,6 +61,11 @@ class App {
         theme: this.boardTheme,
         onOpenImport: () => this.importModal?.show(),
         onSwitchToBots: () => this.switchMode('bot'),
+        onPlayFromFen: (fen, userColor, targetElo) => {
+          this.switchMode('bot');
+          this.botArena?.startFromPosition(fen, userColor, targetElo);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
         onSelectGame: (pgn, userColor, cachedGame) => {
           if (cachedGame) {
             this.reviewDashboard?.setGame(cachedGame);
@@ -68,6 +73,9 @@ class App {
           } else {
             this.runAnalysis(pgn, userColor);
           }
+        },
+        onReanalyzeGame: (pgn, userColor) => {
+          this.runAnalysis(pgn, userColor, true);
         },
       });
     }
@@ -214,8 +222,8 @@ class App {
     });
   }
 
-  async runAnalysis(pgn, userColor) {
-    console.log(`[App] runAnalysis requested (userColor: ${userColor}, deepReview: ${this.isDeepReview})`);
+  async runAnalysis(pgn, userColor, forceFresh = false) {
+    console.log(`[App] runAnalysis requested (userColor: ${userColor}, deepReview: ${this.isDeepReview}, forceFresh: ${forceFresh})`);
     this.switchMode('review');
     window.scrollTo({ top: 0, behavior: 'instant' });
 
@@ -224,16 +232,20 @@ class App {
     document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
     document.body.classList.remove('modal-open');
 
-    let cachedGame = getCachedGame(pgn, userColor);
-    if (!cachedGame && typeof pgn === 'string') {
-      cachedGame = getCachedGame(pgn, 'w') || getCachedGame(pgn, 'b');
-    }
-    if (cachedGame) {
-      console.log(`[App] Game found in cache: ${cachedGame.white} vs ${cachedGame.black} (${cachedGame.userAccuracy}% acc)`);
-      this.reviewDashboard?.setGame(cachedGame);
-      soundService.playSuccess();
-      this.importModal?.setAnalyzing(false, 0, 0);
-      return;
+    if (!forceFresh) {
+      let cachedGame = getCachedGame(pgn, userColor);
+      if (!cachedGame && typeof pgn === 'string') {
+        cachedGame = getCachedGame(pgn, 'w') || getCachedGame(pgn, 'b');
+      }
+      if (cachedGame) {
+        console.log(`[App] Game found in cache: ${cachedGame.white} vs ${cachedGame.black} (${cachedGame.userAccuracy}% acc)`);
+        this.reviewDashboard?.setGame(cachedGame);
+        soundService.playSuccess();
+        this.importModal?.setAnalyzing(false, 0, 0);
+        return;
+      }
+    } else if (typeof FEN_EVAL_CACHE !== 'undefined' && FEN_EVAL_CACHE.clear) {
+      FEN_EVAL_CACHE.clear();
     }
 
     // Resolve actual PGN if an ID or key was passed

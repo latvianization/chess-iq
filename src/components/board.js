@@ -85,6 +85,7 @@ class Chessboard {
     this.secondBestMove = options.secondBestMove || null; // { from, to }
     this.threatMove = options.threatMove || null; // { from, to }
     this.badge = options.badge || null; // { square, classification }
+    this.visionOverlay = options.visionOverlay || 'none'; // 'none' | 'hanging' | 'heatmap'
 
     this.selectedSquare = null;
     this.possibleDests = [];
@@ -98,7 +99,7 @@ class Chessboard {
 
   setProps(newProps) {
     let shouldRerender = false;
-    ['fen', 'orientation', 'theme', 'interactive', 'showPlayerBars', 'whiteName', 'blackName', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'secondBestMove', 'threatMove', 'badge'].forEach((k) => {
+    ['fen', 'orientation', 'theme', 'interactive', 'showPlayerBars', 'whiteName', 'blackName', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'secondBestMove', 'threatMove', 'badge', 'visionOverlay'].forEach((k) => {
       if (newProps[k] !== undefined && newProps[k] !== this[k]) {
         this[k] = newProps[k];
         shouldRerender = true;
@@ -246,6 +247,9 @@ class Chessboard {
     } catch {}
 
     const capturedData = getCapturedPiecesAndDiff(this.fen);
+    const visionData = (this.visionOverlay && this.visionOverlay !== 'none' && typeof analyzeBoardVision === 'function')
+      ? analyzeBoardVision(this.fen)
+      : null;
 
     const outerWrapper = document.createElement('div');
     outerWrapper.className = 'd-flex flex-column align-items-center w-100';
@@ -389,6 +393,41 @@ class Chessboard {
           badgeEl.title = `${comic.term} (${COMIC_DICTIONARY[this.badge.classification]?.standardLabel || ''})`;
           badgeEl.innerHTML = `<span>${comic.symbol}</span><span>${comic.term}</span>`;
           sqDiv.appendChild(badgeEl);
+        }
+
+        if (visionData) {
+          if (this.visionOverlay === 'hanging') {
+            const pStatus = visionData.pieceStatus[square];
+            if (pStatus) {
+              const isHanging = pStatus.status === 'hanging';
+              const ringEl = document.createElement('div');
+              ringEl.className = isHanging ? 'xray-hanging-ring' : 'xray-loose-ring';
+              ringEl.title = pStatus.label;
+              const tagEl = document.createElement('span');
+              tagEl.className = isHanging ? 'xray-hanging-tag' : 'xray-loose-tag';
+              tagEl.textContent = isHanging ? '🎯 HANGING' : '⚠️ LOOSE';
+              ringEl.appendChild(tagEl);
+              sqDiv.appendChild(ringEl);
+            }
+          } else if (this.visionOverlay === 'heatmap') {
+            const ctrl = visionData.squareControl[square];
+            if (ctrl && (ctrl.whiteAttackers > 0 || ctrl.blackAttackers > 0)) {
+              const heatEl = document.createElement('div');
+              heatEl.className = 'xray-heatmap-cell';
+              const net = ctrl.net;
+              if (net > 0) {
+                const alpha = Math.min(0.58, 0.20 + net * 0.12);
+                heatEl.style.backgroundColor = `rgba(6, 182, 212, ${alpha})`;
+              } else if (net < 0) {
+                const alpha = Math.min(0.58, 0.20 + Math.abs(net) * 0.12);
+                heatEl.style.backgroundColor = `rgba(244, 63, 94, ${alpha})`;
+              } else {
+                heatEl.style.backgroundColor = 'rgba(245, 158, 11, 0.28)';
+              }
+              heatEl.title = `White attackers: ${ctrl.whiteAttackers} | Black attackers: ${ctrl.blackAttackers}`;
+              sqDiv.appendChild(heatEl);
+            }
+          }
         }
 
         if (this.interactive) {

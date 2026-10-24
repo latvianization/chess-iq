@@ -1,4 +1,4 @@
-const MAX_FEN_CACHE_SIZE = 4000;
+const MAX_FEN_CACHE_SIZE = 6000;
 const PST_BY_TYPE = {
   p: PST_MG_PAWN,
   n: PST_MG_KNIGHT,
@@ -8,7 +8,21 @@ const PST_BY_TYPE = {
   k: PST_MG_KING
 };
 
+const PST_EG_BY_TYPE = {
+  p: typeof PST_EG_PAWN !== "undefined" ? PST_EG_PAWN : PST_MG_PAWN,
+  n: typeof PST_EG_KNIGHT !== "undefined" ? PST_EG_KNIGHT : PST_MG_KNIGHT,
+  b: typeof PST_EG_BISHOP !== "undefined" ? PST_EG_BISHOP : PST_MG_BISHOP,
+  r: typeof PST_EG_ROOK !== "undefined" ? PST_EG_ROOK : PST_MG_ROOK,
+  q: typeof PST_EG_QUEEN !== "undefined" ? PST_EG_QUEEN : PST_MG_QUEEN,
+  k: typeof PST_EG_KING !== "undefined" ? PST_EG_KING : PST_MG_KING
+};
+
+const PHASE_WEIGHTS = { p: 0, n: 1, b: 1, r: 2, q: 4, k: 0 };
+const MAX_PHASE = 24;
+
 var FEN_EVAL_CACHE = new Map();
+var LOCAL_TT = new Map();
+const MAX_LOCAL_TT_SIZE = 12000;
 
 function setFenCache(key, value) {
   if (FEN_EVAL_CACHE.size >= MAX_FEN_CACHE_SIZE && !FEN_EVAL_CACHE.has(key)) {
@@ -117,23 +131,110 @@ function isChessInCheck(c) {
 }
 
 function evaluateBoardScore(chess) {
-  let score = 0;
+  let mgScore = 0;
+  let egScore = 0;
+  let phase = 0;
+  let whiteBishops = 0;
+  let blackBishops = 0;
+  const whitePawnCols = [0, 0, 0, 0, 0, 0, 0, 0];
+  const blackPawnCols = [0, 0, 0, 0, 0, 0, 0, 0];
+  const whiteMinPawnRank = [8, 8, 8, 8, 8, 8, 8, 8];
+  const blackMaxPawnRank = [-1, -1, -1, -1, -1, -1, -1, -1];
+  const whiteRooks = [];
+  const blackRooks = [];
+
   const board = chess.board();
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const piece = board[r][c];
       if (!piece) continue;
-      const baseVal = PIECE_VALUES[piece.type] || 0;
-      const pst = PST_BY_TYPE[piece.type];
-      const pstVal = pst ? (piece.color === "w" ? pst[r * 8 + c] : pst[(7 - r) * 8 + c]) : 0;
-      if (piece.color === "w") {
-        score += baseVal + pstVal;
+      const type = piece.type;
+      const isW = piece.color === "w";
+      const mgBase = PIECE_VALUES[type] || 0;
+      const egBase = (typeof PIECE_VALUES_EG !== "undefined" && PIECE_VALUES_EG[type]) || mgBase;
+      const pstMg = PST_BY_TYPE[type];
+      const pstEg = PST_EG_BY_TYPE[type];
+      const sqIdx = isW ? r * 8 + c : (7 - r) * 8 + c;
+      const mgVal = mgBase + (pstMg ? pstMg[sqIdx] : 0);
+      const egVal = egBase + (pstEg ? pstEg[sqIdx] : 0);
+
+      if (isW) {
+        mgScore += mgVal;
+        egScore += egVal;
+        if (type === "b") whiteBishops++;
+        else if (type === "p") {
+          whitePawnCols[c]++;
+          if (r < whiteMinPawnRank[c]) whiteMinPawnRank[c] = r;
+        } else if (type === "r") {
+          whiteRooks.push(c);
+        }
       } else {
-        score -= baseVal + pstVal;
+        mgScore -= mgVal;
+        egScore -= egVal;
+        if (type === "b") blackBishops++;
+        else if (type === "p") {
+          blackPawnCols[c]++;
+          if (r > blackMaxPawnRank[c]) blackMaxPawnRank[c] = r;
+        } else if (type === "r") {
+          blackRooks.push(c);
+        }
+      }
+      phase += PHASE_WEIGHTS[type] || 0;
+    }
+  }
+
+  let bonus = 0;
+  if (whiteBishops >= 2) bonus += 32;
+  if (blackBishops >= 2) bonus -= 32;
+
+  for (let c = 0; c < 8; c++) {
+    if (whitePawnCols[c] > 1) bonus -= 14 * (whitePawnCols[c] - 1);
+    if (blackPawnCols[c] > 1) bonus += 14 * (blackPawnCols[c] - 1);
+
+    const wLeft = c > 0 ? whitePawnCols[c - 1] : 0;
+    const wRight = c < 7 ? whitePawnCols[c + 1] : 0;
+    if (whitePawnCols[c] > 0 && wLeft === 0 && wRight === 0) bonus -= 12;
+
+    const bLeft = c > 0 ? blackPawnCols[c - 1] : 0;
+    const bRight = c < 7 ? blackPawnCols[c + 1] : 0;
+    if (blackPawnCols[c] > 0 && bLeft === 0 && bRight === 0) bonus += 12;
+
+    if (whitePawnCols[c] > 0) {
+      const wRank = whiteMinPawnRank[c];
+      const bBlockC = blackMaxPawnRank[c] > -1 && blackMaxPawnRank[c] < wRank;
+      const bBlockL = c > 0 && blackMaxPawnRank[c - 1] > -1 && blackMaxPawnRank[c - 1] < wRank;
+      const bBlockR = c < 7 && blackMaxPawnRank[c + 1] > -1 && blackMaxPawnRank[c + 1] < wRank;
+      if (!bBlockC && !bBlockL && !bBlockR) {
+        const advancement = 7 - wRank;
+        bonus += advancement * advancement * 4;
+      }
+    }
+    if (blackPawnCols[c] > 0) {
+      const bRank = blackMaxPawnRank[c];
+      const wBlockC = whiteMinPawnRank[c] < 8 && whiteMinPawnRank[c] > bRank;
+      const wBlockL = c > 0 && whiteMinPawnRank[c - 1] < 8 && whiteMinPawnRank[c - 1] > bRank;
+      const wBlockR = c < 7 && whiteMinPawnRank[c + 1] < 8 && whiteMinPawnRank[c + 1] > bRank;
+      if (!wBlockC && !wBlockL && !wBlockR) {
+        const advancement = bRank;
+        bonus -= advancement * advancement * 4;
       }
     }
   }
-  return score;
+
+  for (const col of whiteRooks) {
+    if (whitePawnCols[col] === 0) {
+      bonus += blackPawnCols[col] === 0 ? 22 : 11;
+    }
+  }
+  for (const col of blackRooks) {
+    if (blackPawnCols[col] === 0) {
+      bonus -= whitePawnCols[col] === 0 ? 22 : 11;
+    }
+  }
+
+  const clampedPhase = Math.min(MAX_PHASE, phase);
+  const tapered = Math.round((mgScore * clampedPhase + egScore * (MAX_PHASE - clampedPhase)) / MAX_PHASE);
+  return tapered + bonus;
 }
 
 function evaluatePositionLocally(fen) {
@@ -149,14 +250,16 @@ function evaluatePositionLocally(fen) {
   return { cp: evaluateBoardScore(chess) + Math.round(mobility), mate: null };
 }
 
-function scoreMoveForOrdering(move) {
+function scoreMoveForOrdering(move, ttBestUci = "") {
+  const uci = `${move.from}${move.to}${move.promotion || ""}`;
+  if (ttBestUci && uci === ttBestUci) return 3e4;
   if (move.captured) {
     const victimVal = PIECE_VALUES[move.captured] || 100;
     const attackerVal = PIECE_VALUES[move.piece] || 100;
     return 1e4 + victimVal * 10 - attackerVal;
   }
   if (move.promotion) {
-    return 9e3;
+    return 9e3 + (PIECE_VALUES[move.promotion] || 0);
   }
   if (move.san.includes("+")) {
     return 5e3;
@@ -168,6 +271,7 @@ function quiescence(chess, alpha, beta, qDepth = 0) {
   const standPat = evaluateBoardScore(chess);
   const isWhite = chess.turn() === "w";
   if (qDepth >= 4) return standPat;
+
   if (isWhite) {
     if (standPat >= beta) return beta;
     if (standPat > alpha) alpha = standPat;
@@ -175,8 +279,10 @@ function quiescence(chess, alpha, beta, qDepth = 0) {
     if (standPat <= alpha) return alpha;
     if (standPat < beta) beta = standPat;
   }
-  const captures = chess.moves({ verbose: true }).filter((m) => m.captured || m.promotion || m.san.includes("+"));
+
+  const captures = chess.moves({ verbose: true }).filter((m) => m.captured || m.promotion || (qDepth === 0 && m.san.includes("+")));
   captures.sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a));
+
   for (const cap of captures) {
     chess.move(cap);
     const score = quiescence(chess, alpha, beta, qDepth + 1);
@@ -192,32 +298,34 @@ function quiescence(chess, alpha, beta, qDepth = 0) {
   return isWhite ? alpha : beta;
 }
 
-function alphaBeta(chess, depth, alpha, beta, pvArray) {
-  if (depth === 0) {
+function alphaBeta(chess, depth, alpha, beta, pvArray, plyFromRoot = 1) {
+  if (depth <= 0) {
     return quiescence(chess, alpha, beta);
   }
   const moves = chess.moves({ verbose: true });
   if (moves.length === 0) {
     if (isChessCheckmate(chess)) {
-      return chess.turn() === "w" ? -3e4 : 3e4;
+      return chess.turn() === "w" ? -(3e4 - plyFromRoot * 10) : (3e4 - plyFromRoot * 10);
     }
     return 0;
   }
   if (isChessGameOver(chess)) {
     return 0;
   }
+
   moves.sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a));
   const isWhite = chess.turn() === "w";
   let bestScore = isWhite ? -Infinity : Infinity;
+
   for (const move of moves) {
     chess.move(move);
     const localChildPv = [];
-    const score = alphaBeta(chess, depth - 1, alpha, beta, localChildPv);
+    const score = alphaBeta(chess, depth - 1, alpha, beta, localChildPv, plyFromRoot + 1);
     chess.undo();
+    const uci = `${move.from}${move.to}${move.promotion || ""}`;
     if (isWhite) {
       if (score > bestScore) {
         bestScore = score;
-        const uci = `${move.from}${move.to}${move.promotion || ""}`;
         pvArray.length = 0;
         pvArray.push(uci, ...localChildPv);
       }
@@ -226,7 +334,6 @@ function alphaBeta(chess, depth, alpha, beta, pvArray) {
     } else {
       if (score < bestScore) {
         bestScore = score;
-        const uci = `${move.from}${move.to}${move.promotion || ""}`;
         pvArray.length = 0;
         pvArray.push(uci, ...localChildPv);
       }
@@ -234,6 +341,7 @@ function alphaBeta(chess, depth, alpha, beta, pvArray) {
       if (beta <= alpha) break;
     }
   }
+
   return bestScore;
 }
 
@@ -241,8 +349,9 @@ function findBestMoveLocal(fen, depth = 3) {
   const chess = new Chess(fen);
   const moves = chess.moves({ verbose: true });
   if (moves.length === 0) {
-    return { bestMoveUci: "", bestMoveSan: "", secondBestMoveUci: "", secondBestMoveSan: "", evalCp: 0, pv: [] };
+    return { bestMoveUci: "", bestMoveSan: "", secondBestMoveUci: "", secondBestMoveSan: "", secondBestPv: [], evalCp: 0, pv: [] };
   }
+
   moves.sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a));
   const isWhite = chess.turn() === "w";
   let bestScore = isWhite ? -Infinity : Infinity;
@@ -250,18 +359,21 @@ function findBestMoveLocal(fen, depth = 3) {
   let bestMove = moves[0];
   let secondBestMove = moves.length > 1 ? moves[1] : null;
   let finalPv = [];
+  let secondFinalPv = [];
   let alpha = -Infinity;
   let beta = Infinity;
+
   for (const move of moves) {
     chess.move(move);
     const childPv = [];
-    const score = alphaBeta(chess, depth - 1, alpha, beta, childPv);
+    const score = alphaBeta(chess, depth - 1, alpha, beta, childPv, 1);
     chess.undo();
     const moveUci = `${move.from}${move.to}${move.promotion || ""}`;
     if (isWhite) {
       if (score > bestScore) {
         secondBestScore = bestScore;
         secondBestMove = bestMove;
+        secondFinalPv = finalPv;
         bestScore = score;
         bestMove = move;
         finalPv = [moveUci, ...childPv];
@@ -269,11 +381,13 @@ function findBestMoveLocal(fen, depth = 3) {
       } else if (score > secondBestScore) {
         secondBestScore = score;
         secondBestMove = move;
+        secondFinalPv = [moveUci, ...childPv];
       }
     } else {
       if (score < bestScore) {
         secondBestScore = bestScore;
         secondBestMove = bestMove;
+        secondFinalPv = finalPv;
         bestScore = score;
         bestMove = move;
         finalPv = [moveUci, ...childPv];
@@ -281,6 +395,7 @@ function findBestMoveLocal(fen, depth = 3) {
       } else if (score < secondBestScore) {
         secondBestScore = score;
         secondBestMove = move;
+        secondFinalPv = [moveUci, ...childPv];
       }
     }
   }
@@ -304,6 +419,7 @@ function findBestMoveLocal(fen, depth = 3) {
     bestMoveSan: bestMove.san,
     secondBestMoveUci,
     secondBestMoveSan,
+    secondBestPv: secondFinalPv,
     evalCp: bestScore,
     multiPv2Cp: secondBestScore !== (isWhite ? -Infinity : Infinity) ? secondBestScore : void 0,
     pv: finalPv.length > 0 ? finalPv : [bestMoveUci]
@@ -317,8 +433,9 @@ function normalizeFenKey(fen) {
 }
 
 const ENGINE_PROFILES = {
-  fast: { depth: 8, maxWaitMs: 250 },
-  deep: { depth: 12, maxWaitMs: 500 }
+  fast: { depth: 10, maxWaitMs: 250, localDepth: 2 },
+  deep: { depth: 14, maxWaitMs: 450, localDepth: 3 },
+  ultra: { depth: 16, maxWaitMs: 700, localDepth: 3 }
 };
 
 function toWhitePerspective(result, fen) {
@@ -333,20 +450,28 @@ function toWhitePerspective(result, fen) {
 
 function localEvaluation(fen, depth) {
   const localSearch = findBestMoveLocal(fen, depth);
+  const isMate = Math.abs(localSearch.evalCp) >= 29000;
   return {
-    scoreCp: localSearch.evalCp,
-    mate: null,
+    scoreCp: isMate ? (localSearch.evalCp > 0 ? 3000 : -3000) : localSearch.evalCp,
+    mate: isMate ? (localSearch.evalCp > 0 ? Math.max(1, Math.ceil((30000 - localSearch.evalCp) / 20)) : -Math.max(1, Math.ceil((30000 + localSearch.evalCp) / 20))) : null,
     pv: localSearch.pv,
     bestMoveUci: localSearch.bestMoveUci,
     secondBestMoveUci: localSearch.secondBestMoveUci,
+    secondBestPv: localSearch.secondBestPv || [],
     multiPv2ScoreCp: localSearch.multiPv2Cp,
+    depth,
     source: "local"
   };
 }
 
-async function evaluateFenHybrid(fen, isDeep = false) {
-  const profileKey = isDeep ? "deep" : "fast";
-  const cacheKey = `${normalizeFenKey(fen)}_${profileKey}`;
+async function evaluateFenHybrid(fen, isDeep = true) {
+  const profileKey = isDeep === "ultra" ? "ultra" : (isDeep ? "deep" : "fast");
+  const normKey = normalizeFenKey(fen);
+  const cacheKey = `${normKey}_${profileKey}`;
+  if (profileKey !== "ultra") {
+    const ultraCached = FEN_EVAL_CACHE.get(`${normKey}_ultra`);
+    if (ultraCached) return ultraCached;
+  }
   const cached = FEN_EVAL_CACHE.get(cacheKey);
   if (cached) return cached;
 
@@ -361,6 +486,8 @@ async function evaluateFenHybrid(fen, isDeep = false) {
         pv: [],
         bestMoveUci: "",
         secondBestMoveUci: "",
+        secondBestPv: [],
+        depth: 0,
         source: "terminal"
       };
       setFenCache(cacheKey, terminalResult);
@@ -368,7 +495,7 @@ async function evaluateFenHybrid(fen, isDeep = false) {
     }
   } catch {}
 
-  const profile = ENGINE_PROFILES[profileKey];
+  const profile = ENGINE_PROFILES[profileKey] || ENGINE_PROFILES.deep;
   const sfEval = await stockfishService.evaluate(fen, profile.depth, profile.maxWaitMs);
   if (sfEval && sfEval.bestMoveUci) {
     const sfResult = toWhitePerspective({
@@ -377,15 +504,23 @@ async function evaluateFenHybrid(fen, isDeep = false) {
       pv: sfEval.pv,
       bestMoveUci: sfEval.bestMoveUci,
       secondBestMoveUci: sfEval.secondBestMoveUci || "",
+      secondBestPv: sfEval.secondBestPv || [],
       multiPv2ScoreCp: sfEval.multiPv2ScoreCp,
+      depth: sfEval.depth || profile.depth,
       source: "stockfish"
     }, fen);
     setFenCache(cacheKey, sfResult);
+    if (profileKey === "ultra") {
+      setFenCache(`${normKey}_deep`, sfResult);
+    }
     return sfResult;
   }
 
-  const localResult = localEvaluation(fen, profile.depth <= 8 ? 2 : 3);
+  const localResult = localEvaluation(fen, profile.localDepth || 4);
   setFenCache(cacheKey, localResult);
+  if (profileKey === "ultra") {
+    setFenCache(`${normKey}_deep`, localResult);
+  }
   return localResult;
 }
 
@@ -398,7 +533,7 @@ async function prefetchEvaluations(fens, isDeep, onEach) {
     ? Math.max(2, stockfishService.targetSize || stockfishService.size)
     : 1;
   const concurrency = Math.min(workerCount, unique.length);
-  console.log(`[Engine] Evaluating ${unique.length} positions across ${concurrency} workers`);
+  console.log(`[Engine] Evaluating ${unique.length} positions across ${concurrency} workers (profile: ${isDeep})`);
 
   let next = 0;
   let done = 0;
@@ -409,6 +544,9 @@ async function prefetchEvaluations(fens, isDeep, onEach) {
       await evaluateFenHybrid(fen, isDeep);
       done++;
       if (onEach) await onEach(done, unique.length);
+      if (!stockfishService.isAvailable && done % 2 === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
     }
   });
 

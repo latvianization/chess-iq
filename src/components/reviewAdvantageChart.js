@@ -104,12 +104,17 @@ function renderAdvantageChart(dashboard) {
     brilliant: '#06b6d4',
     great: '#3b82f6'
   };
+  const tpPly = dashboard.game.turningPoint?.ply || null;
   const pointDotsSvg = dashboard.advantagePoints
     .map((pt) => {
       const cls = pt.ply?.classification;
       const color = keyPointColors[cls];
       if (!color) return '';
-      return `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="3.5" fill="${color}" stroke="#0b1120" stroke-width="1.2" />`;
+      const isTp = tpPly && pt.ply?.ply === tpPly;
+      return `
+        ${isTp ? `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="7" fill="none" stroke="#ef4444" stroke-width="1.6" stroke-dasharray="2,2" />` : ''}
+        <circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${isTp ? '4.5' : '3.5'}" fill="${color}" stroke="#0b1120" stroke-width="1.2" />
+      `;
     })
     .join('');
 
@@ -120,24 +125,36 @@ function renderAdvantageChart(dashboard) {
         <span class="small fw-black" style="font-size: 11px;">Advantage Timeline</span>
       </div>
       <div class="d-flex align-items-center gap-2 font-monospace" style="font-size: 10px;">
-        <span class="d-flex align-items-center gap-1 text-info"><span class="rounded-circle d-inline-block bg-info" style="width: 6px; height: 6px;"></span>White+</span>
-        <span class="d-flex align-items-center gap-1 text-secondary"><span class="rounded-circle d-inline-block bg-secondary" style="width: 6px; height: 6px;"></span>Black+</span>
+        <span class="d-flex align-items-center gap-1 text-info"><span class="rounded-circle d-inline-block" style="width: 7px; height: 7px; background: #38bdf8;"></span>White+</span>
+        <span class="d-flex align-items-center gap-1 text-warning"><span class="rounded-circle d-inline-block" style="width: 7px; height: 7px; background: #f59e0b;"></span>Black+</span>
       </div>
     </div>
     <div class="advantage-chart-canvas position-relative" id="advantage-chart-canvas">
       <svg class="w-100 h-100" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display: block;">
         <defs>
           <linearGradient id="advWhiteGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.38" />
-            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.04" />
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.52" />
+            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.08" />
           </linearGradient>
+          <linearGradient id="advBlackGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.08" />
+            <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.52" />
+          </linearGradient>
+          <clipPath id="advClipWhite">
+            <rect x="0" y="0" width="${width}" height="${midY}" />
+          </clipPath>
+          <clipPath id="advClipBlack">
+            <rect x="0" y="${midY}" width="${width}" height="${height - midY}" />
+          </clipPath>
         </defs>
         <!-- 50% Equality Line -->
-        <line x1="0" y1="${midY}" x2="${width}" y2="${midY}" stroke="#64748b" stroke-width="1.2" stroke-dasharray="4,4" opacity="0.65" />
-        <!-- Gradient Area -->
-        <path d="${areaD}" fill="url(#advWhiteGrad)" />
+        <line x1="0" y1="${midY}" x2="${width}" y2="${midY}" stroke="#64748b" stroke-width="1.2" stroke-dasharray="4,4" opacity="0.7" />
+        <!-- Dual-Tone Gradient Areas (White Top / Black Bottom) -->
+        <path d="${areaD}" fill="url(#advWhiteGrad)" clip-path="url(#advClipWhite)" />
+        <path d="${areaD}" fill="url(#advBlackGrad)" clip-path="url(#advClipBlack)" />
         <!-- Main Advantage Spline -->
-        <path d="${curveD}" fill="none" stroke="#38bdf8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="${curveD}" fill="none" stroke="#38bdf8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#advClipWhite)" />
+        <path d="${curveD}" fill="none" stroke="#f59e0b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#advClipBlack)" />
         <!-- Phase Markers -->
         ${phaseMarkersSvg}
         <!-- Key Moment Advantage Points -->

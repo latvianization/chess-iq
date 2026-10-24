@@ -30,6 +30,30 @@ async function openWhyModal(dashboard, targetEval = null) {
   const evalBefore = cur.scoreBefore !== undefined ? (cur.scoreBefore / 100).toFixed(1) : null;
   const evalAfter = cur.scoreAfter !== undefined ? (cur.scoreAfter / 100).toFixed(1) : null;
 
+  const motifs = (Array.isArray(cur.motifs) && cur.motifs.length > 0)
+    ? cur.motifs
+    : (typeof detectTacticalMotifs === 'function'
+        ? detectTacticalMotifs(cur.fenBefore, cur.fen, { color: cur.color }, cur.bestMoveUci, cur.pv, cur.mate, cur.classification, cur.ply)
+        : []);
+
+  const motifBadgesHtml = motifs.length > 0
+    ? `<div class="d-flex align-items-center flex-wrap gap-1.5 mt-1">
+        ${motifs.map((m) => `<span class="motif-pill" style="border-color: ${m.color}; color: ${m.color}; background: ${m.color}18;">${m.icon} ${m.label}</span>`).join('')}
+       </div>`
+    : '';
+
+  const coachTipHtml = motifs.length > 0 && motifs[0].coachTip
+    ? `<div class="card border-0 mb-2 p-2.5" style="background: rgba(245, 158, 11, 0.09); border: 1px solid rgba(245, 158, 11, 0.35) !important; border-radius: 0.75rem;">
+         <div class="d-flex align-items-start gap-2">
+           <span class="fs-6 lh-1 mt-0.5">🎓</span>
+           <div>
+             <span class="text-uppercase fw-black text-warning d-block" style="font-size: 10px; letter-spacing: 0.5px;">Coach's Pattern Tip (${motifs[0].label})</span>
+             <span class="small fw-semibold text-body" style="font-size: 12px;">${motifs[0].coachTip}</span>
+           </div>
+         </div>
+       </div>`
+    : '';
+
   const modal = document.createElement('div');
   modal.className = 'why-modal-backdrop';
   modal.id = 'why-blunder-modal';
@@ -43,6 +67,7 @@ async function openWhyModal(dashboard, targetEval = null) {
           <div>
             <h5 class="mb-0 fw-black fs-6">${isBrilliant ? `Why was ${cur.san} Brilliant?` : `Why was ${cur.san} a ${classificationName}?`}</h5>
             <div class="text-secondary small font-monospace" style="font-size: 11px;">Move ${Math.ceil((cur.ply || 1) / 2)}${cur.color === 'b' ? '... ' : '. '}${cur.san}</div>
+            ${motifBadgesHtml}
           </div>
         </div>
         <button type="button" class="btn-close" id="why-btn-close" aria-label="Close"></button>
@@ -87,7 +112,7 @@ async function openWhyModal(dashboard, targetEval = null) {
               </div>
             </div>
 
-            <div class="card border-0 mb-3 p-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border) !important; border-radius: 0.75rem;">
+            <div class="card border-0 mb-2 p-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border) !important; border-radius: 0.75rem;">
               <div class="d-flex align-items-start gap-2">
                 <i class="bi ${isBrilliant ? 'bi-gem' : 'bi-shield-exclamation text-danger'} fs-5 lh-1 mt-0.5" ${isBrilliant ? 'style="color: #06b6d4;"' : ''}></i>
                 <div>
@@ -95,6 +120,8 @@ async function openWhyModal(dashboard, targetEval = null) {
                 </div>
               </div>
             </div>
+
+            ${coachTipHtml}
 
             <div class="p-2 mb-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border); border-radius: 0.75rem; max-height: 140px; overflow-y: auto;">
               <div class="small fw-bold text-secondary mb-1.5" style="font-size: 11px;">Tactical Continuation (5 Moves):</div>
