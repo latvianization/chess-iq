@@ -189,24 +189,25 @@ class Chessboard {
     left.appendChild(nameSpan);
 
     const right = document.createElement('div');
-    right.className = 'd-flex align-items-center';
+    right.className = 'd-flex align-items-center gap-1.5';
 
-    const piecesDiv = document.createElement('div');
-    piecesDiv.className = 'board-captured-pieces';
-    captured.forEach((pKey) => {
-      const pSrc = INLINE_PIECE_DATA_URLS[pKey] || `./pieces/${pKey}.svg`;
-      const pImg = document.createElement('img');
-      pImg.src = pSrc;
-      pImg.className = 'captured-piece-img';
-      pImg.alt = pKey;
-      piecesDiv.appendChild(pImg);
-    });
-
-    right.appendChild(piecesDiv);
+    if (captured.length > 0) {
+      const piecesDiv = document.createElement('div');
+      piecesDiv.className = 'board-captured-pieces';
+      captured.forEach((pKey) => {
+        const pSrc = INLINE_PIECE_DATA_URLS[pKey] || `./pieces/${pKey}.svg`;
+        const pImg = document.createElement('img');
+        pImg.src = pSrc;
+        pImg.className = 'captured-piece-img';
+        pImg.alt = pKey;
+        piecesDiv.appendChild(pImg);
+      });
+      right.appendChild(piecesDiv);
+    }
 
     if (diff > 0) {
       const diffBadge = document.createElement('span');
-      diffBadge.className = 'material-diff-badge bg-body-secondary text-secondary';
+      diffBadge.className = 'material-diff-badge';
       diffBadge.textContent = `+${diff}`;
       right.appendChild(diffBadge);
     }

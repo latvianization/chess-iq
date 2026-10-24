@@ -97,6 +97,22 @@ function renderAdvantageChart(dashboard) {
     `;
   }
 
+  const keyPointColors = {
+    blunder: '#ef4444',
+    mistake: '#f97316',
+    missed_win: '#eab308',
+    brilliant: '#06b6d4',
+    great: '#3b82f6'
+  };
+  const pointDotsSvg = dashboard.advantagePoints
+    .map((pt) => {
+      const cls = pt.ply?.classification;
+      const color = keyPointColors[cls];
+      if (!color) return '';
+      return `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="3.5" fill="${color}" stroke="#0b1120" stroke-width="1.2" />`;
+    })
+    .join('');
+
   chartArea.innerHTML = `
     <div class="d-flex align-items-center justify-content-between px-1 pb-1 mb-1 border-bottom border-secondary border-opacity-25">
       <div class="d-flex align-items-center gap-1.5">
@@ -112,22 +128,24 @@ function renderAdvantageChart(dashboard) {
       <svg class="w-100 h-100" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display: block;">
         <defs>
           <linearGradient id="advWhiteGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.3" />
-            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.02" />
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.38" />
+            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.04" />
           </linearGradient>
         </defs>
         <!-- 50% Equality Line -->
-        <line x1="0" y1="${midY}" x2="${width}" y2="${midY}" stroke="#475569" stroke-width="1" stroke-dasharray="4,4" opacity="0.5" />
+        <line x1="0" y1="${midY}" x2="${width}" y2="${midY}" stroke="#64748b" stroke-width="1.2" stroke-dasharray="4,4" opacity="0.65" />
         <!-- Gradient Area -->
         <path d="${areaD}" fill="url(#advWhiteGrad)" />
         <!-- Main Advantage Spline -->
-        <path d="${curveD}" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="${curveD}" fill="none" stroke="#38bdf8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
         <!-- Phase Markers -->
         ${phaseMarkersSvg}
+        <!-- Key Moment Advantage Points -->
+        ${pointDotsSvg}
         <!-- Active Move Scrubber -->
         <g id="advantage-scrubber-group" style="display: ${selectedPoint ? 'inline' : 'none'};">
-          <line id="scrubber-line" x1="${selectedPoint?.x || 0}" y1="0" x2="${selectedPoint?.x || 0}" y2="${height}" stroke="#fbbf24" stroke-width="1.8" opacity="0.9" />
-          <circle id="scrubber-circle" cx="${selectedPoint?.x || 0}" cy="${dashboard.currentPly === 0 ? midY : (selectedPoint?.y || midY)}" r="4" fill="#fbbf24" stroke="#0f172a" stroke-width="1.5" />
+          <line id="scrubber-line" x1="${selectedPoint?.x || 0}" y1="0" x2="${selectedPoint?.x || 0}" y2="${height}" stroke="#fbbf24" stroke-width="2.2" opacity="0.95" />
+          <circle id="scrubber-circle" cx="${selectedPoint?.x || 0}" cy="${dashboard.currentPly === 0 ? midY : (selectedPoint?.y || midY)}" r="5.5" fill="#fbbf24" stroke="#0f172a" stroke-width="2" />
         </g>
       </svg>
       <div id="advantage-chart-tooltip" class="position-absolute d-none px-2 py-1 rounded bg-dark border border-secondary shadow text-white small" style="pointer-events: none; z-index: 10; font-size: 11px;"></div>
