@@ -192,7 +192,7 @@ function getMaterialDiffInPawns(chess, moverColor) {
   return diff;
 }
 
-function summarizePunishment(fenStart, fenEnd, moverColor) {
+function summarizePunishment(fenStart, fenEnd, moverColor, classification = "inaccuracy") {
   try {
     const cEnd = new Chess(fenEnd);
     if (isChessCheckmate(cEnd)) {
@@ -205,9 +205,47 @@ function summarizePunishment(fenStart, fenEnd, moverColor) {
     if (netLoss >= 5) return `Opponent wins a Rook (+${netLoss})`;
     if (netLoss >= 3) return `Opponent wins a minor piece (+${netLoss})`;
     if (netLoss >= 1) return `Opponent wins material (+${netLoss} pawn${netLoss > 1 ? "s" : ""})`;
-    return "Opponent converts into a winning positional advantage";
+
+    // Positional breakdown when no material is captured in the continuation
+    const moverSide = moverColor === "w" ? "white" : "black";
+    const oppSide = moverColor === "w" ? "black" : "white";
+
+    if (typeof computePositionalPillars === "function") {
+      const pStart = computePositionalPillars(fenStart);
+      const pEnd = computePositionalPillars(fenEnd);
+
+      if (pStart && pEnd) {
+        const kingSafetyLoss = (pStart.kingSafety?.[moverSide] || 50) - (pEnd.kingSafety?.[moverSide] || 50);
+        const oppActivityGain = (pEnd.activity?.[oppSide] || 50) - (pStart.activity?.[oppSide] || 50);
+        const moverActivityLoss = (pStart.activity?.[moverSide] || 50) - (pEnd.activity?.[moverSide] || 50);
+        const structureLoss = (pStart.pawnStructure?.[moverSide] || 50) - (pEnd.pawnStructure?.[moverSide] || 50);
+
+        if (kingSafetyLoss >= 7) {
+          return classification === "inaccuracy"
+            ? "Weakens your King shelter, allowing opponent attacking pressure"
+            : (classification === "blunder" ? "Decisively exposes your King to an overwhelming assault" : "Compromises King safety, giving opponent dangerous initiative");
+        }
+        if (structureLoss >= 7) {
+          return classification === "inaccuracy"
+            ? "Weakens your pawn structure, creating long-term structural targets"
+            : (classification === "blunder" ? "Severely shatters your pawn defense, leaving critical weaknesses" : "Compromises pawn structure into chronic targets");
+        }
+        if (oppActivityGain >= 6 || moverActivityLoss >= 6) {
+          return classification === "inaccuracy"
+            ? "Concedes central control and active piece mobility to opponent"
+            : (classification === "blunder" ? "Allows opponent to dominate the board with complete piece activity" : "Allows opponent to seize dominant piece activity and central control");
+        }
+      }
+    }
+
+    if (classification === "inaccuracy") {
+      return "Opponent gains a slight positional edge and freer piece mobility";
+    } else if (classification === "mistake") {
+      return "Opponent consolidates a clear positional advantage";
+    }
+    return "Opponent converts into a dominating positional advantage";
   } catch {
-    return "Opponent gains a decisive tactical advantage";
+    return "Opponent gains a strategic positional advantage";
   }
 }
 
@@ -293,7 +331,7 @@ function prepareMoveExplanation(cur) {
     const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
     const punishmentSummary = isBrilliant
       ? summarizeBrilliant(cur.fen, endFen, cur.color)
-      : summarizePunishment(cur.fen, endFen, cur.color);
+      : summarizePunishment(cur.fen, endFen, cur.color, cur.classification);
 
     const bestSteps = [
       { ply: 0, fen: cur.fenBefore, from: null, to: null, san: "Start" }
@@ -402,6 +440,27 @@ const TACTICAL_MOTIF_CATALOG = {
     icon: "⚡",
     color: "#eab308",
     coachTip: "Use the 'Checks, Captures, Threats' checklist before playing a quiet developing move."
+  },
+  positional_pressure: {
+    id: "positional_pressure",
+    label: "Positional Advantage",
+    icon: "📐",
+    color: "#3b82f6",
+    coachTip: "No material hangs immediately—look at piece activity, board control, and strong outpost squares."
+  },
+  pawn_weakness: {
+    id: "pawn_weakness",
+    label: "Pawn Structure",
+    icon: "♟️",
+    color: "#8b5cf6",
+    coachTip: "Pawns cannot move backward. Avoid pawn pushes that create undefended holes or isolated targets."
+  },
+  space_advantage: {
+    id: "space_advantage",
+    label: "Space & Activity",
+    icon: "🌐",
+    color: "#0ea5e9",
+    coachTip: "Active pieces control key central files and restrict opponent mobility, building long-term pressure."
   }
 };
 
@@ -672,7 +731,10 @@ function detectTacticalMotifs(fenBefore, fenAfter, moveObj, bestMoveUci, pvAfter
           const follow = bChess.moves({ verbose: true }).filter((m) => m.from === bm.to && m.captured && ["q", "r", "b", "n"].includes(m.captured));
           if (follow.length >= 2) addMotif("fork");
           else if (bm.captured && PIECE_PAWN_UNITS[bm.captured] >= 3) addMotif("hanging_piece");
+          else if (classification === "inaccuracy") addMotif("positional_pressure");
           else addMotif("missed_tactic");
+        } else if (classification === "inaccuracy") {
+          addMotif("positional_pressure");
         }
       }
     }
@@ -683,10 +745,10 @@ function detectTacticalMotifs(fenBefore, fenAfter, moveObj, bestMoveUci, pvAfter
 
 function computePositionalPillars(fen) {
   const fallback = {
-    material: { white: 50, black: 50, label: "Equal" },
-    activity: { white: 50, black: 50, label: "Balanced" },
-    kingSafety: { white: 50, black: 50, label: "Solid" },
-    pawnStructure: { white: 50, black: 50, label: "Symmetric" }
+    material: { white: 50, black: 50, label: "Equal", whiteScore: 0, blackScore: 0 },
+    activity: { white: 50, black: 50, label: "Balanced", whiteScore: 0, blackScore: 0 },
+    kingSafety: { white: 50, black: 50, label: "Solid", whiteScore: 78, blackScore: 78 },
+    pawnStructure: { white: 50, black: 50, label: "Symmetric", whiteScore: 70, blackScore: 70 }
   };
   if (!fen) return fallback;
 
@@ -781,10 +843,10 @@ function computePositionalPillars(fen) {
     const psLabel = Math.abs(psShare.white - 50) <= 5 ? "Balanced" : (psShare.white > 50 ? "White Cleaner" : "Black Cleaner");
 
     return {
-      material: { ...matShare, label: matLabel },
-      activity: { ...actShare, label: actLabel },
-      kingSafety: { ...ksShare, label: ksLabel },
-      pawnStructure: { ...psShare, label: psLabel }
+      material: { ...matShare, label: matLabel, whiteScore: Math.round(wMat * 10) / 10, blackScore: Math.round(bMat * 10) / 10 },
+      activity: { ...actShare, label: actLabel, whiteScore: Math.round(wActivity), blackScore: Math.round(bActivity) },
+      kingSafety: { ...ksShare, label: ksLabel, whiteScore: Math.round(wKingSafety), blackScore: Math.round(bKingSafety) },
+      pawnStructure: { ...psShare, label: psLabel, whiteScore: Math.round(wStructure), blackScore: Math.round(bStructure) }
     };
   } catch {
     return fallback;

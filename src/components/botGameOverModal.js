@@ -1,6 +1,7 @@
 function closeGameOverModal() {
   const existing = document.getElementById('bot-game-over-modal');
   if (existing) existing.remove();
+  document.body.classList.remove('modal-open');
 }
 
 function getBotRecords() {
@@ -109,7 +110,20 @@ function showGameOverModal(arena, reason = 'Game Completed') {
     </div>
   `;
 
+  document.body.classList.add('modal-open');
   document.body.appendChild(modal);
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeGameOverModal();
+  });
+
+  const handleEsc = (e) => {
+    if (e.key === 'Escape') {
+      closeGameOverModal();
+      window.removeEventListener('keydown', handleEsc);
+    }
+  };
+  window.addEventListener('keydown', handleEsc);
 
   modal.querySelector('#modal-btn-review')?.addEventListener('click', (e) => {
     const btn = e.currentTarget;
@@ -119,7 +133,7 @@ function showGameOverModal(arena, reason = 'Game Completed') {
     }
     closeGameOverModal();
     if (arena.onAnalyzeGame) {
-      arena.onAnalyzeGame(arena.getEnrichedPgn(), arena.userColor);
+      arena.onAnalyzeGame(arena.getEnrichedPgn(), arena.userColor, { isBotGame: true, bot: arena.selectedBot });
     }
   });
 

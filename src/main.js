@@ -40,7 +40,6 @@ class App {
   constructor() {
     this.appMode = 'review'; // 'review' | 'bot'
     this.isDarkMode = false;
-    this.boardTheme = 'green';
     this.isDeepReview = true;
 
     this.reviewDashboard = null;
@@ -53,12 +52,14 @@ class App {
   init() {
     this.setupTheme();
     this.bindHeader();
+    if (typeof initGlobalTooltips === 'function') {
+      initGlobalTooltips();
+    }
 
     // Mount Review Dashboard
     const reviewMount = document.getElementById('review-view');
     if (reviewMount) {
       this.reviewDashboard = new ReviewDashboard(reviewMount, {
-        theme: this.boardTheme,
         onOpenImport: () => this.importModal?.show(),
         onSwitchToBots: () => this.switchMode('bot'),
         onPlayFromFen: (fen, userColor, targetElo) => {
@@ -84,8 +85,7 @@ class App {
     const botMount = document.getElementById('bot-view');
     if (botMount) {
       this.botArena = new BotArena(botMount, {
-        theme: this.boardTheme,
-        onAnalyzeGame: (pgn, userColor) => this.runAnalysis(pgn, userColor),
+        onAnalyzeGame: (pgn, userColor, meta) => this.runAnalysis(pgn, userColor, false, meta),
       });
     }
 
@@ -132,6 +132,26 @@ class App {
   switchMode(mode) {
     this.appMode = mode;
 
+    // Purge any open modals or backdrops to ensure page scroll is never trapped
+    this.importModal?.hide();
+    document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+    document.querySelectorAll('.modal.show').forEach((m) => m.classList.remove('show'));
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+
+    if (typeof closeWhyModal === 'function' && this.reviewDashboard) {
+      closeWhyModal(this.reviewDashboard);
+    }
+    document.getElementById('why-blunder-modal')?.remove();
+    document.getElementById('blunder-bank-modal')?.remove();
+    document.getElementById('positional-pillars-modal')?.remove();
+    document.getElementById('iq-guide-modal-root')?.remove();
+    if (typeof closeGameOverModal === 'function') {
+      closeGameOverModal();
+    }
+    document.getElementById('bot-game-over-modal')?.remove();
+
     const reviewView = document.getElementById('review-view');
     const botView = document.getElementById('bot-view');
     const btnReview = document.getElementById('nav-mode-review');
@@ -147,6 +167,9 @@ class App {
       botView?.classList.remove('d-none');
       btnBot?.classList.add('active');
       btnReview?.classList.remove('active');
+      if (this.botArena && !this.botArena.isPlaying) {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      }
     }
   }
 
@@ -159,6 +182,8 @@ class App {
       closeWhyModal(this.reviewDashboard);
     }
     document.getElementById('why-blunder-modal')?.remove();
+    document.getElementById('blunder-bank-modal')?.remove();
+    document.getElementById('positional-pillars-modal')?.remove();
     if (typeof closeGameOverModal === 'function') {
       closeGameOverModal();
     }
@@ -196,33 +221,14 @@ class App {
       soundService.toggleMute();
       this.updateSoundIcon();
     });
-
-    // Theme selector dropdown/menu
-    const menuToggle = document.querySelector('[data-bs-toggle="menu"], [data-bs-toggle="dropdown"]');
-    const menuEl = document.querySelector('.menu, .dropdown-menu');
-    if (menuToggle && menuEl && !bootstrap?.Dropdown) {
-      menuToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        menuEl.classList.toggle('show');
-      });
-      document.addEventListener('click', (e) => {
-        if (!menuEl.contains(e.target) && e.target !== menuToggle) {
-          menuEl.classList.remove('show');
-        }
-      });
-    }
-
-    document.querySelectorAll('[data-board-theme]').forEach((item) => {
-      item.addEventListener('click', (e) => {
-        this.boardTheme = e.currentTarget.getAttribute('data-board-theme');
-        this.reviewDashboard?.setTheme(this.boardTheme);
-        this.botArena?.setTheme(this.boardTheme);
-        menuEl?.classList.remove('show');
-      });
+    document.getElementById('nav-btn-help')?.addEventListener('click', () => {
+      if (typeof openIqGuideModal === 'function') {
+        openIqGuideModal();
+      }
     });
   }
 
-  async runAnalysis(pgn, userColor, forceFresh = false) {
+  async runAnalysis(pgn, userColor, forceFresh = false, meta = null) {
     console.log(`[App] runAnalysis requested (userColor: ${userColor}, deepReview: ${this.isDeepReview}, forceFresh: ${forceFresh})`);
     this.switchMode('review');
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -231,6 +237,7 @@ class App {
     this.importModal?.hide();
     document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
     document.body.classList.remove('modal-open');
+    document.getElementById('positional-pillars-modal')?.remove();
 
     if (!forceFresh) {
       let cachedGame = getCachedGame(pgn, userColor);
@@ -291,6 +298,17 @@ class App {
 
       if (matchedGameId) {
         analyzedGame.id = matchedGameId;
+        analyzedGame.isImported = true;
+      }
+
+      if (meta?.isBotGame || meta?.bot) {
+        analyzedGame.isBotGame = true;
+        analyzedGame.isImported = false;
+        if (meta.bot) {
+          analyzedGame.botId = meta.bot.id;
+          analyzedGame.botName = meta.bot.name;
+          analyzedGame.botAvatar = meta.bot.avatar;
+        }
       }
 
       console.log('[App] Analysis completed, caching and loading review...');

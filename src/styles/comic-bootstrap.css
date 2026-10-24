@@ -13,6 +13,11 @@
   --arcade-gold: #fbbf24;
   --arcade-gold-hover: #f59e0b;
   --arcade-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  /* Pretty Scrollbar Tokens (Light Mode) */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(100, 116, 139, 0.28);
+  --scrollbar-thumb-hover: rgba(245, 158, 11, 0.85);
+  --scrollbar-thumb-active: #f59e0b;
 }
 
 [data-bs-theme="dark"] {
@@ -25,6 +30,16 @@
   --arcade-gold: #fbbf24;
   --arcade-gold-hover: #f59e0b;
   --arcade-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.5);
+  /* Pretty Scrollbar Tokens (Dark Mode) */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.22);
+  --scrollbar-thumb-hover: rgba(251, 191, 36, 0.75);
+  --scrollbar-thumb-active: #fbbf24;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 76px;
 }
 
 body {
@@ -34,8 +49,14 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
   transition: background-color 0.25s ease, color 0.25s ease;
   -webkit-font-smoothing: antialiased;
+}
+
+body:not(.modal-open) {
+  overflow-y: auto !important;
 }
 
 /* Glassmorphic Navbar */
@@ -157,11 +178,41 @@ body {
   background: rgba(255, 255, 255, 0.12);
 }
 
-.theme-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  display: inline-block;
+/* Responsive navbar adjustments for mobile screens */
+@media (max-width: 575.98px) {
+  .glass-nav {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+  .arcade-badge-logo {
+    width: 28px;
+    height: 28px;
+    font-size: 0.85rem;
+    border-radius: 0.5rem;
+  }
+  .arcade-mode-pills {
+    padding: 2px;
+  }
+  .arcade-mode-pills .arcade-pill {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.85rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .arcade-btn-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 0.55rem;
+    font-size: 0.95rem;
+  }
+  #nav-btn-import {
+    width: 32px;
+    height: 32px;
+    padding: 0 !important;
+    border-radius: 0.55rem;
+  }
 }
 
 /* Glass Card & Cards */
@@ -247,7 +298,19 @@ body {
   border: 3px solid #1e2433;
   box-shadow: 0 15px 35px rgba(0, 0, 0, 0.35);
   user-select: none;
-  touch-action: manipulation;
+  touch-action: none;
+}
+
+@media (min-width: 992px) {
+  .board-container {
+    max-width: min(680px, calc(100vh - 210px));
+  }
+}
+
+@media (min-width: 1400px) {
+  .board-container {
+    max-width: min(720px, calc(100vh - 190px));
+  }
 }
 
 [data-bs-theme="light"] .board-container {
@@ -292,17 +355,39 @@ body {
   box-shadow: inset 0 0 0 3px #fbbf24;
 }
 
-.piece-img[draggable="true"] {
+.board-container.is-interactive .board-square.has-movable-piece {
   cursor: grab;
 }
 
-.piece-img[draggable="true"]:active {
-  cursor: grabbing;
+.board-container.is-interactive .board-square.has-movable-piece:active,
+body.board-is-dragging,
+body.board-is-dragging * {
+  cursor: grabbing !important;
 }
 
 .piece-img.is-dragging {
-  opacity: 0.35;
-  transform: scale(1.08);
+  opacity: 0.22;
+}
+
+.board-floating-piece {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 99999;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.board-floating-piece img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.5));
+  transform: scale(1.12);
+  transition: transform 0.08s ease-out;
 }
 
 .board-player-bar {
@@ -320,6 +405,104 @@ body {
   border: 1px solid var(--arcade-border);
   border-radius: 0.7rem;
   min-height: 36px;
+}
+
+@media (min-width: 992px) {
+  .board-player-bar {
+    max-width: min(680px, calc(100vh - 210px));
+  }
+}
+
+@media (min-width: 1400px) {
+  .board-player-bar {
+    max-width: min(720px, calc(100vh - 190px));
+  }
+}
+
+/* ==========================================================================
+   Review Mode Dedicated Chessboard & Controls Sizing
+   Makes the board compact enough on desktop/laptop viewports so the move
+   notation strip, step navigation buttons, eval bar, and board are all
+   100% visible on screen without requiring vertical scrolling.
+   ========================================================================== */
+.review-board-column-inner {
+  --review-board-size: min(440px, calc(100vw - 56px), calc(100vh - 280px));
+  --eval-bar-width: 26px;
+  --board-gap: 8px;
+  width: 100%;
+  max-width: calc(var(--review-board-size) + var(--eval-bar-width) + var(--board-gap));
+  margin: 0 auto;
+}
+
+#review-board-mount {
+  width: 100%;
+}
+
+#review-board-mount .board-container {
+  width: 100%;
+  max-width: var(--review-board-size) !important;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.28);
+}
+
+#review-board-mount .board-player-bar {
+  width: 100%;
+  max-width: var(--review-board-size) !important;
+  margin: 0.15rem auto;
+  padding: 0.22rem 0.55rem;
+  min-height: 32px;
+  font-size: 0.8rem;
+}
+
+#review-board-mount .captured-piece-img {
+  width: 18px;
+  height: 18px;
+}
+
+.review-board-column-inner #eval-bar.eval-bar-wrapper {
+  width: var(--eval-bar-width);
+  min-width: var(--eval-bar-width);
+  min-height: 180px;
+}
+
+.review-board-column-inner .arcade-step-btn-lg {
+  height: 38px;
+  font-size: 0.85rem;
+}
+
+.review-board-column-inner .arcade-step-btn-sm {
+  height: 38px;
+  width: 38px;
+}
+
+#review-move-strip,
+#review-nav-controls {
+  min-height: 44px;
+}
+
+@media (min-width: 768px) {
+  .review-board-column-inner {
+    --review-board-size: min(450px, calc(100vh - 275px));
+    --eval-bar-width: 30px;
+    --board-gap: 10px;
+  }
+}
+
+@media (min-width: 992px) {
+  .review-board-column-inner {
+    --review-board-size: min(465px, calc(100vh - 270px));
+    --eval-bar-width: 30px;
+    --board-gap: 10px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .review-board-column-inner {
+    --review-board-size: min(490px, calc(100vh - 265px));
+    --eval-bar-width: 32px;
+    --board-gap: 10px;
+  }
 }
 
 .board-captured-pieces {
@@ -430,7 +613,7 @@ body {
   position: absolute;
   top: -6px;
   right: -6px;
-  z-index: 20;
+  z-index: 40;
   display: flex;
   align-items: center;
   gap: 3px;
@@ -447,6 +630,10 @@ body {
   animation: badgePop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+.board-square:has(.comic-square-badge) {
+  z-index: auto;
+}
+
 @keyframes badgePop {
   0% { transform: scale(0.5) rotate(-15deg); opacity: 0; }
   100% { transform: scale(1) rotate(-6deg); opacity: 1; }
@@ -456,7 +643,7 @@ body {
 .eval-bar-wrapper {
   position: relative;
   width: 32px;
-  min-height: 280px;
+  min-height: 180px;
   height: 100%;
   border: 1.5px solid rgba(255, 255, 255, 0.2);
   border-radius: 0.75rem;
@@ -513,12 +700,189 @@ body {
   will-change: transform;
 }
 
-/* Move History Scrollable Container */
+/* Move History Scrollable Container - Compact on Desktop */
 .move-history-container {
-  max-height: 240px;
+  max-height: 180px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+}
+
+@media (min-width: 992px) {
+  .move-history-container {
+    max-height: 185px;
+    min-height: 120px;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .move-history-container {
+    max-height: 220px;
+  }
+}
+
+.move-history-container table td {
+  padding: 0.22rem 0.45rem !important;
+  font-size: 12.5px;
+}
+
+.mini-move-badge {
+  width: 19px !important;
+  height: 19px !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+}
+
+.mini-move-badge.multi-char {
+  font-size: 8.5px !important;
+  letter-spacing: -0.6px !important;
+}
+
+/* Secondary Information Arcade Accordion */
+.arcade-accordion .accordion-item {
+  background-color: var(--arcade-card);
+  border: 1px solid var(--arcade-border);
+  border-radius: 0.75rem !important;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.arcade-accordion .accordion-header {
+  margin-bottom: 0;
+}
+
+.arcade-accordion .accordion-button {
+  background-color: var(--arcade-card);
+  color: var(--arcade-text);
+  font-weight: 800;
+  font-size: 12px;
+  padding: 0.55rem 0.85rem;
+  box-shadow: none !important;
+  border: none;
+}
+
+.arcade-accordion .accordion-button:not(.collapsed) {
+  background-color: rgba(251, 191, 36, 0.08);
+  color: var(--arcade-gold);
+  border-bottom: 1px solid var(--arcade-border);
+}
+
+[data-bs-theme="light"] .arcade-accordion .accordion-button:not(.collapsed) {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+}
+
+.arcade-accordion .accordion-button::after {
+  background-size: 0.85rem;
+  transition: transform 0.2s ease-in-out;
+}
+
+[data-bs-theme="dark"] .arcade-accordion .accordion-button::after {
+  filter: invert(1) brightness(1.5);
+}
+
+.arcade-accordion .accordion-body {
+  background-color: var(--arcade-card);
+  color: var(--arcade-text);
+  padding: 0.65rem;
+}
+
+/* Glanceable Stats & Chips */
+.glance-chip {
+  padding: 0.25rem 0.55rem;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 999px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+}
+
+.glance-chip.cursor-pointer:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+
+.glance-phase-pill {
+  font-size: 11px;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-weight: 700;
+  background: var(--arcade-card-hover, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--arcade-border);
+}
+
+/* Collapsible Chevron Animation & Hint Text */
+.collapse-chevron {
+  transition: transform 0.2s ease-in-out;
+  display: inline-block;
+}
+
+[data-bs-toggle="collapse"]:not(.collapsed) .collapse-chevron {
+  transform: rotate(180deg);
+}
+
+[data-bs-toggle="collapse"].collapsed .collapse-chevron {
+  transform: rotate(0deg);
+}
+
+.collapse-hint-text::before {
+  content: "(Click to expand)";
+}
+
+[data-bs-toggle="collapse"]:not(.collapsed) .collapse-hint-text::before {
+  content: "(Click to collapse)";
+}
+
+/* Ensure Bootstrap Collapse and Accordion Content is Always Visible When Expanded */
+/* Overrides any Tailwind CSS .collapse { visibility: collapse; } interference */
+.collapse,
+.accordion-collapse,
+.collapsing,
+.collapse.show,
+.arcade-accordion .accordion-collapse,
+.arcade-accordion .accordion-body,
+#collapse-moves-history,
+#collapse-coach-insights,
+#collapse-positional-pillars,
+#collapse-detailed-performance {
+  visibility: visible !important;
+}
+
+.collapse:not(.show) {
+  display: none;
+}
+
+.collapsing {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.35s ease;
+}
+
+.collapse.show {
+  display: block;
+}
+
+/* Coach Insights & Callouts Scrollable Container on Desktop */
+.review-coach-insights-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+@media (min-width: 992px) {
+  .review-coach-insights-scroll {
+    max-height: 280px;
+  }
+}
+
+/* Desktop Full Width Layout (Zero Vertical Scroll) */
+@media (min-width: 992px) {
+  .app-main-container {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
 }
 
 /* Mobile Board Column (Flows naturally without overlapping sticky header) */
@@ -637,6 +1001,40 @@ body {
 .fg-secondary { color: var(--bs-secondary, #94a3b8) !important; }
 .fg-warning { color: var(--bs-warning, #f59e0b) !important; }
 
+/* Custom Bootstrap Grid Decimal Gutters */
+.g-1\.5, .row.g-1\.5 {
+  --bs-gutter-x: 0.375rem;
+  --bs-gutter-y: 0.375rem;
+}
+.gx-1\.5, .row.gx-1\.5 {
+  --bs-gutter-x: 0.375rem;
+}
+.gy-1\.5, .row.gy-1\.5 {
+  --bs-gutter-y: 0.375rem;
+}
+
+.g-2\.5, .row.g-2\.5 {
+  --bs-gutter-x: 0.75rem;
+  --bs-gutter-y: 0.75rem;
+}
+.gx-2\.5, .row.gx-2\.5 {
+  --bs-gutter-x: 0.75rem;
+}
+.gy-2\.5, .row.gy-2\.5 {
+  --bs-gutter-y: 0.75rem;
+}
+
+.g-3\.5, .row.g-3\.5 {
+  --bs-gutter-x: 1.25rem;
+  --bs-gutter-y: 1.25rem;
+}
+.gx-3\.5, .row.gx-3\.5 {
+  --bs-gutter-x: 1.25rem;
+}
+.gy-3\.5, .row.gy-3\.5 {
+  --bs-gutter-y: 1.25rem;
+}
+
 /* Bootstrap 6 Placeholder Wave Animation */
 .placeholder-wave {
   mask-image: linear-gradient(130deg, #000 55%, rgba(0, 0, 0, 0.8) 75%, #000 95%);
@@ -662,12 +1060,17 @@ body {
   align-items: center;
   justify-content: center;
   padding: 1rem;
+  overflow-x: hidden;
   animation: fadeIn 0.25s ease-out;
 }
 
 .game-over-dialog {
-  max-width: 440px;
+  max-width: 460px;
   width: 100%;
+  max-height: min(94vh, 760px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
   border-radius: 1.5rem !important;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
   animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -684,16 +1087,222 @@ body {
   align-items: center;
   justify-content: center;
   padding: 1rem;
+  overflow-x: hidden;
   animation: fadeIn 0.25s ease-out;
 }
 
 .why-dialog {
   animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  max-height: min(93vh, 840px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* ==========================================================================
+   Pretty & Clean Scrollbars (Modals, Dialogs, and Global)
+   ========================================================================== */
+
+/* Prevent double scrollbars & background scrolling when ANY modal is open */
+body.modal-open {
+  overflow: hidden !important;
+}
+
+/* Clean, modern scrollbars for all modals, dialogs, and their scrollable children */
+.why-dialog,
+.game-over-dialog,
+.modal,
+.modal-dialog,
+.modal-content,
+.modal-body,
+.why-modal-backdrop,
+.game-over-modal-backdrop,
+.pretty-scrollbar,
+.custom-scrollbar,
+.move-history-container,
+.review-coach-insights-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  overscroll-behavior: contain;
+}
+
+/* Any scrollable container inside any modal */
+.why-dialog *,
+.modal-content *,
+.game-over-dialog * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Chromium / WebKit custom scrollbars */
+.why-dialog::-webkit-scrollbar,
+.game-over-dialog::-webkit-scrollbar,
+.modal::-webkit-scrollbar,
+.modal-dialog::-webkit-scrollbar,
+.modal-content::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar,
+.why-modal-backdrop::-webkit-scrollbar,
+.game-over-modal-backdrop::-webkit-scrollbar,
+.pretty-scrollbar::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar,
+.move-history-container::-webkit-scrollbar,
+.review-coach-insights-scroll::-webkit-scrollbar,
+.why-dialog *::-webkit-scrollbar,
+.modal-content *::-webkit-scrollbar,
+.game-over-dialog *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.why-dialog::-webkit-scrollbar-track,
+.game-over-dialog::-webkit-scrollbar-track,
+.modal::-webkit-scrollbar-track,
+.modal-dialog::-webkit-scrollbar-track,
+.modal-content::-webkit-scrollbar-track,
+.modal-body::-webkit-scrollbar-track,
+.why-modal-backdrop::-webkit-scrollbar-track,
+.game-over-modal-backdrop::-webkit-scrollbar-track,
+.pretty-scrollbar::-webkit-scrollbar-track,
+.custom-scrollbar::-webkit-scrollbar-track,
+.move-history-container::-webkit-scrollbar-track,
+.review-coach-insights-scroll::-webkit-scrollbar-track,
+.why-dialog *::-webkit-scrollbar-track,
+.modal-content *::-webkit-scrollbar-track,
+.game-over-dialog *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.why-dialog::-webkit-scrollbar-thumb,
+.game-over-dialog::-webkit-scrollbar-thumb,
+.modal::-webkit-scrollbar-thumb,
+.modal-dialog::-webkit-scrollbar-thumb,
+.modal-content::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb,
+.why-modal-backdrop::-webkit-scrollbar-thumb,
+.game-over-modal-backdrop::-webkit-scrollbar-thumb,
+.pretty-scrollbar::-webkit-scrollbar-thumb,
+.custom-scrollbar::-webkit-scrollbar-thumb,
+.move-history-container::-webkit-scrollbar-thumb,
+.review-coach-insights-scroll::-webkit-scrollbar-thumb,
+.why-dialog *::-webkit-scrollbar-thumb,
+.modal-content *::-webkit-scrollbar-thumb,
+.game-over-dialog *::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.why-dialog::-webkit-scrollbar-thumb:hover,
+.game-over-dialog::-webkit-scrollbar-thumb:hover,
+.modal::-webkit-scrollbar-thumb:hover,
+.modal-dialog::-webkit-scrollbar-thumb:hover,
+.modal-content::-webkit-scrollbar-thumb:hover,
+.modal-body::-webkit-scrollbar-thumb:hover,
+.why-modal-backdrop::-webkit-scrollbar-thumb:hover,
+.game-over-modal-backdrop::-webkit-scrollbar-thumb:hover,
+.pretty-scrollbar::-webkit-scrollbar-thumb:hover,
+.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+.move-history-container::-webkit-scrollbar-thumb:hover,
+.review-coach-insights-scroll::-webkit-scrollbar-thumb:hover,
+.why-dialog *::-webkit-scrollbar-thumb:hover,
+.modal-content *::-webkit-scrollbar-thumb:hover,
+.game-over-dialog *::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+.why-dialog::-webkit-scrollbar-thumb:active,
+.game-over-dialog::-webkit-scrollbar-thumb:active,
+.modal::-webkit-scrollbar-thumb:active,
+.pretty-scrollbar::-webkit-scrollbar-thumb:active,
+.why-dialog *::-webkit-scrollbar-thumb:active,
+.modal-content *::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
+}
+
+/* Eliminate arrows and buttons */
+.why-dialog::-webkit-scrollbar-button,
+.game-over-dialog::-webkit-scrollbar-button,
+.modal::-webkit-scrollbar-button,
+.modal-dialog::-webkit-scrollbar-button,
+.modal-content::-webkit-scrollbar-button,
+.modal-body::-webkit-scrollbar-button,
+.why-modal-backdrop::-webkit-scrollbar-button,
+.game-over-modal-backdrop::-webkit-scrollbar-button,
+.pretty-scrollbar::-webkit-scrollbar-button,
+.custom-scrollbar::-webkit-scrollbar-button,
+.move-history-container::-webkit-scrollbar-button,
+.review-coach-insights-scroll::-webkit-scrollbar-button,
+.why-dialog *::-webkit-scrollbar-button,
+.modal-content *::-webkit-scrollbar-button,
+.game-over-dialog *::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.why-dialog::-webkit-scrollbar-corner,
+.game-over-dialog::-webkit-scrollbar-corner,
+.modal::-webkit-scrollbar-corner,
+.modal-content::-webkit-scrollbar-corner,
+.modal-body::-webkit-scrollbar-corner,
+.why-modal-backdrop::-webkit-scrollbar-corner,
+.game-over-modal-backdrop::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Zero Scrollbar utility ("or none") - completely hides scrollbars while retaining full scroll functionality */
+.scrollbar-none,
+.no-scrollbar,
+[data-scrollbar="none"] {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+.scrollbar-none::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar,
+[data-scrollbar="none"]::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Global App Scrollbars */
+body {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+body::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+body::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* Modernized Imported Game Cards */
@@ -723,6 +1332,30 @@ body {
 
 .imported-game-card.card-draw {
   border-left: 4px solid #94a3b8;
+}
+
+/* Saved Games List Cards */
+.saved-game-card {
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.saved-game-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(251, 191, 36, 0.6) !important;
+  box-shadow: 0 10px 24px -5px rgba(0, 0, 0, 0.18);
+}
+
+.saved-game-card .btn-delete-saved-game {
+  opacity: 0.85;
+  transition: all 0.15s ease;
+}
+
+.saved-game-card:hover .btn-delete-saved-game {
+  opacity: 1;
+}
+
+.saved-game-card.card-bot-match:hover {
+  border-color: rgba(139, 92, 246, 0.6) !important;
 }
 
 /* ==========================================================================
@@ -885,16 +1518,77 @@ input[type="range"].arcade-range {
   animation: pulseDotAnim 1.6s infinite cubic-bezier(0.66, 0, 0, 1);
 }
 
-/* All-Bots Tier Grid Cards */
+/* All-Bots Tier Grid Cards & Scrolling Enhancements */
+[id^="tier-sec-"] {
+  scroll-margin-top: 116px;
+}
+
+#bot-view {
+  width: 100%;
+  min-height: 100%;
+}
+
+.bot-tier-sticky-bar {
+  background: rgba(248, 250, 252, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 999px;
+  max-width: fit-content;
+  margin: 0 auto;
+  border: 1px solid var(--arcade-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
+}
+
+[data-bs-theme="dark"] .bot-tier-sticky-bar {
+  background: rgba(19, 23, 34, 0.92);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.bot-tier-nav-btn {
+  border: 1px solid var(--arcade-border);
+  background: transparent;
+  color: var(--arcade-text-muted);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.bot-tier-nav-btn:hover {
+  color: var(--arcade-text);
+  border-color: #fbbf24;
+}
+
+.bot-tier-nav-btn.active {
+  background: #fbbf24 !important;
+  color: #0b0e14 !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.35);
+}
+
 .bot-select-card {
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
   border: 1px solid var(--arcade-border);
+  touch-action: pan-y;
+  user-select: none;
+  cursor: pointer;
 }
 
 .bot-select-card:hover {
   transform: translateY(-3px) scale(1.02);
   border-color: #fbbf24 !important;
   box-shadow: 0 8px 24px rgba(251, 191, 36, 0.22);
+}
+
+.bot-select-card:focus-visible {
+  outline: none;
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.45);
+}
+
+.bot-select-card:active {
+  transform: translateY(0px) scale(0.99);
 }
 
 .bot-select-card .bot-avatar-emoji {
@@ -1028,6 +1722,13 @@ input[type="range"].arcade-range {
   box-shadow: 0 0 10px rgba(6, 182, 212, 0.4);
 }
 
+.xray-toggle-btn.active-best {
+  background: #10b981;
+  color: #ffffff !important;
+  border-color: #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+}
+
 .xray-hanging-ring {
   position: absolute;
   inset: 2px;
@@ -1062,6 +1763,15 @@ input[type="range"].arcade-range {
   white-space: nowrap;
   letter-spacing: 0.2px;
   line-height: 1.1;
+  pointer-events: auto;
+  cursor: help;
+  z-index: 30;
+  transition: transform 0.12s ease;
+}
+
+.xray-hanging-tag:hover,
+.xray-loose-tag:hover {
+  transform: translateX(-50%) scale(1.18);
 }
 
 .xray-hanging-tag {
@@ -1105,10 +1815,527 @@ input[type="range"].arcade-range {
   transition: width 0.25s ease;
 }
 
+.positional-pillar-card {
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+  user-select: none;
+}
+
+.positional-pillar-card:hover {
+  transform: translateY(-1.5px);
+  border-color: rgba(56, 189, 248, 0.5) !important;
+  background: var(--arcade-card-hover) !important;
+  box-shadow: 0 4px 14px -3px rgba(0, 0, 0, 0.25);
+}
+
+.positional-pillar-card:active {
+  transform: translateY(0);
+}
+
+.pillar-guide-highlight {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35), 0 8px 24px -4px rgba(0, 0, 0, 0.3) !important;
+}
+
 .coach-plan-card {
   border-left: 4px solid #f59e0b !important;
   background: linear-gradient(135deg, rgba(245, 158, 11, 0.06) 0%, var(--arcade-card) 100%);
 }
+
+/* ==========================================================================
+   Chess IQ Global Floating Tooltip & Info Popups
+   ========================================================================== */
+#iq-global-tooltip {
+  position: absolute;
+  z-index: 99999;
+  max-width: 320px;
+  width: max-content;
+  pointer-events: none;
+  background: var(--arcade-card, #131722);
+  border: 1.5px solid var(--arcade-border, #2d3748);
+  border-radius: 0.85rem;
+  padding: 0.65rem 0.8rem;
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(251, 191, 36, 0.15);
+  animation: iqTooltipFadeIn 0.14s ease-out;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+[data-bs-theme="light"] #iq-global-tooltip {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 16px 32px -4px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(245, 158, 11, 0.2);
+}
+
+@keyframes iqTooltipFadeIn {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.iq-tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--arcade-border, rgba(255, 255, 255, 0.1));
+}
+
+.iq-tooltip-badge {
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(251, 191, 36, 0.16);
+  color: #f59e0b;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  flex-shrink: 0;
+}
+
+.iq-tooltip-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: inherit;
+}
+
+.iq-tooltip-shortcut {
+  font-size: 9px;
+  font-family: var(--bs-font-monospace);
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.15);
+  padding: 1px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.iq-tooltip-body {
+  font-size: 11px;
+  line-height: 1.4;
+  color: inherit;
+}
+
+.iq-tooltip-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.iq-tooltip-label {
+  font-size: 9.5px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.iq-tooltip-text {
+  font-weight: 500;
+  color: var(--bs-body-color, #e2e8f0);
+}
+
+[data-bs-theme="light"] .iq-tooltip-text {
+  color: #1e293b;
+}
+
+.iq-tooltip-arrow {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border: 1.5px solid var(--arcade-border, #2d3748);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.iq-tooltip-arrow.arrow-bottom {
+  bottom: -6px;
+  border-top: none;
+  border-left: none;
+}
+
+.iq-tooltip-arrow.arrow-top {
+  top: -6px;
+  border-bottom: none;
+  border-right: none;
+}
+
+/* Info Icon Button on Data Cards */
+.iq-info-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  font-size: 10.5px;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.35rem;
+  transition: all 0.15s ease;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.iq-info-icon-btn:hover,
+.iq-info-icon-btn:focus-visible {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.18);
+  border-color: #f59e0b;
+  transform: scale(1.12);
+  outline: none;
+}
+
+/* ==========================================================================
+   High-Contrast Typography, Badges, Elo Ratings & Match Overview
+   ========================================================================== */
+
+/* Universal High-Contrast Color Utility Overrides */
+.text-cyan {
+  color: #38bdf8 !important;
+}
+[data-bs-theme="light"] .text-cyan {
+  color: #0284c7 !important;
+}
+
+.text-emerald {
+  color: #10b981 !important;
+}
+[data-bs-theme="light"] .text-emerald {
+  color: #059669 !important;
+}
+
+/* Match Overview Section Header */
+.match-overview-pill {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+[data-bs-theme="light"] .match-overview-pill {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+/* Player PVP Card in Match Overview */
+.player-pvp-card {
+  background: var(--arcade-card-hover, rgba(0,0,0,0.03));
+  border: 1px solid var(--arcade-border);
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.player-pvp-card:hover {
+  border-color: rgba(251, 191, 36, 0.4);
+}
+.player-pvp-card.is-user {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.06) 0%, transparent 100%);
+}
+
+/* Match Stat Badges (Elo, Perf, Acc) */
+.match-stat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2.5px 7px;
+  border-radius: 6px;
+  font-family: var(--bs-font-monospace);
+  white-space: nowrap;
+  line-height: 1.25;
+  transition: transform 0.15s ease;
+}
+.match-stat-badge .stat-num {
+  font-weight: 900;
+}
+.match-stat-badge .stat-lbl {
+  font-weight: 600;
+  opacity: 0.85;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+/* Official Elo Badge */
+.match-elo-badge {
+  background: rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+[data-bs-theme="light"] .match-elo-badge {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+
+/* Performance Elo Badge */
+.match-perf-badge {
+  background: rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+}
+[data-bs-theme="light"] .match-perf-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #7dd3fc;
+}
+
+/* Accuracy Badge */
+.match-acc-badge {
+  background: rgba(52, 211, 153, 0.18);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.45);
+}
+[data-bs-theme="light"] .match-acc-badge {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+
+/* Match Result Badge in Center */
+.match-result-badge {
+  font-family: var(--bs-font-monospace);
+  font-size: 13px;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+.match-result-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.75px;
+  color: var(--arcade-text-muted);
+  background: rgba(148, 163, 184, 0.15);
+  padding: 1.5px 6px;
+  border-radius: 4px;
+}
+
+/* Phase Elo Rating Chip (Opening, Middle, Endgame) */
+.phase-elo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: var(--bs-font-monospace);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  line-height: 1.2;
+}
+[data-bs-theme="light"] .phase-elo-chip {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+/* Move Quality Breakdown Rows & Badges */
+.move-quality-row {
+  transition: background-color 0.15s ease;
+  border-radius: 8px;
+}
+.move-quality-row.has-moves {
+  background: rgba(255, 255, 255, 0.04);
+}
+[data-bs-theme="light"] .move-quality-row.has-moves {
+  background: rgba(0, 0, 0, 0.03);
+}
+.move-quality-row.no-moves {
+  background: transparent;
+  opacity: 0.85;
+}
+.move-quality-row:hover {
+  background: var(--arcade-card-hover) !important;
+}
+
+.move-quality-badge {
+  font-size: 12px;
+  font-weight: 800;
+  min-width: 130px;
+  height: 26px;
+  padding: 3px 10px;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  letter-spacing: -0.01em;
+}
+[data-bs-theme="dark"] .move-quality-badge {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.move-count-zero {
+  color: var(--arcade-text-muted) !important;
+  opacity: 0.5;
+}
+
+/* Active Move Strip Badges */
+.eval-chip-badge {
+  background: rgba(148, 163, 184, 0.18);
+  color: var(--arcade-text);
+  border: 1px solid var(--arcade-border);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.best-move-chip {
+  background: #059669;
+  color: #ffffff !important;
+  border: 1px solid #047857;
+  font-size: 11.5px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
+}
+
+.second-move-chip {
+  background: rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  font-size: 11.5px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+[data-bs-theme="light"] .second-move-chip {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #7dd3fc;
+}
+
+/* Move Table Mini Badge */
+.mini-move-badge {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+[data-bs-theme="dark"] .mini-move-badge {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Saved Game Elo Badge */
+.saved-game-elo-badge {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--arcade-text);
+  border: 1px solid var(--arcade-border);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+/* Comprehensive Game Report Modal & Print Styles */
+.full-report-dialog {
+  max-width: 980px !important;
+  width: 100% !important;
+  max-height: min(94vh, 920px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.report-metric-card {
+  background: var(--arcade-card);
+  border: 1px solid var(--arcade-border);
+  border-radius: 0.85rem;
+  padding: 0.85rem;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.report-metric-card:hover {
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.report-phase-card {
+  background: var(--arcade-card);
+  border: 1px solid var(--arcade-border);
+  border-radius: 0.85rem;
+  padding: 0.75rem;
+  height: 100%;
+}
+
+.report-blunder-row {
+  background: var(--arcade-card);
+  border: 1px solid var(--arcade-border);
+  border-radius: 0.65rem;
+  padding: 0.6rem 0.85rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.report-blunder-row:hover {
+  background-color: var(--arcade-card-hover, rgba(0, 0, 0, 0.04));
+  border-color: rgba(244, 63, 94, 0.4);
+}
+
+.report-dual-bar-track {
+  height: 8px;
+  background: var(--arcade-border, rgba(0, 0, 0, 0.1));
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+}
+
+.report-dual-bar-white {
+  background: #fbbf24;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.report-dual-bar-black {
+  background: #06b6d4;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #review-detailed-modal, #review-detailed-modal * {
+    visibility: visible !important;
+  }
+  #review-detailed-modal {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-height: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    backdrop-filter: none !important;
+  }
+  .full-report-dialog, .why-dialog {
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
 
 
 

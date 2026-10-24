@@ -13,8 +13,6 @@ const RANKS_REV = [...RANKS].reverse();
 
 const THEMES = {
   green: { light: '#ebecd0', dark: '#739552' },
-  wood: { light: '#f0d9b5', dark: '#b58863' },
-  icy: { light: '#dee3e6', dark: '#587a9f' },
 };
 
 function getCapturedPiecesAndDiff(fen) {
@@ -73,7 +71,7 @@ class Chessboard {
     this.container = containerEl;
     this.fen = options.fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
     this.orientation = options.orientation || 'w';
-    this.theme = options.theme || 'green';
+    this.theme = 'green';
     this.interactive = options.interactive || false;
     this.showPlayerBars = options.showPlayerBars !== undefined ? options.showPlayerBars : true;
     this.whiteName = options.whiteName || 'White';
@@ -86,6 +84,8 @@ class Chessboard {
     this.threatMove = options.threatMove || null; // { from, to }
     this.badge = options.badge || null; // { square, classification }
     this.visionOverlay = options.visionOverlay || 'none'; // 'none' | 'hanging' | 'heatmap'
+    this.showBestMove = options.showBestMove !== undefined ? options.showBestMove : false;
+    this.showLoosePieces = options.showLoosePieces !== undefined ? options.showLoosePieces : false;
 
     this.selectedSquare = null;
     this.possibleDests = [];
@@ -94,12 +94,102 @@ class Chessboard {
     this.userHighlights = new Set();
     this.rightClickStartSquare = null;
 
+    this.dragState = null;
+    this.skipNextMoveAnimation = false;
+    this.activePointerMoveHandler = null;
+    this.activePointerUpHandler = null;
+    this.activeKeyDownHandler = null;
+
     this.render();
+  }
+
+  cleanupDrag() {
+    if (this.dragState) {
+      if (this.dragState.dragEl && this.dragState.dragEl.parentNode) {
+        this.dragState.dragEl.parentNode.removeChild(this.dragState.dragEl);
+      }
+      if (this.dragState.sourceImg) {
+        this.dragState.sourceImg.classList.remove('is-dragging');
+      }
+      if (this.dragState.hoverSquare && this.container) {
+        const curEl = this.container.querySelector(`.board-square[data-square="${this.dragState.hoverSquare}"]`);
+        if (curEl) curEl.classList.remove('drag-over');
+      }
+      this.dragState = null;
+    }
+    document.body.classList.remove('board-is-dragging');
+    if (this.activePointerMoveHandler) {
+      window.removeEventListener('pointermove', this.activePointerMoveHandler);
+      this.activePointerMoveHandler = null;
+    }
+    if (this.activePointerUpHandler) {
+      window.removeEventListener('pointerup', this.activePointerUpHandler);
+      window.removeEventListener('pointercancel', this.activePointerUpHandler);
+      this.activePointerUpHandler = null;
+    }
+    if (this.activeKeyDownHandler) {
+      window.removeEventListener('keydown', this.activeKeyDownHandler);
+      this.activeKeyDownHandler = null;
+    }
+  }
+
+  getSquareFromCoords(clientX, clientY) {
+    if (!this.grid) return null;
+    const rect = this.grid.getBoundingClientRect();
+    if (
+      clientX < rect.left ||
+      clientX > rect.right ||
+      clientY < rect.top ||
+      clientY > rect.bottom
+    ) {
+      return null;
+    }
+    const x = Math.floor(((clientX - rect.left) / rect.width) * 8);
+    const y = Math.floor(((clientY - rect.top) / rect.height) * 8);
+    if (x < 0 || x > 7 || y < 0 || y > 7) return null;
+
+    const isWhiteOrientation = this.orientation === 'w';
+    const files = isWhiteOrientation ? FILES : FILES_REV;
+    const ranks = isWhiteOrientation ? RANKS : RANKS_REV;
+
+    return `${files[x]}${ranks[y]}`;
+  }
+
+  updateSelectionHighlights() {
+    if (!this.container) return;
+    const squares = this.container.querySelectorAll('.board-square');
+    squares.forEach((sq) => {
+      sq.classList.remove('selected', 'capture-target', 'drag-over');
+      const dot = sq.querySelector('.move-dot');
+      if (dot) dot.remove();
+    });
+
+    if (this.selectedSquare) {
+      const selectedEl = this.container.querySelector(`.board-square[data-square="${this.selectedSquare}"]`);
+      if (selectedEl && !selectedEl.classList.contains('in-check')) {
+        selectedEl.classList.add('selected');
+      }
+    }
+
+    if (this.possibleDests && this.possibleDests.length > 0) {
+      this.possibleDests.forEach((destSq) => {
+        const destEl = this.container.querySelector(`.board-square[data-square="${destSq}"]`);
+        if (!destEl) return;
+        const hasPiece = destEl.querySelector('.piece-img');
+        if (hasPiece) {
+          destEl.classList.add('capture-target');
+        } else {
+          const dot = document.createElement('div');
+          dot.className = 'move-dot';
+          destEl.appendChild(dot);
+        }
+      });
+    }
   }
 
   setProps(newProps) {
     let shouldRerender = false;
-    ['fen', 'orientation', 'theme', 'interactive', 'showPlayerBars', 'whiteName', 'blackName', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'secondBestMove', 'threatMove', 'badge', 'visionOverlay'].forEach((k) => {
+    ['fen', 'orientation', 'theme', 'interactive', 'showPlayerBars', 'whiteName', 'blackName', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'secondBestMove', 'threatMove', 'badge', 'visionOverlay', 'showBestMove', 'showLoosePieces'].forEach((k) => {
       if (newProps[k] !== undefined && newProps[k] !== this[k]) {
         this[k] = newProps[k];
         shouldRerender = true;
@@ -142,7 +232,7 @@ class Chessboard {
       if (this.selectedSquare === square) {
         this.selectedSquare = null;
         this.possibleDests = [];
-        this.render();
+        this.updateSelectionHighlights();
         return;
       }
 
@@ -150,6 +240,7 @@ class Chessboard {
         const from = this.selectedSquare;
         this.selectedSquare = null;
         this.possibleDests = [];
+        this.updateSelectionHighlights();
         if (this.onMove) {
           this.onMove(from, square);
         }
@@ -158,13 +249,23 @@ class Chessboard {
     }
 
     if (piece) {
-      this.selectedSquare = square;
-      this.possibleDests = this.legalMovesFrom ? this.legalMovesFrom(square) : [];
-      this.render();
+      const turn = (this.fen || '').split(' ')[1] || 'w';
+      const pieceColor = piece === piece.toUpperCase() ? 'w' : 'b';
+      const dests = this.legalMovesFrom ? this.legalMovesFrom(square) : [];
+
+      if (dests.length > 0 || pieceColor === turn || !this.legalMovesFrom) {
+        this.selectedSquare = square;
+        this.possibleDests = dests;
+        this.updateSelectionHighlights();
+      } else {
+        this.selectedSquare = null;
+        this.possibleDests = [];
+        this.updateSelectionHighlights();
+      }
     } else {
       this.selectedSquare = null;
       this.possibleDests = [];
-      this.render();
+      this.updateSelectionHighlights();
     }
   }
 
@@ -219,13 +320,15 @@ class Chessboard {
   }
 
   render() {
+    this.cleanupDrag();
     this.container.innerHTML = '';
 
     const board = this.parseFen(this.fen);
+    const turn = (this.fen || '').split(' ')[1] || 'w';
     const isWhiteOrientation = this.orientation === 'w';
     const files = isWhiteOrientation ? FILES : FILES_REV;
     const ranks = isWhiteOrientation ? RANKS : RANKS_REV;
-    const themeColors = THEMES[this.theme] || THEMES.green;
+    const themeColors = THEMES.green;
     const pendingAnimations = [];
 
     let checkSquare = null;
@@ -247,9 +350,8 @@ class Chessboard {
     } catch {}
 
     const capturedData = getCapturedPiecesAndDiff(this.fen);
-    const visionData = (this.visionOverlay && this.visionOverlay !== 'none' && typeof analyzeBoardVision === 'function')
-      ? analyzeBoardVision(this.fen)
-      : null;
+    const needVision = (this.showLoosePieces || (this.visionOverlay && this.visionOverlay !== 'none')) && typeof analyzeBoardVision === 'function';
+    const visionData = needVision ? analyzeBoardVision(this.fen) : null;
 
     const outerWrapper = document.createElement('div');
     outerWrapper.className = 'd-flex flex-column align-items-center w-100';
@@ -262,10 +364,12 @@ class Chessboard {
     }
 
     const boardWrapper = document.createElement('div');
-    boardWrapper.className = 'board-container';
+    boardWrapper.className = `board-container${this.interactive ? ' is-interactive' : ''}`;
+    this.boardWrapper = boardWrapper;
 
     const grid = document.createElement('div');
     grid.className = 'board-grid';
+    this.grid = grid;
 
     ranks.forEach((rank, rIdx) => {
       files.forEach((file, fIdx) => {
@@ -276,6 +380,11 @@ class Chessboard {
         const sqDiv = document.createElement('div');
         sqDiv.className = 'board-square';
         sqDiv.dataset.square = square;
+
+        const origR = isWhiteOrientation ? rIdx : 7 - rIdx;
+        const origF = isWhiteOrientation ? fIdx : 7 - fIdx;
+        const pieceChar = board[origR] ? board[origR][origF] : null;
+        sqDiv.dataset.piece = pieceChar || '';
 
         const isLastMove = this.lastMove && (this.lastMove.from === square || this.lastMove.to === square);
         const isSelected = this.selectedSquare === square;
@@ -310,63 +419,48 @@ class Chessboard {
           sqDiv.appendChild(rankLabel);
         }
 
-        const origR = isWhiteOrientation ? rIdx : 7 - rIdx;
-        const origF = isWhiteOrientation ? fIdx : 7 - fIdx;
-        const pieceChar = board[origR] ? board[origR][origF] : null;
-
         if (pieceChar) {
           const colorCode = pieceChar === pieceChar.toUpperCase() ? 'w' : 'b';
           const typeCode = pieceChar.toUpperCase();
           const pieceKey = `${colorCode}${typeCode}`;
           const pieceSrc = INLINE_PIECE_DATA_URLS[pieceKey] || `./pieces/${pieceKey}.svg`;
 
+          const isCurrentTurn = colorCode === turn;
+          const isMovable = this.interactive && (isCurrentTurn || !this.legalMovesFrom);
+          if (isMovable) {
+            sqDiv.classList.add('has-movable-piece');
+          }
+
           const img = document.createElement('img');
           img.src = pieceSrc;
           img.className = 'piece-img';
           img.alt = `${colorCode === 'w' ? 'White' : 'Black'} ${typeCode}`;
-
-          if (this.interactive) {
-            img.draggable = true;
-
-            img.addEventListener('dragstart', (e) => {
-              if (!this.interactive) {
-                e.preventDefault();
-                return;
-              }
-              this.selectedSquare = square;
-              this.possibleDests = this.legalMovesFrom ? this.legalMovesFrom(square) : [];
-              this.render();
-
-              e.dataTransfer.setData('text/plain', square);
-              e.dataTransfer.effectAllowed = 'move';
-              img.classList.add('is-dragging');
-            });
-
-            img.addEventListener('dragend', () => {
-              img.classList.remove('is-dragging');
-              this.container.querySelectorAll('.board-square').forEach((s) => s.classList.remove('drag-over'));
-            });
-          } else {
-            img.draggable = false;
-          }
+          img.draggable = false;
+          img.addEventListener('dragstart', (e) => e.preventDefault());
 
           if (this.lastMove && this.lastMove.to === square && this.lastMove.from) {
             const currentMoveKey = `${this.lastMove.from}-${this.lastMove.to}-${this.fen}`;
             if (this.lastAnimatedMoveKey !== currentMoveKey) {
-              const fromF = this.lastMove.from[0];
-              const fromR = this.lastMove.from[1];
-              const fromX = files.indexOf(fromF);
-              const fromY = ranks.indexOf(fromR);
-              const toX = fIdx;
-              const toY = rIdx;
-              if (fromX !== -1 && fromY !== -1) {
-                const deltaX = (fromX - toX) * 100;
-                const deltaY = (fromY - toY) * 100;
-                img.style.transform = `translate(${deltaX}%, ${deltaY}%)`;
-                img.style.transition = 'none';
-                img.style.zIndex = '20';
-                this.lastAnimatedMoveKey = currentMoveKey;
-                pendingAnimations.push(img);
+              this.lastAnimatedMoveKey = currentMoveKey;
+              if (this.skipNextMoveAnimation) {
+                this.skipNextMoveAnimation = false;
+                img.classList.add('piece-landing-pop');
+                setTimeout(() => img.classList.remove('piece-landing-pop'), 200);
+              } else {
+                const fromF = this.lastMove.from[0];
+                const fromR = this.lastMove.from[1];
+                const fromX = files.indexOf(fromF);
+                const fromY = ranks.indexOf(fromR);
+                const toX = fIdx;
+                const toY = rIdx;
+                if (fromX !== -1 && fromY !== -1) {
+                  const deltaX = (fromX - toX) * 100;
+                  const deltaY = (fromY - toY) * 100;
+                  img.style.transform = `translate(${deltaX}%, ${deltaY}%)`;
+                  img.style.transition = 'none';
+                  img.style.zIndex = '20';
+                  pendingAnimations.push(img);
+                }
               }
             }
           }
@@ -390,26 +484,34 @@ class Chessboard {
           badgeEl.className = 'comic-square-badge';
           badgeEl.style.backgroundColor = comic.bg;
           badgeEl.style.color = comic.text;
+          badgeEl.style.zIndex = '40';
           badgeEl.title = `${comic.term} (${COMIC_DICTIONARY[this.badge.classification]?.standardLabel || ''})`;
           badgeEl.innerHTML = `<span>${comic.symbol}</span><span>${comic.term}</span>`;
           sqDiv.appendChild(badgeEl);
         }
 
         if (visionData) {
-          if (this.visionOverlay === 'hanging') {
+          if (this.showLoosePieces || this.visionOverlay === 'hanging') {
             const pStatus = visionData.pieceStatus[square];
             if (pStatus) {
               const isHanging = pStatus.status === 'hanging';
               const ringEl = document.createElement('div');
               ringEl.className = isHanging ? 'xray-hanging-ring' : 'xray-loose-ring';
-              ringEl.title = pStatus.label;
+              const pieceName = (typeof PIECE_NAME_MAP !== 'undefined' && PIECE_NAME_MAP[pStatus.type]) ? PIECE_NAME_MAP[pStatus.type] : 'Piece';
+              ringEl.setAttribute('data-iq-tip', isHanging ? 'board_piece_hanging' : 'board_piece_loose');
+              ringEl.setAttribute('data-iq-title', isHanging ? `🎯 Hanging ${pieceName} (${square.toUpperCase()})` : `⚠️ Loose ${pieceName} (${square.toUpperCase()})`);
+
               const tagEl = document.createElement('span');
               tagEl.className = isHanging ? 'xray-hanging-tag' : 'xray-loose-tag';
               tagEl.textContent = isHanging ? '🎯 HANGING' : '⚠️ LOOSE';
+              tagEl.setAttribute('data-iq-tip', isHanging ? 'board_piece_hanging' : 'board_piece_loose');
+              tagEl.setAttribute('data-iq-title', isHanging ? `🎯 Hanging ${pieceName} (${square.toUpperCase()})` : `⚠️ Loose ${pieceName} (${square.toUpperCase()})`);
+
               ringEl.appendChild(tagEl);
               sqDiv.appendChild(ringEl);
             }
-          } else if (this.visionOverlay === 'heatmap') {
+          }
+          if (this.visionOverlay === 'heatmap') {
             const ctrl = visionData.squareControl[square];
             if (ctrl && (ctrl.whiteAttackers > 0 || ctrl.blackAttackers > 0)) {
               const heatEl = document.createElement('div');
@@ -430,44 +532,6 @@ class Chessboard {
           }
         }
 
-        if (this.interactive) {
-          sqDiv.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            if (!sqDiv.classList.contains('drag-over')) {
-              sqDiv.classList.add('drag-over');
-            }
-          });
-
-          sqDiv.addEventListener('dragleave', (e) => {
-            if (e.relatedTarget && sqDiv.contains(e.relatedTarget)) return;
-            sqDiv.classList.remove('drag-over');
-          });
-
-          sqDiv.addEventListener('drop', (e) => {
-            e.preventDefault();
-            sqDiv.classList.remove('drag-over');
-            const from = e.dataTransfer.getData('text/plain') || this.selectedSquare;
-            const to = square;
-
-            if (from && to && from !== to && this.possibleDests.includes(to)) {
-              this.selectedSquare = null;
-              this.possibleDests = [];
-              if (this.onMove) {
-                this.onMove(from, to);
-              }
-            } else if (from && from === to) {
-              this.selectedSquare = null;
-              this.possibleDests = [];
-              this.render();
-            }
-          });
-        }
-
-        sqDiv.addEventListener('click', () => {
-          this.handleSquareClick(square, pieceChar);
-        });
-
         grid.appendChild(sqDiv);
       });
     });
@@ -475,21 +539,24 @@ class Chessboard {
     boardWrapper.appendChild(grid);
 
     const svgLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svgLayer.setAttribute('viewBox', '0 0 100 100');
     svgLayer.setAttribute('class', 'position-absolute top-0 start-0 w-100 h-100 pointer-events-none');
     svgLayer.style.pointerEvents = 'none';
-    svgLayer.style.zIndex = '15';
+    svgLayer.style.zIndex = '35';
 
-    if (this.secondBestMove && this.secondBestMove.from && this.secondBestMove.to) {
-      this.drawArrow(svgLayer, this.secondBestMove.from, this.secondBestMove.to, '#10b981', false, 'second-best-move', 2.2);
-    }
-    if (this.bestMove && this.bestMove.from && this.bestMove.to) {
-      this.drawArrow(svgLayer, this.bestMove.from, this.bestMove.to, '#10b981', false, 'best-move', 4.8);
+    if (this.showBestMove !== false) {
+      if (this.secondBestMove && this.secondBestMove.from && this.secondBestMove.to) {
+        this.drawArrow(svgLayer, this.secondBestMove.from, this.secondBestMove.to, '#10b981', false, 'second-best-move', 1.4);
+      }
+      if (this.bestMove && this.bestMove.from && this.bestMove.to) {
+        this.drawArrow(svgLayer, this.bestMove.from, this.bestMove.to, '#10b981', false, 'best-move', 2.4);
+      }
     }
     if (this.threatMove && this.threatMove.from && this.threatMove.to) {
-      this.drawArrow(svgLayer, this.threatMove.from, this.threatMove.to, '#ef4444', true, 'threat-move', 3.5);
+      this.drawArrow(svgLayer, this.threatMove.from, this.threatMove.to, '#ef4444', true, 'threat-move', 1.8);
     }
     this.userArrows.forEach((arr, idx) => {
-      this.drawArrow(svgLayer, arr.from, arr.to, '#f59e0b', false, `user-${idx}`, 3.8);
+      this.drawArrow(svgLayer, arr.from, arr.to, '#f59e0b', false, `user-${idx}`, 2.0);
     });
 
     boardWrapper.appendChild(svgLayer);
@@ -498,14 +565,194 @@ class Chessboard {
       e.preventDefault();
     });
 
-    boardWrapper.addEventListener('mousedown', (e) => {
-      if (e.button === 0) {
+    if (this.interactive) {
+      boardWrapper.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+
         if (this.userArrows.length > 0 || this.userHighlights.size > 0) {
           this.userArrows = [];
           this.userHighlights.clear();
           this.render();
+          return;
         }
-      } else if (e.button === 2) {
+
+        const sqEl = e.target.closest('[data-square]');
+        if (!sqEl) return;
+        const square = sqEl.dataset.square;
+        const pieceChar = sqEl.dataset.piece || null;
+
+        // Destination square click for currently selected piece
+        if (this.selectedSquare && this.possibleDests.includes(square)) {
+          const from = this.selectedSquare;
+          this.selectedSquare = null;
+          this.possibleDests = [];
+          this.updateSelectionHighlights();
+          if (this.onMove) {
+            this.onMove(from, square);
+          }
+          return;
+        }
+
+        const wasAlreadySelected = this.selectedSquare === square;
+
+        const currentTurn = (this.fen || '').split(' ')[1] || 'w';
+        const pieceColor = pieceChar ? (pieceChar === pieceChar.toUpperCase() ? 'w' : 'b') : null;
+        const dests = this.legalMovesFrom ? this.legalMovesFrom(square) : [];
+        const isMovablePiece = pieceChar && (dests.length > 0 || pieceColor === currentTurn || !this.legalMovesFrom);
+
+        if (isMovablePiece) {
+          this.selectedSquare = square;
+          this.possibleDests = dests;
+          this.updateSelectionHighlights();
+
+          this.cleanupDrag();
+          this.dragState = {
+            startX: e.clientX,
+            startY: e.clientY,
+            fromSquare: square,
+            piece: pieceChar,
+            wasAlreadySelected,
+            isDragging: false,
+            dragEl: null,
+            sourceImg: sqEl.querySelector('.piece-img'),
+            hoverSquare: square
+          };
+
+          const onPointerMove = (moveEvt) => {
+            if (!this.dragState) return;
+            const dx = moveEvt.clientX - this.dragState.startX;
+            const dy = moveEvt.clientY - this.dragState.startY;
+            const dist = Math.hypot(dx, dy);
+
+            if (!this.dragState.isDragging && dist > 4) {
+              this.dragState.isDragging = true;
+              document.body.classList.add('board-is-dragging');
+              if (this.dragState.sourceImg) {
+                this.dragState.sourceImg.classList.add('is-dragging');
+              }
+
+              const rect = this.grid ? this.grid.getBoundingClientRect() : this.boardWrapper.getBoundingClientRect();
+              const squareSize = rect.width / 8;
+              const pieceSize = squareSize * 0.95;
+
+              const dragEl = document.createElement('div');
+              dragEl.className = 'board-floating-piece';
+              dragEl.style.width = `${pieceSize}px`;
+              dragEl.style.height = `${pieceSize}px`;
+              dragEl.style.transform = `translate(${moveEvt.clientX - pieceSize / 2}px, ${moveEvt.clientY - pieceSize / 2}px)`;
+
+              const cCode = this.dragState.piece === this.dragState.piece.toUpperCase() ? 'w' : 'b';
+              const tCode = this.dragState.piece.toUpperCase();
+              const pKey = `${cCode}${tCode}`;
+              const pSrc = INLINE_PIECE_DATA_URLS[pKey] || `./pieces/${pKey}.svg`;
+
+              const img = document.createElement('img');
+              img.src = pSrc;
+              img.alt = '';
+              dragEl.appendChild(img);
+
+              document.body.appendChild(dragEl);
+              this.dragState.dragEl = dragEl;
+              this.dragState.pieceSize = pieceSize;
+            }
+
+            if (this.dragState.isDragging && this.dragState.dragEl) {
+              const pieceSize = this.dragState.pieceSize;
+              this.dragState.dragEl.style.transform = `translate(${moveEvt.clientX - pieceSize / 2}px, ${moveEvt.clientY - pieceSize / 2}px)`;
+
+              const currentSquare = this.getSquareFromCoords(moveEvt.clientX, moveEvt.clientY);
+              if (currentSquare !== this.dragState.hoverSquare) {
+                if (this.dragState.hoverSquare) {
+                  const prevEl = this.container.querySelector(`.board-square[data-square="${this.dragState.hoverSquare}"]`);
+                  if (prevEl) prevEl.classList.remove('drag-over');
+                }
+                if (currentSquare) {
+                  const curEl = this.container.querySelector(`.board-square[data-square="${currentSquare}"]`);
+                  if (curEl) curEl.classList.add('drag-over');
+                }
+                this.dragState.hoverSquare = currentSquare;
+              }
+            }
+          };
+
+          const onPointerUp = (upEvt) => {
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('pointercancel', onPointerUp);
+            window.removeEventListener('keydown', onKeyDown);
+            this.activePointerMoveHandler = null;
+            this.activePointerUpHandler = null;
+            this.activeKeyDownHandler = null;
+
+            if (!this.dragState) return;
+
+            const { fromSquare, wasAlreadySelected, isDragging, dragEl, sourceImg, hoverSquare } = this.dragState;
+
+            if (dragEl && dragEl.parentNode) {
+              dragEl.parentNode.removeChild(dragEl);
+            }
+            if (sourceImg) {
+              sourceImg.classList.remove('is-dragging');
+            }
+            if (hoverSquare && this.container) {
+              const curEl = this.container.querySelector(`.board-square[data-square="${hoverSquare}"]`);
+              if (curEl) curEl.classList.remove('drag-over');
+            }
+            document.body.classList.remove('board-is-dragging');
+
+            this.dragState = null;
+
+            if (isDragging) {
+              const targetSquare = this.getSquareFromCoords(upEvt.clientX, upEvt.clientY);
+              if (targetSquare && this.possibleDests.includes(targetSquare)) {
+                const from = fromSquare;
+                this.selectedSquare = null;
+                this.possibleDests = [];
+                this.skipNextMoveAnimation = true;
+                this.updateSelectionHighlights();
+                if (this.onMove) {
+                  this.onMove(from, targetSquare);
+                }
+              } else if (targetSquare === fromSquare) {
+                this.selectedSquare = fromSquare;
+                this.possibleDests = this.legalMovesFrom ? this.legalMovesFrom(fromSquare) : [];
+                this.updateSelectionHighlights();
+              } else {
+                this.selectedSquare = null;
+                this.possibleDests = [];
+                this.updateSelectionHighlights();
+              }
+            } else if (wasAlreadySelected) {
+              this.selectedSquare = null;
+              this.possibleDests = [];
+              this.updateSelectionHighlights();
+            }
+          };
+
+          const onKeyDown = (keyEvt) => {
+            if (keyEvt.key === 'Escape') {
+              onPointerUp({ clientX: -9999, clientY: -9999 });
+            }
+          };
+
+          this.activePointerMoveHandler = onPointerMove;
+          this.activePointerUpHandler = onPointerUp;
+          this.activeKeyDownHandler = onKeyDown;
+
+          window.addEventListener('pointermove', onPointerMove);
+          window.addEventListener('pointerup', onPointerUp);
+          window.addEventListener('pointercancel', onPointerUp);
+          window.addEventListener('keydown', onKeyDown);
+        } else {
+          this.selectedSquare = null;
+          this.possibleDests = [];
+          this.updateSelectionHighlights();
+        }
+      });
+    }
+
+    boardWrapper.addEventListener('mousedown', (e) => {
+      if (e.button === 2) {
         const sqEl = e.target.closest('[data-square]');
         this.rightClickStartSquare = sqEl ? sqEl.dataset.square : null;
       }
@@ -563,7 +810,7 @@ class Chessboard {
     }
   }
 
-  drawArrow(svg, fromSq, toSq, color, dashed = false, idPrefix = 'arrow', strokeWidth = 3.5) {
+  drawArrow(svg, fromSq, toSq, color, dashed = false, idPrefix = 'arrow', strokeWidth = 2.4) {
     const files = this.orientation === 'w' ? FILES : FILES_REV;
     const ranks = this.orientation === 'w' ? RANKS : RANKS_REV;
     const getCoords = (sq) => {
@@ -585,50 +832,75 @@ class Chessboard {
 
     const dx = x2 - x1;
     const dy = y2 - y1;
-    const angle = Math.atan2(dy, dx);
     const dist = Math.hypot(dx, dy);
-    if (dist < 1) return;
+    if (dist < 0.5) return;
 
-    const isThick = strokeWidth >= 4;
-    const isThin = strokeWidth <= 2.5;
-    const markerW = isThick ? 7 : (isThin ? 4.5 : 6);
-    const markerH = isThick ? 7 : (isThin ? 4.5 : 6);
-    const refX = markerW * 0.65;
-    const refY = markerH * 0.5;
+    const angle = Math.atan2(dy, dx);
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
 
-    const endX = x1 + Math.cos(angle) * (dist - (isThick ? 3.8 : 3.2));
-    const endY = y1 + Math.sin(angle) * (dist - (isThick ? 3.8 : 3.2));
+    const isThick = strokeWidth >= 2.2;
+    const isThin = strokeWidth <= 1.5;
 
-    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-    marker.setAttribute('id', `marker-${idPrefix}`);
-    marker.setAttribute('markerWidth', String(markerW));
-    marker.setAttribute('markerHeight', String(markerH));
-    marker.setAttribute('refX', String(refX));
-    marker.setAttribute('refY', String(refY));
-    marker.setAttribute('orient', 'auto');
+    // Arrowhead dimensions - sharp, pointy triangular head
+    const headLength = isThick ? 4.8 : (isThin ? 3.4 : 4.0);
+    const headWidth = isThick ? 4.6 : (isThin ? 3.2 : 3.8);
+    const targetOffset = isThick ? 2.0 : 1.5;
 
-    const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    polygon.setAttribute('points', `0 0, ${markerW} ${refY}, 0 ${markerH}`);
-    polygon.setAttribute('fill', color);
-    polygon.setAttribute('opacity', isThin ? '0.75' : '0.9');
-    marker.appendChild(polygon);
-    defs.appendChild(marker);
-    svg.appendChild(defs);
+    // Crisp pointy arrowhead tip (directed toward destination square)
+    const tipX = x2 - cos * targetOffset;
+    const tipY = y2 - sin * targetOffset;
 
+    // Base center of arrowhead triangle
+    const baseX = tipX - cos * headLength;
+    const baseY = tipY - sin * headLength;
+
+    // Perpendicular wings to create sharp arrowhead
+    const perpX = -sin * (headWidth / 2);
+    const perpY = cos * (headWidth / 2);
+
+    const leftX = baseX + perpX;
+    const leftY = baseY + perpY;
+    const rightX = baseX - perpX;
+    const rightY = baseY - perpY;
+
+    // Shaft line coordinates:
+    // Starts neatly near departure square center with a smooth round cap,
+    // and ends slightly overlapping the base of the arrowhead so there is zero gap,
+    // while never penetrating near the pointy tip.
+    const startOffset = isThick ? 1.6 : 1.2;
+    const startX = x1 + cos * startOffset;
+    const startY = y1 + sin * startOffset;
+
+    const overlap = 0.5;
+    const shaftEndX = baseX + cos * overlap;
+    const shaftEndY = baseY + sin * overlap;
+
+    // Group wrapper to composite stroke & fill with uniform opacity (no overlap seams)
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    group.setAttribute('class', `board-arrow ${idPrefix}`);
+    group.setAttribute('opacity', isThin ? '0.78' : '0.92');
+
+    // Shaft line
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', `${x1}%`);
-    line.setAttribute('y1', `${y1}%`);
-    line.setAttribute('x2', `${endX}%`);
-    line.setAttribute('y2', `${endY}%`);
+    line.setAttribute('x1', String(startX));
+    line.setAttribute('y1', String(startY));
+    line.setAttribute('x2', String(shaftEndX));
+    line.setAttribute('y2', String(shaftEndY));
     line.setAttribute('stroke', color);
     line.setAttribute('stroke-width', String(strokeWidth));
     line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('opacity', isThin ? '0.75' : '0.9');
     if (dashed) {
-      line.setAttribute('stroke-dasharray', '5,5');
+      line.setAttribute('stroke-dasharray', '2.5,2.0');
     }
-    line.setAttribute('marker-end', `url(#marker-${idPrefix})`);
-    svg.appendChild(line);
+    group.appendChild(line);
+
+    // Sharp pointy arrowhead polygon
+    const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    polygon.setAttribute('points', `${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`);
+    polygon.setAttribute('fill', color);
+    group.appendChild(polygon);
+
+    svg.appendChild(group);
   }
 }

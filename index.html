@@ -13,6 +13,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
+        corePlugins: {
+          visibility: false,
+        },
         darkMode: ['selector', '[data-bs-theme="dark"]'],
         theme: {
           extend: {
@@ -47,66 +50,59 @@
   </head>
   <body>
     <!-- Top Navigation Bar -->
-    <header class="navbar border-bottom sticky-top px-2.5 sm:px-4 py-2 glass-nav">
+    <header class="navbar border-bottom sticky-top px-2 px-sm-4 py-1.5 py-sm-2 glass-nav">
       <div class="container-fluid px-0 d-flex align-items-center justify-content-between flex-nowrap gap-1 sm:gap-3">
         <!-- Brand & Mode Switcher -->
         <div class="d-flex align-items-center gap-1.5 sm:gap-3 flex-shrink-0">
-          <a class="navbar-brand d-flex align-items-center gap-1.5 fw-black mb-0 text-decoration-none logo-hover me-0" href="#" id="brand-logo" style="cursor: pointer;" title="Back to Home">
+          <a class="navbar-brand d-flex align-items-center gap-1.5 fw-black mb-0 text-decoration-none logo-hover me-0" href="#" id="brand-logo" style="cursor: pointer;" aria-label="Chess IQ Home">
             <span class="arcade-badge-logo">⚡</span>
             <span class="fw-black fs-6 sm:fs-5 tracking-tight font-sans">CHESS<span class="fg-warning">IQ</span></span>
           </a>
 
           <!-- Mode Switcher Pill Group -->
           <div class="arcade-mode-pills" role="group">
-            <button type="button" class="arcade-pill active" id="nav-mode-review">
-              <i class="bi bi-search me-1"></i><span>Review</span>
+            <button type="button" class="arcade-pill active" id="nav-mode-review" title="Review Game" aria-label="Review Game">
+              <i class="bi bi-search me-0 me-sm-1"></i><span class="d-none d-sm-inline">Review</span>
             </button>
-            <button type="button" class="arcade-pill" id="nav-mode-bot">
-              <i class="bi bi-robot me-1"></i><span class="d-none sm:inline">33 </span><span>Bots</span>
+            <button type="button" class="arcade-pill" id="nav-mode-bot" title="Play vs Bots" aria-label="Play vs Bots">
+              <i class="bi bi-robot me-0 me-sm-1"></i><span class="d-none d-md-inline">33 </span><span class="d-none d-sm-inline">Bots</span>
             </button>
           </div>
         </div>
 
         <!-- Right: Actions & Theme Toggle -->
-        <div class="d-flex align-items-center gap-1.5 sm:gap-2 flex-shrink-0">
-          <!-- Board Theme Dropdown (Bootstrap 5 Dropdown) -->
-          <div class="dropdown">
-            <button class="arcade-btn-icon" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Board Theme">
-              <i class="bi bi-palette-fill"></i>
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow border-0 glass-card">
-              <li><button class="dropdown-item fw-bold d-flex align-items-center gap-2 py-2" data-board-theme="green"><span class="theme-dot" style="background:#739552;"></span> Tournament Green</button></li>
-              <li><button class="dropdown-item fw-bold d-flex align-items-center gap-2 py-2" data-board-theme="wood"><span class="theme-dot" style="background:#b58863;"></span> Warm Wood</button></li>
-              <li><button class="dropdown-item fw-bold d-flex align-items-center gap-2 py-2" data-board-theme="icy"><span class="theme-dot" style="background:#587a9f;"></span> Cyber Frost</button></li>
-            </ul>
-          </div>
-
+        <div class="d-flex align-items-center gap-1 sm:gap-2 flex-shrink-0">
           <!-- Sound Toggle (Mute / Unmute) -->
-          <button type="button" class="arcade-btn-icon" id="nav-btn-sound" title="Toggle Sound">
+          <button type="button" class="arcade-btn-icon" id="nav-btn-sound" aria-label="Toggle Sound" title="Toggle Sound">
             <i class="bi bi-volume-up-fill" id="sound-toggle-icon"></i>
           </button>
 
           <!-- Theme Toggle (Light / Dark) -->
-          <button type="button" class="arcade-btn-icon" id="nav-btn-theme" title="Toggle Light/Dark Theme">
+          <button type="button" class="arcade-btn-icon" id="nav-btn-theme" aria-label="Toggle Theme" title="Toggle Theme">
             <i class="bi bi-sun-fill fg-warning" id="theme-toggle-icon"></i>
           </button>
 
+          <!-- Help & Guide Modal Trigger -->
+          <button type="button" class="arcade-btn-icon" id="nav-btn-help" aria-label="Chess IQ Guide & Glossary" title="Chess IQ Guide & Glossary">
+            <i class="bi bi-question-circle-fill text-warning"></i>
+          </button>
+
           <!-- Import Game Button (Bootstrap 5 Modal Trigger) -->
-          <button type="button" class="arcade-btn-primary px-2.5 sm:px-3.5 py-1.5 d-flex align-items-center gap-1.5" id="nav-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal" title="Import Game">
+          <button type="button" class="arcade-btn-primary px-2.5 sm:px-3.5 py-1.5 d-flex align-items-center justify-content-center gap-1.5" id="nav-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal" title="Import Game" aria-label="Import Game">
             <i class="bi bi-cloud-arrow-up-fill"></i>
-            <span class="d-none sm:inline">Import</span>
+            <span class="d-none d-sm-inline">Import</span>
           </button>
         </div>
       </div>
     </header>
 
     <!-- Main Application Container -->
-    <main class="container-fluid max-w-7xl px-2 sm:px-4 py-3 sm:py-4">
+    <main class="container-fluid px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 w-100 app-main-container">
       <!-- Mode 1: Review Mode View -->
-      <section id="review-view"></section>
+      <section id="review-view" class="w-100"></section>
 
       <!-- Mode 2: Play vs 33 Bots View -->
-      <section id="bot-view" class="d-none"></section>
+      <section id="bot-view" class="d-none w-100"></section>
     </main>
 
     <!-- Bootstrap 5 Import Modal Container -->
@@ -144,6 +140,7 @@
     <script src="./src/services/engineRefutations.js"></script>
     <script src="./src/services/gameCacheService.js"></script>
     <script src="./src/services/blunderBankService.js"></script>
+    <script src="./src/services/tooltipService.js"></script>
     <script src="./src/services/importApi.js"></script>
 
     <!-- 3. UI Components -->

@@ -433,9 +433,9 @@ function normalizeFenKey(fen) {
 }
 
 const ENGINE_PROFILES = {
-  fast: { depth: 10, maxWaitMs: 250, localDepth: 2 },
-  deep: { depth: 14, maxWaitMs: 450, localDepth: 3 },
-  ultra: { depth: 16, maxWaitMs: 700, localDepth: 3 }
+  fast: { depth: 10, maxWaitMs: 400, localDepth: 2 },
+  deep: { depth: 14, maxWaitMs: 600, localDepth: 3 },
+  ultra: { depth: 16, maxWaitMs: 1000, localDepth: 3 }
 };
 
 function toWhitePerspective(result, fen) {

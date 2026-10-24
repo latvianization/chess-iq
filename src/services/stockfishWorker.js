@@ -219,15 +219,15 @@ class StockfishWorkerService {
           this.currentScoreCp = m > 0 ? 3e3 : -3e3;
         }
       }
-      const pvMatch = line.match(/pv\s+(.+)$/);
+      const pvMatch = line.match(/\bpv\s+(.+)$/);
       if (pvMatch) {
-        const pvMoves = pvMatch[1].trim().split(/\s+/);
-        if (isMultiPv2) {
-          this.secondBestMove = pvMoves[0] || "";
-          this.secondBestPv = pvMoves;
-        } else {
-          this.currentPv = pvMoves;
-          if (pvMoves.length > 0) {
+        const pvMoves = pvMatch[1].trim().split(/\s+/).filter((m) => /^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(m));
+        if (pvMoves.length > 0) {
+          if (isMultiPv2) {
+            this.secondBestMove = pvMoves[0] || "";
+            this.secondBestPv = pvMoves;
+          } else {
+            this.currentPv = pvMoves;
             this.currentBestMove = pvMoves[0];
           }
         }

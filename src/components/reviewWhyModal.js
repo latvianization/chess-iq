@@ -10,6 +10,7 @@ function closeWhyModal(dashboard) {
   const existing = document.getElementById('why-blunder-modal');
   if (existing) existing.remove();
   dashboard.whyBoard = null;
+  document.body.classList.remove('modal-open');
 }
 
 async function openWhyModal(dashboard, targetEval = null) {
@@ -17,6 +18,7 @@ async function openWhyModal(dashboard, targetEval = null) {
   if (!cur) return;
 
   closeWhyModal(dashboard);
+  document.body.classList.add('modal-open');
 
   const isBrilliant = cur.classification === 'brilliant';
   const comic = getComicBadge(cur.classification, cur.san);
@@ -58,7 +60,7 @@ async function openWhyModal(dashboard, targetEval = null) {
   modal.className = 'why-modal-backdrop';
   modal.id = 'why-blunder-modal';
   modal.innerHTML = `
-    <div class="why-dialog p-3 p-md-4 shadow-lg" style="max-width: 820px; width: 100%; max-height: 94vh; overflow-y: auto; border-radius: 1.25rem; background: var(--arcade-card); border: 1px solid var(--arcade-border);">
+    <div class="why-dialog p-3 p-md-3.5 shadow-lg" style="max-width: 820px; width: 100%; border-radius: 1.25rem; background: var(--arcade-card); border: 1px solid var(--arcade-border);">
       <div class="d-flex align-items-center justify-content-between pb-2.5 mb-3 border-bottom" style="border-color: var(--arcade-border) !important;">
         <div class="d-flex align-items-center gap-2.5">
           <span class="badge rounded-pill px-3 py-1.5" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 800; font-size: 12px;">
@@ -87,25 +89,25 @@ async function openWhyModal(dashboard, targetEval = null) {
 
       <div class="row g-3 align-items-stretch">
         <div class="col-12 col-md-7 d-flex justify-content-center">
-          <div id="why-modal-board" style="width: 100%; max-width: 380px; aspect-ratio: 1/1;"></div>
+          <div id="why-modal-board" style="width: 100%; max-width: min(370px, 42vh); aspect-ratio: 1/1;"></div>
         </div>
         <div class="col-12 col-md-5 d-flex flex-column justify-content-between">
           <div>
             <div class="card border-0 mb-2 p-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border) !important; border-radius: 0.75rem;">
               <div class="d-flex align-items-center justify-content-between mb-1.5">
-                <span class="text-uppercase fw-bold text-secondary" style="font-size: 10px; letter-spacing: 0.5px;">Evaluation Impact</span>
-                <span class="badge ${isBrilliant ? '' : 'bg-danger-subtle text-danger border border-danger-subtle'} font-monospace" id="why-line-tag" ${isBrilliant ? 'style="background: rgba(6,182,212,0.15); color: #06b6d4; border: 1px solid rgba(6,182,212,0.3);"' : ''}>${isBrilliant ? 'Winning Line' : 'Punishment'}</span>
+                <span class="text-uppercase fw-bold text-secondary" style="font-size: 11px; letter-spacing: 0.5px;">Evaluation Impact</span>
+                <span class="badge ${isBrilliant ? '' : 'bg-danger text-white'} font-monospace" id="why-line-tag" ${isBrilliant ? 'style="background: rgba(6,182,212,0.18); color: #0891b2; border: 1px solid rgba(6,182,212,0.4);"' : ''}>${isBrilliant ? 'Winning Line' : 'Punishment'}</span>
               </div>
               <div class="d-flex align-items-center gap-3">
                 <div>
-                  <span class="text-secondary small d-block" style="font-size: 10px;">Win Chance</span>
+                  <span class="text-secondary small d-block fw-bold" style="font-size: 11px;">Win Chance</span>
                   <span class="fw-black font-monospace fs-6">${winProbBeforePct}% → ${winProbAfterPct}%</span>
-                  ${isBrilliant ? (winGainPct > 0 ? `<span class="badge font-monospace ms-1" style="background: rgba(6,182,212,0.2); color: #06b6d4; font-size: 10px;">+${winGainPct}%</span>` : `<span class="badge bg-success-subtle text-success font-monospace ms-1" style="font-size: 10px;">Solid</span>`) : `<span class="badge bg-danger text-white font-monospace ms-1" style="font-size: 10px;">-${winLossPct}%</span>`}
+                  ${isBrilliant ? (winGainPct > 0 ? `<span class="badge font-monospace ms-1" style="background: rgba(6,182,212,0.2); color: #0891b2; font-size: 11px;">+${winGainPct}%</span>` : `<span class="badge bg-success text-white font-monospace ms-1" style="font-size: 11px;">Solid</span>`) : `<span class="badge bg-danger text-white font-monospace ms-1" style="font-size: 11px;">-${winLossPct}%</span>`}
                 </div>
                 ${evalBefore !== null && evalAfter !== null ? `
                 <div class="vr opacity-25"></div>
                 <div>
-                  <span class="text-secondary small d-block" style="font-size: 10px;">Engine Score</span>
+                  <span class="text-secondary small d-block fw-bold" style="font-size: 11px;">Engine Score</span>
                   <span class="fw-black font-monospace fs-6">${Number(evalBefore) > 0 ? '+' + evalBefore : evalBefore} → ${Number(evalAfter) > 0 ? '+' + evalAfter : evalAfter}</span>
                 </div>
                 ` : ''}
@@ -114,17 +116,20 @@ async function openWhyModal(dashboard, targetEval = null) {
 
             <div class="card border-0 mb-2 p-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border) !important; border-radius: 0.75rem;">
               <div class="d-flex align-items-start gap-2">
-                <i class="bi ${isBrilliant ? 'bi-gem' : 'bi-shield-exclamation text-danger'} fs-5 lh-1 mt-0.5" ${isBrilliant ? 'style="color: #06b6d4;"' : ''}></i>
+                <i class="bi ${isBrilliant ? 'bi-gem' : 'bi-shield-exclamation text-danger'} fs-5 lh-1 mt-0.5" ${isBrilliant ? 'style="color: #0891b2;"' : ''}></i>
                 <div>
-                  <span class="fw-bold small d-block text-body" id="why-summary-text"><span class="spinner-border spinner-border-sm ${isBrilliant ? '' : 'text-danger'} me-2" ${isBrilliant ? 'style="color: #06b6d4;"' : ''} role="status"></span>Calculating what happens next...</span>
+                  <span class="fw-bold small d-block text-body" id="why-summary-text"><span class="spinner-border spinner-border-sm ${isBrilliant ? '' : 'text-danger'} me-2" ${isBrilliant ? 'style="color: #0891b2;"' : ''} role="status"></span>Calculating what happens next...</span>
                 </div>
               </div>
             </div>
 
             ${coachTipHtml}
 
-            <div class="p-2 mb-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border); border-radius: 0.75rem; max-height: 140px; overflow-y: auto;">
-              <div class="small fw-bold text-secondary mb-1.5" style="font-size: 11px;">Tactical Continuation (5 Moves):</div>
+            <div class="p-2.5 mb-2.5 rounded-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
+              <div class="d-flex align-items-center justify-content-between mb-1.5">
+                <span class="small fw-bold text-secondary" style="font-size: 12px;" id="why-continuation-title">Tactical Continuation (5 Moves):</span>
+                <span class="small text-secondary font-monospace" style="font-size: 10px;" id="why-positional-hint"></span>
+              </div>
               <div class="d-flex flex-wrap gap-1.5" id="why-pills-container">
                 <span class="text-secondary small"><span class="spinner-border spinner-border-sm me-2" role="status"></span>Loading line...</span>
               </div>
@@ -215,7 +220,7 @@ async function openWhyModal(dashboard, targetEval = null) {
       const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
       punishmentSummary = isBrilliant
         ? summarizeBrilliant(cur.fen, endFen, cur.color)
-        : summarizePunishment(cur.fen, endFen, cur.color);
+        : summarizePunishment(cur.fen, endFen, cur.color, cur.classification);
     }
 
     if (!hasValidBest) {
@@ -339,6 +344,19 @@ async function openWhyModal(dashboard, targetEval = null) {
     const btnBest = modal.querySelector('#why-tab-best');
     const tagEl = modal.querySelector('#why-line-tag');
     const summaryEl = modal.querySelector('#why-summary-text');
+    const continuationTitleEl = modal.querySelector('#why-continuation-title');
+    const positionalHintEl = modal.querySelector('#why-positional-hint');
+
+    const hasMaterialLoss = (() => {
+      try {
+        if (!punishmentSteps || punishmentSteps.length < 2) return false;
+        const cStart = new Chess(punishmentSteps[0].fen);
+        const cEnd = new Chess(punishmentSteps[punishmentSteps.length - 1].fen);
+        return typeof getMaterialDiffInPawns === 'function'
+          ? (getMaterialDiffInPawns(cStart, cur.color) - getMaterialDiffInPawns(cEnd, cur.color)) >= 1
+          : false;
+      } catch { return false; }
+    })();
 
     if (tab === 'punishment') {
       currentSteps = punishmentSteps;
@@ -350,13 +368,23 @@ async function openWhyModal(dashboard, targetEval = null) {
           tagEl.className = 'badge font-monospace';
           tagEl.style.cssText = 'background: rgba(6,182,212,0.15); color: #06b6d4; border: 1px solid rgba(6,182,212,0.3);';
           tagEl.textContent = 'Winning Line';
+        } else if (!hasMaterialLoss) {
+          tagEl.className = 'badge bg-info-subtle text-info border border-info-subtle font-monospace';
+          tagEl.style.cssText = '';
+          tagEl.textContent = cur.classification === 'inaccuracy' ? 'Positional Edge' : 'Positional Shift';
         } else {
           tagEl.className = 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace';
           tagEl.style.cssText = '';
-          tagEl.textContent = 'Punishment';
+          tagEl.textContent = 'Tactical Punishment';
         }
       }
       if (summaryEl) summaryEl.textContent = punishmentSummary;
+      if (continuationTitleEl) {
+        continuationTitleEl.textContent = hasMaterialLoss ? 'Tactical Line (5 Moves):' : 'Strategic Follow-up (5 Moves):';
+      }
+      if (positionalHintEl) {
+        positionalHintEl.textContent = (!hasMaterialLoss && !isBrilliant) ? 'No material lost · Look for piece activity' : '';
+      }
     } else {
       currentSteps = bestSteps;
       btnBest?.classList.add('active');
@@ -374,6 +402,12 @@ async function openWhyModal(dashboard, targetEval = null) {
         }
       }
       if (summaryEl) summaryEl.textContent = bestSummary;
+      if (continuationTitleEl) {
+        continuationTitleEl.textContent = 'Optimal Engine Line (5 Moves):';
+      }
+      if (positionalHintEl) {
+        positionalHintEl.textContent = 'Maintains balance & piece harmony';
+      }
     }
 
     updatePills();

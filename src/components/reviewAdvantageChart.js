@@ -86,14 +86,14 @@ function renderAdvantageChart(dashboard) {
     const mgPt = dashboard.advantagePoints[mgPly - 1];
     phaseMarkersSvg += `
       <line x1="${mgPt.x}" y1="6" x2="${mgPt.x}" y2="${height - 6}" stroke="#60a5fa" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.65" />
-      <text x="${mgPt.x}" y="12" fill="#93c5fd" font-size="9" font-weight="700" font-family="ui-monospace, monospace" text-anchor="middle">Middle</text>
+      <text x="${mgPt.x}" y="12" fill="#93c5fd" font-size="10.5" font-weight="800" font-family="ui-monospace, monospace" text-anchor="middle">Middle</text>
     `;
   }
   if (egPly > 1 && egPly <= totalPlies) {
     const egPt = dashboard.advantagePoints[egPly - 1];
     phaseMarkersSvg += `
       <line x1="${egPt.x}" y1="6" x2="${egPt.x}" y2="${height - 6}" stroke="#34d399" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.65" />
-      <text x="${egPt.x}" y="12" fill="#6ee7b7" font-size="9" font-weight="700" font-family="ui-monospace, monospace" text-anchor="middle">Endgame</text>
+      <text x="${egPt.x}" y="12" fill="#6ee7b7" font-size="10.5" font-weight="800" font-family="ui-monospace, monospace" text-anchor="middle">Endgame</text>
     `;
   }
 
@@ -122,11 +122,12 @@ function renderAdvantageChart(dashboard) {
     <div class="d-flex align-items-center justify-content-between px-1 pb-1 mb-1 border-bottom border-secondary border-opacity-25">
       <div class="d-flex align-items-center gap-1.5">
         <i class="bi bi-graph-up text-primary small"></i>
-        <span class="small fw-black" style="font-size: 11px;">Advantage Timeline</span>
+        <span class="small fw-black" style="font-size: 12px;">Advantage Timeline</span>
+        ${typeof renderInfoIcon === 'function' ? renderInfoIcon('card_advantage_chart') : ''}
       </div>
-      <div class="d-flex align-items-center gap-2 font-monospace" style="font-size: 10px;">
-        <span class="d-flex align-items-center gap-1 text-info"><span class="rounded-circle d-inline-block" style="width: 7px; height: 7px; background: #38bdf8;"></span>White+</span>
-        <span class="d-flex align-items-center gap-1 text-warning"><span class="rounded-circle d-inline-block" style="width: 7px; height: 7px; background: #f59e0b;"></span>Black+</span>
+      <div class="d-flex align-items-center gap-2 font-monospace" style="font-size: 11px;">
+        <span class="d-flex align-items-center gap-1 text-info fw-bold"><span class="rounded-circle d-inline-block" style="width: 7px; height: 7px; background: #38bdf8;"></span>White+</span>
+        <span class="d-flex align-items-center gap-1 text-warning fw-bold"><span class="rounded-circle d-inline-block" style="width: 7px; height: 7px; background: #f59e0b;"></span>Black+</span>
       </div>
     </div>
     <div class="advantage-chart-canvas position-relative" id="advantage-chart-canvas">
@@ -209,9 +210,10 @@ function renderAdvantageChart(dashboard) {
         ? `M${Math.abs(ply.mate)}`
         : (ply.scoreCp > 0 ? `+${(ply.scoreCp / 100).toFixed(1)}` : (ply.scoreCp / 100).toFixed(1));
 
+      const isMultiChar = String(dict.symbol).length > 1;
       tooltip.innerHTML = `
         <div class="d-flex align-items-center gap-1.5 font-monospace">
-          <span class="badge border border-dark rounded-circle" style="background:${dict.bg}; color:${dict.text}; width:16px; height:16px; padding:0; display:inline-flex; align-items:center; justify-content:center; font-size:9px;">
+          <span class="badge border border-dark rounded-circle" style="background:${dict.bg}; color:${dict.text}; width:16px; height:16px; padding:0; display:inline-flex; align-items:center; justify-content:center; font-size:${isMultiChar ? '8px' : '9px'}; ${isMultiChar ? 'letter-spacing: -0.6px;' : ''}">
             ${dict.symbol}
           </span>
           <span class="fw-bold">${ply.ply}. ${ply.san}</span>

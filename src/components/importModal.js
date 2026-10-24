@@ -254,7 +254,7 @@ class ImportModal {
                 ` : ''}
               </div>
             </div>
-            <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden pe-1 w-100" style="max-height: 280px; scrollbar-width: thin;">
+            <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden pe-1.5 w-100 pretty-scrollbar" style="max-height: 280px;">
               ${this.fetchedGames.map((g) => {
                 const isUserWhite = g.white.toLowerCase() === this.username.trim().toLowerCase();
                 const isUserBlack = g.black.toLowerCase() === this.username.trim().toLowerCase();
@@ -299,6 +299,9 @@ class ImportModal {
                         <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold flex-shrink-0" style="font-size: 11px;">
                           <i class="bi ${tcIcon} me-1"></i>${g.timeControl}
                         </span>
+                        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle fw-bold flex-shrink-0" style="font-size: 10px;">
+                          <i class="bi bi-people-fill me-0.5"></i>vs Player
+                        </span>
                         ${this.formatOpeningBadge(g.eco)}
                       </div>
                       <div class="d-flex align-items-center gap-2 flex-shrink-0">
@@ -317,21 +320,21 @@ class ImportModal {
                         <div class="d-flex align-items-center gap-2 ${isUserWhite ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
                           <span class="fs-6 lh-1">⚪</span>
                           <span class="text-truncate" style="max-width: 170px;">${insEscape(g.white)}</span>
-                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${insEscape(g.whiteElo)}</span>
-                          ${isUserWhite ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
+                          <span class="badge saved-game-elo-badge font-monospace">${insEscape(g.whiteElo)} Elo</span>
+                          ${isUserWhite ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.5 rounded-pill" style="font-size: 10px;">YOU</span>' : ''}
                         </div>
 
                         <div class="d-flex align-items-center gap-2 ${isUserBlack ? 'fw-black text-warning' : 'fw-medium text-body'}" style="min-width: 0;">
                           <span class="fs-6 lh-1">⚫</span>
                           <span class="text-truncate" style="max-width: 170px;">${insEscape(g.black)}</span>
-                          <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${insEscape(g.blackElo)}</span>
-                          ${isUserBlack ? '<span class="badge bg-warning text-dark fw-bold px-1.5 py-0.5" style="font-size: 9px;">YOU</span>' : ''}
+                          <span class="badge saved-game-elo-badge font-monospace">${insEscape(g.blackElo)} Elo</span>
+                          ${isUserBlack ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.5 rounded-pill" style="font-size: 10px;">YOU</span>' : ''}
                         </div>
 
                         ${isReviewed ? `
-                          <div class="d-flex align-items-center gap-1.5 mt-0.5">
-                            <span class="badge bg-success-subtle text-success font-monospace fw-bold" style="font-size: 10px;">🎯 ${cacheInfo.accuracy}% acc</span>
-                            <span class="badge bg-primary-subtle text-primary font-monospace fw-bold" style="font-size: 10px;">⭐ ${cacheInfo.elo} Elo</span>
+                          <div class="d-flex align-items-center gap-1.5 mt-0.5 flex-wrap">
+                            <span class="match-stat-badge match-acc-badge font-monospace"><i class="bi bi-bullseye me-0.5"></i><span class="stat-num">${cacheInfo.accuracy}%</span> <span class="stat-lbl">Acc</span></span>
+                            <span class="match-stat-badge match-perf-badge font-monospace"><i class="bi bi-star-fill me-0.5"></i><span class="stat-num">${cacheInfo.elo}</span> <span class="stat-lbl">Perf</span></span>
                           </div>
                         ` : ''}
                       </div>

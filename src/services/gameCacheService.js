@@ -24,6 +24,19 @@ function hashString(str) {
   return Math.abs(hash).toString(36);
 }
 
+function detectBotInGame(white, black) {
+  if (typeof BOTS_33 === 'undefined' || !Array.isArray(BOTS_33)) return null;
+  const w = (white || '').toLowerCase();
+  const b = (black || '').toLowerCase();
+  for (const bot of BOTS_33) {
+    const name = bot.name.toLowerCase();
+    if (w.includes(name) || b.includes(name)) {
+      return bot;
+    }
+  }
+  return null;
+}
+
 function getGameCacheKey(gameIdOrPgn, userColor = 'w') {
   if (!gameIdOrPgn) return '';
   const clean = typeof gameIdOrPgn === 'string' ? gameIdOrPgn.trim() : '';
@@ -67,6 +80,18 @@ function getGameCacheInfo(gameIdOrPgn, userColor = 'w') {
   return entry || null;
 }
 
+function sanitizeGamePlies(game) {
+  if (!game || !Array.isArray(game.plies)) return game;
+  const isValidUci = (u) => typeof u === 'string' && u.length >= 4 && /^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(u);
+  for (const p of game.plies) {
+    if (p) {
+      if (!isValidUci(p.bestMoveUci)) p.bestMoveUci = '';
+      if (!isValidUci(p.secondBestMoveUci)) p.secondBestMoveUci = '';
+    }
+  }
+  return game;
+}
+
 function getCachedGame(gameIdOrPgn, userColor = 'w') {
   if (!gameIdOrPgn) return null;
   // 1. Check computed key
@@ -74,14 +99,14 @@ function getCachedGame(gameIdOrPgn, userColor = 'w') {
   if (key) {
     try {
       const raw = localStorage.getItem(`${GAME_PREFIX}${key}`);
-      if (raw) return JSON.parse(raw);
+      if (raw) return sanitizeGamePlies(JSON.parse(raw));
     } catch {}
   }
   // 2. Direct key in storage
   if (typeof gameIdOrPgn === 'string' && gameIdOrPgn !== key) {
     try {
       const raw = localStorage.getItem(`${GAME_PREFIX}${gameIdOrPgn}`);
-      if (raw) return JSON.parse(raw);
+      if (raw) return sanitizeGamePlies(JSON.parse(raw));
     } catch {}
   }
   // 3. Fallback: Search index
@@ -95,7 +120,7 @@ function getCachedGame(gameIdOrPgn, userColor = 'w') {
     );
     if (entry && entry.key) {
       const raw = localStorage.getItem(`${GAME_PREFIX}${entry.key}`);
-      if (raw) return JSON.parse(raw);
+      if (raw) return sanitizeGamePlies(JSON.parse(raw));
     }
   } catch {}
   return null;
@@ -112,6 +137,18 @@ function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
 
     const serialized = JSON.stringify(analyzedGame);
     localStorage.setItem(`${GAME_PREFIX}${key}`, serialized);
+
+    const botMatch = detectBotInGame(analyzedGame.white, analyzedGame.black);
+    const isBot = Boolean(
+      analyzedGame.isBotGame ||
+      botMatch ||
+      (analyzedGame.white === 'You' || analyzedGame.black === 'You')
+    );
+    const isImported = Boolean(
+      analyzedGame.isImported ||
+      (analyzedGame.id && String(analyzedGame.id).startsWith('chesscom_')) ||
+      analyzedGame.platform === 'chesscom'
+    );
 
     let index = getCacheIndex().filter((item) => item.key !== key);
     index.unshift({
@@ -130,7 +167,12 @@ function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
       eco: analyzedGame.eco || '',
       ecoName: analyzedGame.ecoName || '',
       timeControl: analyzedGame.timeControl || '',
-      savedAt: Date.now()
+      savedAt: Date.now(),
+      isBotGame: isBot,
+      botId: analyzedGame.botId || (botMatch ? botMatch.id : null),
+      botName: analyzedGame.botName || (botMatch ? botMatch.name : null),
+      botAvatar: analyzedGame.botAvatar || (botMatch ? botMatch.avatar : null),
+      isImported: isImported
     });
 
     while (index.length > MAX_CACHED_GAMES) {
@@ -172,10 +214,55 @@ function clearGameCache() {
   window.dispatchEvent(new CustomEvent('chess_iq_cache_cleared'));
 }
 
+function removeCachedGame(gameKeyOrId) {
+  if (!gameKeyOrId) return false;
+  let index = getCacheIndex();
+  const entry = index.find((item) =>
+    item.key === gameKeyOrId ||
+    item.id === gameKeyOrId ||
+    (item.key && item.key.includes(gameKeyOrId)) ||
+    (item.id && item.id.includes(gameKeyOrId))
+  );
+
+  const keyToRemove = entry ? entry.key : gameKeyOrId;
+  const idToRemove = entry ? entry.id : gameKeyOrId;
+
+  try {
+    localStorage.removeItem(`${GAME_PREFIX}${keyToRemove}`);
+    if (idToRemove && idToRemove !== keyToRemove) {
+      localStorage.removeItem(`${GAME_PREFIX}${idToRemove}`);
+    }
+  } catch {}
+
+  const newIndex = index.filter((item) =>
+    item.key !== keyToRemove &&
+    item.id !== idToRemove &&
+    item.id !== keyToRemove &&
+    item.key !== idToRemove
+  );
+
+  saveCacheIndex(newIndex);
+  window.dispatchEvent(new CustomEvent('chess_iq_cache_updated', { detail: { key: keyToRemove, removed: true } }));
+  return true;
+}
+
 function getCacheStats() {
   const index = getCacheIndex();
   return {
     count: index.length,
     index
   };
+}
+
+if (typeof window !== 'undefined') {
+  window.getGameCacheKey = getGameCacheKey;
+  window.getCacheIndex = getCacheIndex;
+  window.saveCacheIndex = saveCacheIndex;
+  window.getGameCacheInfo = getGameCacheInfo;
+  window.getCachedGame = getCachedGame;
+  window.saveCachedGame = saveCachedGame;
+  window.removeCachedGame = removeCachedGame;
+  window.clearGameCache = clearGameCache;
+  window.getCacheStats = getCacheStats;
+  window.detectBotInGame = detectBotInGame;
 }

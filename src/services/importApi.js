@@ -92,6 +92,10 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
   const result = ["1-0", "0-1", "1/2-1/2"].includes(resultRaw) ? resultRaw : "*";
   const date = header["Date"] || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
   const timeControl = header["TimeControl"] || "300+0";
+  const gameType = header["GameType"] || (header["Event"] && header["Event"].toLowerCase().includes("bot") ? "bot" : null);
+  const botId = header["BotId"] || null;
+  const botName = header["BotName"] || null;
+  const botAvatar = header["BotAvatar"] || null;
   const { moves: parsedMoves, clocks } = extractMovesAndClocks(pgn);
   let moveHistory = chess.history({ verbose: true });
   if (moveHistory.length === 0 && parsedMoves.length > 0) {
@@ -322,8 +326,11 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
       const moverWinProbBefore = item.side === "w" ? whiteWinProbBefore : 1 - whiteWinProbBefore;
       const moverWinProbAfter = item.side === "w" ? whiteWinProbAfter : 1 - whiteWinProbAfter;
 
-      const bestMoveUci = (engineBefore.pv && engineBefore.pv[0]) || engineBefore.bestMoveUci || "";
-      const secondBestMoveUci = engineBefore.secondBestMoveUci || "";
+      const isValidUciMove = (u) => typeof u === "string" && u.length >= 4 && /^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(u);
+      const rawBest = (engineBefore.pv && engineBefore.pv[0]) || engineBefore.bestMoveUci || "";
+      const bestMoveUci = isValidUciMove(rawBest) ? rawBest : "";
+      const rawSecond = engineBefore.secondBestMoveUci || "";
+      const secondBestMoveUci = isValidUciMove(rawSecond) ? rawSecond : "";
       const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
       const isExactBest = Boolean(bestMoveUci && playedUci && playedUci.toLowerCase() === bestMoveUci.toLowerCase());
 
@@ -650,7 +657,11 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
     userCounts,
     opponentCounts,
     impulsiveBlunders,
-    timeTroubleBlunders
+    timeTroubleBlunders,
+    isBotGame: Boolean(gameType === "bot" || botId || (typeof detectBotInGame === 'function' && detectBotInGame(white, black))),
+    botId: botId || null,
+    botName: botName || null,
+    botAvatar: botAvatar || null
   };
 
   if (typeof syncGameToBlunderBank === "function") {
