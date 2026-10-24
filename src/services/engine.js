@@ -33,17 +33,6 @@ function calculateMoveAccuracy(winProbLoss) {
   return Math.min(100, Math.max(0, Math.round(acc * 10) / 10));
 }
 
-function countTotalPieces(chess) {
-  let count = 0;
-  const board = chess.board();
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      if (board[r][c]) count++;
-    }
-  }
-  return count;
-}
-
 function sumBoardMaterial(chess, color) {
   let total = 0;
   const board = chess.board();
@@ -321,42 +310,6 @@ function findBestMoveLocal(fen, depth = 3) {
   };
 }
 
-async function fetchSyzygyTablebase(fen) {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 600);
-    const encodedFen = encodeURIComponent(fen);
-    const res = await fetch(`https://tablebase.lichess.ovh/standard?fen=${encodedFen}`, {
-      signal: controller.signal,
-      headers: { Accept: "application/json" }
-    });
-    clearTimeout(timeoutId);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.category) {
-        let cp = 0;
-        let mate = null;
-        if (data.category === "win") {
-          cp = 3e3;
-          mate = data.dtm ? Math.ceil(Math.abs(data.dtm) / 2) : 10;
-        } else if (data.category === "loss") {
-          cp = -3e3;
-          mate = data.dtm ? -Math.ceil(Math.abs(data.dtm) / 2) : -10;
-        }
-        const topMove = data.moves && data.moves[0] ? data.moves[0].uci : "";
-        return {
-          scoreCp: cp,
-          mate,
-          pv: topMove ? [topMove] : [],
-          source: "tablebase"
-        };
-      }
-    }
-  } catch {
-  }
-  return null;
-}
-
 function normalizeFenKey(fen) {
   if (!fen) return "";
   const parts = fen.trim().split(/\s+/);
@@ -364,9 +317,8 @@ function normalizeFenKey(fen) {
 }
 
 const ENGINE_PROFILES = {
-  fast: { depth: 8, maxWaitMs: 300 },
-  deep: { depth: 12, maxWaitMs: 600 },
-  insights: { depth: 8, maxWaitMs: 100 }
+  fast: { depth: 8, maxWaitMs: 250 },
+  deep: { depth: 12, maxWaitMs: 500 }
 };
 
 function toWhitePerspective(result, fen) {
@@ -393,33 +345,39 @@ function localEvaluation(fen, depth) {
 }
 
 async function evaluateFenHybrid(fen, isDeep = false) {
-  const profileKey = typeof isDeep === "string" ? isDeep : (isDeep ? "deep" : "fast");
+  const profileKey = isDeep ? "deep" : "fast";
   const cacheKey = `${normalizeFenKey(fen)}_${profileKey}`;
   const cached = FEN_EVAL_CACHE.get(cacheKey);
   if (cached) return cached;
 
-  if (isDeep === true && countTotalPieces(new Chess(fen)) <= 7) {
-    const tablebase = await fetchSyzygyTablebase(fen);
-    if (tablebase) {
-      tablebase.bestMoveUci = tablebase.bestMoveUci || (tablebase.pv && tablebase.pv[0]) || "";
-      tablebase.secondBestMoveUci = tablebase.secondBestMoveUci || findBestMoveLocal(fen, 1).secondBestMoveUci;
-      const whiteResult = toWhitePerspective(tablebase, fen);
-      setFenCache(cacheKey, whiteResult);
-      return whiteResult;
+  try {
+    const chess = new Chess(fen);
+    if (isChessGameOver(chess)) {
+      const isMate = isChessCheckmate(chess);
+      const turn = chess.turn();
+      const terminalResult = {
+        scoreCp: isMate ? (turn === "w" ? -3e3 : 3e3) : 0,
+        mate: isMate ? (turn === "w" ? -1 : 1) : null,
+        pv: [],
+        bestMoveUci: "",
+        secondBestMoveUci: "",
+        source: "terminal"
+      };
+      setFenCache(cacheKey, terminalResult);
+      return terminalResult;
     }
-  }
+  } catch {}
 
-  const profile = ENGINE_PROFILES[profileKey] || ENGINE_PROFILES.fast;
+  const profile = ENGINE_PROFILES[profileKey];
   const sfEval = await stockfishService.evaluate(fen, profile.depth, profile.maxWaitMs);
   if (sfEval && sfEval.bestMoveUci) {
-    const fallback = sfEval.secondBestMoveUci && sfEval.multiPv2ScoreCp !== void 0 ? null : findBestMoveLocal(fen, 1);
     const sfResult = toWhitePerspective({
       scoreCp: sfEval.scoreCp,
       mate: sfEval.mate,
       pv: sfEval.pv,
       bestMoveUci: sfEval.bestMoveUci,
-      secondBestMoveUci: sfEval.secondBestMoveUci || fallback?.secondBestMoveUci || "",
-      multiPv2ScoreCp: sfEval.multiPv2ScoreCp ?? fallback?.multiPv2Cp,
+      secondBestMoveUci: sfEval.secondBestMoveUci || "",
+      multiPv2ScoreCp: sfEval.multiPv2ScoreCp,
       source: "stockfish"
     }, fen);
     setFenCache(cacheKey, sfResult);
@@ -433,38 +391,28 @@ async function evaluateFenHybrid(fen, isDeep = false) {
 
 async function prefetchEvaluations(fens, isDeep, onEach) {
   const unique = [...new Set(fens)];
+  if (unique.length === 0) return;
+
   stockfishService.warmUp();
-  const feederCount = stockfishService.isAvailable
+  const workerCount = stockfishService.isAvailable
     ? Math.max(2, stockfishService.targetSize || stockfishService.size)
     : 1;
-  const profileKey = typeof isDeep === "string" ? isDeep : (isDeep ? "deep" : "fast");
-  console.log(`[Engine] Starting prefetch: ${unique.length} positions (profile: ${profileKey}, feeders: ${feederCount})`);
+  const concurrency = Math.min(workerCount, unique.length);
+  console.log(`[Engine] Evaluating ${unique.length} positions across ${concurrency} workers`);
+
   let next = 0;
   let done = 0;
-  let failure = null;
-  const startedAt = Date.now();
 
-  const feeders = Array.from({ length: feederCount }, async (_, feederIdx) => {
-    while (!failure && next < unique.length) {
+  const workers = Array.from({ length: concurrency }, async () => {
+    while (next < unique.length) {
       const fen = unique[next++];
-      try {
-        await evaluateFenHybrid(fen, isDeep);
-        done++;
-        if (onEach) await onEach(done, unique.length);
-        // Cooperative yield so the browser can process UI events and render
-        await new Promise((r) => setTimeout(r, 0));
-      } catch (err) {
-        if (err && err.message !== 'aborted') {
-          console.error(`[Engine] Feeder ${feederIdx} error on fen ${fen}:`, err);
-        }
-        failure = err;
-      }
+      await evaluateFenHybrid(fen, isDeep);
+      done++;
+      if (onEach) await onEach(done, unique.length);
     }
   });
-  await Promise.all(feeders);
-  const elapsedMs = Date.now() - startedAt;
-  console.log(`[Engine] Prefetch completed: ${done}/${unique.length} positions evaluated in ${elapsedMs}ms (${(elapsedMs / (done || 1)).toFixed(1)}ms/pos)`);
-  if (failure) throw failure;
+
+  await Promise.all(workers);
 }
 
 function isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci = null) {

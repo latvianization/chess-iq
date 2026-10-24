@@ -56,12 +56,6 @@ class ReviewDashboard {
       const isNext = e.key === 'ArrowRight' || e.key === 'Right' || e.code === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'Down' || e.code === 'ArrowDown';
       const isCtrlOrMeta = e.ctrlKey || e.metaKey;
 
-      if (isPrev || isNext || e.key === 'Home' || e.key === 'End' || e.key === ' ' || e.code === 'Space') {
-        if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
-          backgroundAnalysisQueue.notifyUserActivity(5000);
-        }
-      }
-
       if (e.key === 'Home' || (isCtrlOrMeta && isPrev)) {
         e.preventDefault();
         this.goToPly(0);
@@ -105,13 +99,7 @@ class ReviewDashboard {
     const now = Date.now();
     if (now - (this.lastUiYieldTime || 0) >= 16 || current === 0 || current >= total) {
       this.lastUiYieldTime = now;
-      await new Promise((resolve) => {
-        if (typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(() => setTimeout(resolve, 0));
-        } else {
-          setTimeout(resolve, 10);
-        }
-      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
 
@@ -179,9 +167,6 @@ class ReviewDashboard {
   }
 
   setGame(analyzedGame) {
-    if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
-      backgroundAnalysisQueue.notifyUserActivity(4000);
-    }
     this.isAnalyzing = false;
     this.analysisStartTime = null;
     this.lastUiYieldTime = 0;
@@ -193,9 +178,6 @@ class ReviewDashboard {
   }
 
   goToPly(ply) {
-    if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
-      backgroundAnalysisQueue.notifyUserActivity(5000);
-    }
     if (!this.game) return;
     this.currentPly = Math.max(0, Math.min(this.game.plies.length, ply));
 
@@ -237,15 +219,9 @@ class ReviewDashboard {
 
   closeWhyModal() {
     closeWhyModal(this);
-    if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
-      backgroundAnalysisQueue.notifyUserActivity(3000);
-    }
   }
 
   openWhyModal(targetEval = null) {
-    if (typeof backgroundAnalysisQueue !== 'undefined') {
-      backgroundAnalysisQueue.pause();
-    }
     return openWhyModal(this, targetEval);
   }
 
@@ -1070,13 +1046,6 @@ class ReviewDashboard {
       whiteName: this.game.white || 'White',
       blackName: this.game.black || 'Black',
     });
-
-    // Instantly pause background analysis on any interaction with review dashboard
-    this.container.addEventListener('pointerdown', () => {
-      if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
-        backgroundAnalysisQueue.notifyUserActivity(4000);
-      }
-    }, { passive: true });
 
     // Bind Navigation Buttons
     const bindNavBtn = (id, fn) => {

@@ -134,11 +134,7 @@ class App {
       botView?.classList.add('d-none');
       btnReview?.classList.add('active');
       btnBot?.classList.remove('active');
-      if (this.reviewDashboard?.game && !this.reviewDashboard?.isAnalyzing) {
-        backgroundAnalysisQueue.startIdleProcessing();
-      }
     } else {
-      backgroundAnalysisQueue.pause();
       reviewView?.classList.add('d-none');
       botView?.classList.remove('d-none');
       btnBot?.classList.add('active');
@@ -155,7 +151,6 @@ class App {
       closeWhyModal(this.reviewDashboard);
     }
     document.getElementById('why-blunder-modal')?.remove();
-    document.getElementById('insights-modal')?.remove();
     if (typeof closeGameOverModal === 'function') {
       closeGameOverModal();
     }
@@ -186,7 +181,6 @@ class App {
     document.getElementById('nav-mode-review')?.addEventListener('click', () => this.switchMode('review'));
     document.getElementById('nav-mode-bot')?.addEventListener('click', () => this.switchMode('bot'));
     document.getElementById('nav-btn-import')?.addEventListener('click', () => {
-      backgroundAnalysisQueue.pause();
       this.importModal?.show();
     });
     document.getElementById('nav-btn-theme')?.addEventListener('click', () => this.toggleTheme());
@@ -239,23 +233,24 @@ class App {
       this.reviewDashboard?.setGame(cachedGame);
       soundService.playSuccess();
       this.importModal?.setAnalyzing(false, 0, 0);
-      backgroundAnalysisQueue.startIdleProcessing();
       return;
     }
 
     // Resolve actual PGN if an ID or key was passed
     let actualPgn = typeof pgn === 'string' ? pgn.trim() : '';
-    if (actualPgn && !actualPgn.includes(' ') && !actualPgn.includes('\n') && !actualPgn.includes('.')) {
-      try {
-        const savedImport = JSON.parse(localStorage.getItem('chess_iq_imported_games') || 'null');
-        const match = savedImport?.games?.find((g) => g.id === actualPgn);
-        if (match?.pgn) actualPgn = match.pgn;
-      } catch {}
-      if (actualPgn === pgn && typeof getCacheIndex === 'function') {
-        const index = getCacheIndex();
-        const entry = index.find((i) => i.id === pgn || i.key === pgn);
-        if (entry?.pgn) actualPgn = entry.pgn;
+    let matchedGameId = null;
+    try {
+      const savedImport = JSON.parse(localStorage.getItem('chess_iq_imported_games') || 'null');
+      const match = savedImport?.games?.find((g) => g.id === actualPgn || g.pgn === actualPgn);
+      if (match) {
+        if (match.pgn) actualPgn = match.pgn;
+        matchedGameId = match.id;
       }
+    } catch {}
+    if (actualPgn === pgn && !actualPgn.includes(' ') && typeof getCacheIndex === 'function') {
+      const index = getCacheIndex();
+      const entry = index.find((i) => i.id === pgn || i.key === pgn);
+      if (entry?.pgn) actualPgn = entry.pgn;
     }
 
     if (!actualPgn || (!actualPgn.includes(' ') && !actualPgn.includes('.') && actualPgn.length < 15)) {
@@ -267,11 +262,10 @@ class App {
     }
 
     console.log('[App] Starting fresh game analysis...');
-    backgroundAnalysisQueue.pause();
     this.reviewDashboard?.showLoading(0, 0);
 
     // Allow modal hide and review loading view to paint before computation begins
-    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 50)));
+    await new Promise((resolve) => setTimeout(resolve, 30));
 
     try {
       const analyzedGame = await analyzeFullPgn(
@@ -283,11 +277,14 @@ class App {
         }
       );
 
+      if (matchedGameId) {
+        analyzedGame.id = matchedGameId;
+      }
+
       console.log('[App] Analysis completed, caching and loading review...');
       saveCachedGame(actualPgn, userColor, analyzedGame);
       this.reviewDashboard?.setGame(analyzedGame);
       soundService.playSuccess();
-      backgroundAnalysisQueue.startIdleProcessing();
     } catch (err) {
       console.error('[App] Analysis failed:', err);
       this.reviewDashboard?.hideLoading();

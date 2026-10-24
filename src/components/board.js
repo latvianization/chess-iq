@@ -135,9 +135,6 @@ class Chessboard {
   }
 
   handleSquareClick(square, piece) {
-    if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
-      backgroundAnalysisQueue.notifyUserActivity(5000);
-    }
     if (!this.interactive) return;
 
     if (this.selectedSquare) {
@@ -327,9 +324,6 @@ class Chessboard {
             img.draggable = true;
 
             img.addEventListener('dragstart', (e) => {
-              if (typeof backgroundAnalysisQueue !== 'undefined' && backgroundAnalysisQueue.notifyUserActivity) {
-                backgroundAnalysisQueue.notifyUserActivity(5000);
-              }
               if (!this.interactive) {
                 e.preventDefault();
                 return;

@@ -5,7 +5,7 @@ const MAX_CACHED_GAMES = 30;
 (function removeLegacyCache() {
   try {
     Object.keys(localStorage)
-      .filter((k) => k.startsWith('chess_iq_game_v1_') || k === 'chess_iq_analyzed_index_v1')
+      .filter((k) => k.startsWith('chess_iq_game_v1_') || k === 'chess_iq_analyzed_index_v1' || k.startsWith('chess_iq_insights_'))
       .forEach((k) => localStorage.removeItem(k));
   } catch {}
 })();

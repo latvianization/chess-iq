@@ -14,14 +14,15 @@ function getCandidateWorkerUrls() {
 }
 
 class StockfishWorkerService {
-  constructor(id = `worker-${nextWorkerId++}`) {
+  constructor(onReadyCallback, id = `worker-${nextWorkerId++}`) {
     this.id = id;
+    this.onReadyCallback = onReadyCallback || (() => {});
     this.worker = null;
     this.isInitialized = false;
+    this.isReady = false;
     this.isAvailable = true;
-    this.queue = [];
-    this.isProcessing = false;
-    this.pendingResolve = null;
+    this.isBusy = false;
+    this.currentTask = null;
     this.currentBestMove = "";
     this.currentScoreCp = 0;
     this.currentMate = null;
@@ -29,21 +30,23 @@ class StockfishWorkerService {
     this.currentDepth = 0;
     this.secondBestCp = void 0;
     this.secondBestMove = "";
-    this.evaluationTimeoutId = null;
+    this.softTimeoutId = null;
     this.hardTimeoutId = null;
     this.candidateIndex = 0;
     this.initWorker();
   }
+
   initWorker() {
     if (typeof window === "undefined" || typeof Worker === "undefined") {
       this.isAvailable = false;
       return;
     }
-    if (typeof window !== "undefined" && window.location && window.location.protocol === "file:") {
+    if (window.location && window.location.protocol === "file:") {
       this.isAvailable = false;
-      this.drainQueue();
+      this.abortCurrentTask();
       return;
     }
+
     const candidates = getCandidateWorkerUrls();
     const workerUrl = resolvedStockfishUrl || candidates[this.candidateIndex] || candidates[0];
     this.workerUrl = workerUrl;
@@ -66,10 +69,12 @@ class StockfishWorkerService {
         const msg = (err && err.message) || (err && err.type ? `Event (${err.type})` : "Worker error");
         console.warn(`[StockfishPool][${this.id}] Worker offline (${msg})`);
         this.isAvailable = false;
-        this.drainQueue();
+        this.isReady = false;
+        this.abortCurrentTask();
         try {
           this.worker.terminate();
         } catch {}
+        this.onReadyCallback();
       };
       this.worker.postMessage("uci");
     } catch (err) {
@@ -80,44 +85,56 @@ class StockfishWorkerService {
       }
       console.warn(`[StockfishPool][${this.id}] Init failed:`, err?.message || err);
       this.isAvailable = false;
-      this.drainQueue();
+      this.isReady = false;
+      this.abortCurrentTask();
+      this.onReadyCallback();
     }
   }
-  drainQueue() {
-    if (this.evaluationTimeoutId) {
-      clearTimeout(this.evaluationTimeoutId);
-      this.evaluationTimeoutId = null;
+
+  clearTimers() {
+    if (this.softTimeoutId) {
+      clearTimeout(this.softTimeoutId);
+      this.softTimeoutId = null;
     }
     if (this.hardTimeoutId) {
       clearTimeout(this.hardTimeoutId);
       this.hardTimeoutId = null;
     }
-    if (this.pendingResolve) {
-      const resolve = this.pendingResolve;
-      this.pendingResolve = null;
-      resolve(null);
-    }
-    while (this.queue.length > 0) {
-      const item = this.queue.shift();
-      if (item && item.resolve) item.resolve(null);
-    }
-    this.isProcessing = false;
   }
-  handleMessage(line) {
-    if (typeof line !== "string") return;
+
+  abortCurrentTask(fallbackValue = null) {
+    this.clearTimers();
+    this.isBusy = false;
+    if (this.currentTask) {
+      const task = this.currentTask;
+      this.currentTask = null;
+      task.resolve(fallbackValue);
+    }
+  }
+
+  handleMessage(rawLine) {
+    if (typeof rawLine !== "string") return;
+    const line = rawLine.trim();
+    if (!line) return;
+
     if (line === "uciok") {
       this.isInitialized = true;
       if (!resolvedStockfishUrl && this.workerUrl) {
         resolvedStockfishUrl = this.workerUrl;
       }
-      console.log(`[StockfishPool][${this.id}] Initialized and ready (uciok)`);
       if (this.worker) {
         this.worker.postMessage("setoption name MultiPV value 2");
         this.worker.postMessage("isready");
       }
-      this.processQueue();
       return;
     }
+
+    if (line === "readyok") {
+      this.isReady = true;
+      this.onReadyCallback();
+      return;
+    }
+
     if (line.startsWith("info depth")) {
       const depthMatch = line.match(/depth\s+(\d+)/);
       if (depthMatch) {
@@ -138,7 +155,9 @@ class StockfishWorkerService {
       const scoreMateMatch = line.match(/score\s+mate\s+(-?\d+)/);
       if (scoreMateMatch) {
         const m = parseInt(scoreMateMatch[1], 10);
-        if (!isMultiPv2) {
+        if (isMultiPv2) {
+          this.secondBestCp = m > 0 ? 3e3 : -3e3;
+        } else {
           this.currentMate = m;
           this.currentScoreCp = m > 0 ? 3e3 : -3e3;
         }
@@ -155,17 +174,14 @@ class StockfishWorkerService {
           }
         }
       }
+      return;
     }
+
     if (line.startsWith("bestmove")) {
-      if (this.evaluationTimeoutId) {
-        clearTimeout(this.evaluationTimeoutId);
-        this.evaluationTimeoutId = null;
-      }
-      if (this.hardTimeoutId) {
-        clearTimeout(this.hardTimeoutId);
-        this.hardTimeoutId = null;
-      }
-      if (!this.pendingResolve) {
+      this.clearTimers();
+      if (!this.currentTask) {
+        this.isBusy = false;
+        this.onReadyCallback();
         return;
       }
       const parts = line.split(/\s+/);
@@ -174,29 +190,27 @@ class StockfishWorkerService {
         bestMoveUci: bestMove,
         scoreCp: this.currentScoreCp,
         mate: this.currentMate,
-        pv: this.currentPv.length > 0 ? this.currentPv : [bestMove],
+        pv: this.currentPv.length > 0 ? this.currentPv : (bestMove ? [bestMove] : []),
         depth: this.currentDepth,
         multiPv2ScoreCp: this.secondBestCp,
         secondBestMoveUci: this.secondBestMove
       };
-      const resolve = this.pendingResolve;
-      this.pendingResolve = null;
-      this.isProcessing = false;
-      if (resolve) resolve(result);
-      this.processQueue();
+      const task = this.currentTask;
+      this.currentTask = null;
+      this.isBusy = false;
+      task.resolve(result);
+      this.onReadyCallback();
     }
   }
-  processQueue() {
-    if (this.isProcessing || this.queue.length === 0 || !this.worker || !this.isAvailable) {
-      return;
-    }
-    if (!this.isInitialized) {
-      return;
-    }
-    const item = this.queue.shift();
-    if (!item) return;
 
-    this.isProcessing = true;
+  runTask(task) {
+    if (!this.isAvailable || !this.isReady || !this.worker) {
+      task.resolve(null);
+      return;
+    }
+
+    this.isBusy = true;
+    this.currentTask = task;
     this.currentBestMove = "";
     this.currentScoreCp = 0;
     this.currentMate = null;
@@ -204,103 +218,81 @@ class StockfishWorkerService {
     this.currentDepth = 0;
     this.secondBestCp = void 0;
     this.secondBestMove = "";
-    this.pendingResolve = item.resolve;
 
-    this.evaluationTimeoutId = setTimeout(() => {
-      this.evaluationTimeoutId = null;
-      if (this.pendingResolve) {
-        try {
-          this.worker.postMessage("stop");
-        } catch {}
+    const waitMs = task.maxWaitMs || 300;
+    this.softTimeoutId = setTimeout(() => {
+      this.softTimeoutId = null;
+      if (!this.currentTask) return;
+      try {
+        this.worker.postMessage("stop");
+      } catch {}
 
-        this.hardTimeoutId = setTimeout(() => {
-          this.hardTimeoutId = null;
-          if (this.pendingResolve) {
-            console.warn(`[StockfishPool][${this.id}] Hard timeout: engine did not return bestmove, terminating and restarting worker`);
-            const fallback = {
-              bestMoveUci: this.currentBestMove || "",
+      this.hardTimeoutId = setTimeout(() => {
+        this.hardTimeoutId = null;
+        if (!this.currentTask) return;
+        console.warn(`[StockfishPool][${this.id}] Hard timeout, restarting worker`);
+        const fallback = this.currentBestMove
+          ? {
+              bestMoveUci: this.currentBestMove,
               scoreCp: this.currentScoreCp,
               mate: this.currentMate,
-              pv: this.currentPv.length > 0 ? this.currentPv : [],
+              pv: this.currentPv.length > 0 ? this.currentPv : [this.currentBestMove],
               depth: this.currentDepth,
               multiPv2ScoreCp: this.secondBestCp,
               secondBestMoveUci: this.secondBestMove,
               timedOut: true
-            };
-            const resolve = this.pendingResolve;
-            this.pendingResolve = null;
-            this.isProcessing = false;
+            }
+          : null;
 
-            try {
-              if (this.worker) this.worker.terminate();
-            } catch {}
-            this.worker = null;
-            this.isInitialized = false;
+        try {
+          if (this.worker) this.worker.terminate();
+        } catch {}
+        this.worker = null;
+        this.isInitialized = false;
+        this.isReady = false;
 
-            resolve(fallback);
-            this.initWorker();
-          }
-        }, 1500);
-      }
-    }, (item.maxWaitMs || 1200) + 300);
+        this.abortCurrentTask(fallback);
+        this.initWorker();
+        this.onReadyCallback();
+      }, 800);
+    }, waitMs + 300);
 
     try {
-      this.worker.postMessage(`position fen ${item.fen}`);
-      const movetimeCmd = item.maxWaitMs ? ` movetime ${item.maxWaitMs}` : "";
-      this.worker.postMessage(`go depth ${item.depth}${movetimeCmd}`);
+      this.worker.postMessage(`position fen ${task.fen}`);
+      const movetimeCmd = task.maxWaitMs ? ` movetime ${task.maxWaitMs}` : "";
+      this.worker.postMessage(`go depth ${task.depth}${movetimeCmd}`);
     } catch (err) {
       console.error(`[StockfishPool][${this.id}] postMessage failed:`, err);
-      if (this.evaluationTimeoutId) clearTimeout(this.evaluationTimeoutId);
-      if (this.hardTimeoutId) clearTimeout(this.hardTimeoutId);
-      this.isProcessing = false;
-      const resolve = this.pendingResolve;
-      this.pendingResolve = null;
-      if (resolve) resolve(null);
-      this.processQueue();
+      this.abortCurrentTask(null);
+      this.onReadyCallback();
     }
   }
-  evaluate(fen, depth = 14, maxWaitMs = 1000) {
-    if (!this.isAvailable || !this.worker) {
-      return Promise.resolve(null);
-    }
-    return new Promise((resolve) => {
-      let settled = false;
-      const safeResolve = (val) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(overallTimeout);
-        resolve(val);
-      };
-      const overallTimeout = setTimeout(() => {
-        safeResolve(null);
-      }, (maxWaitMs || 1200) + 2500);
 
-      this.queue.push({ fen, depth, maxWaitMs, resolve: safeResolve });
-      this.processQueue();
-    });
-  }
   isEngineReady() {
-    return this.isAvailable && this.isInitialized;
+    return this.isAvailable && this.isReady;
   }
 }
+
 const POOL_MAX_WORKERS = 4;
 const MAX_CONSECUTIVE_INIT_FAILURES = 3;
 
 class StockfishPool {
   constructor() {
     const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
-    this.targetSize = Math.min(POOL_MAX_WORKERS, Math.max(1, cores - 1));
+    this.targetSize = Math.min(POOL_MAX_WORKERS, Math.max(2, cores - 1));
     this.consecutiveFailures = 0;
     this.isPermanentlyDisabled = false;
+    this.queue = [];
+    this.workers = [];
 
     if (typeof window !== "undefined" && window.location && window.location.protocol === "file:") {
       this.isPermanentlyDisabled = true;
-      this.workers = [];
       return;
     }
 
-    this.workers = [new StockfishWorkerService()];
+    this.warmUp();
   }
+
   cleanDeadWorkers() {
     const dead = this.workers.filter((w) => !w.isAvailable);
     if (dead.length > 0) {
@@ -312,26 +304,58 @@ class StockfishPool {
     }
     if (this.consecutiveFailures >= MAX_CONSECUTIVE_INIT_FAILURES && this.workers.length === 0) {
       this.isPermanentlyDisabled = true;
+      this.drainPoolQueue();
     }
   }
+
+  drainPoolQueue() {
+    while (this.queue.length > 0) {
+      const task = this.queue.shift();
+      if (task && task.resolve) task.resolve(null);
+    }
+  }
+
   warmUp() {
     if (this.isPermanentlyDisabled) return;
     this.cleanDeadWorkers();
     if (this.isPermanentlyDisabled) return;
     while (this.workers.length < this.targetSize) {
-      this.workers.push(new StockfishWorkerService());
+      this.workers.push(new StockfishWorkerService(() => this.dispatch()));
     }
   }
+
+  dispatch() {
+    this.cleanDeadWorkers();
+    if (this.isPermanentlyDisabled) return;
+
+    const readyWorkers = this.workers.filter((w) => w.isAvailable && w.isReady);
+    if (readyWorkers.length > 0) {
+      this.consecutiveFailures = 0;
+    }
+
+    const idleWorkers = readyWorkers.filter((w) => !w.isBusy);
+    while (idleWorkers.length > 0 && this.queue.length > 0) {
+      const worker = idleWorkers.shift();
+      const task = this.queue.shift();
+      if (worker && task) {
+        worker.runTask(task);
+      }
+    }
+  }
+
   get size() {
     return this.isPermanentlyDisabled ? 0 : this.workers.filter((w) => w.isAvailable).length;
   }
+
   get isAvailable() {
     return !this.isPermanentlyDisabled && this.workers.some((w) => w.isAvailable);
   }
+
   isEngineReady() {
     return !this.isPermanentlyDisabled && this.workers.some((w) => w.isEngineReady());
   }
-  evaluate(fen, depth = 14, maxWaitMs = 1000) {
+
+  evaluate(fen, depth = 10, maxWaitMs = 250) {
     if (this.isPermanentlyDisabled) {
       return Promise.resolve(null);
     }
@@ -339,26 +363,18 @@ class StockfishPool {
     if (this.isPermanentlyDisabled) {
       return Promise.resolve(null);
     }
-    if (this.workers.length === 0) {
-      this.workers.push(new StockfishWorkerService());
-    }
     if (this.workers.length < this.targetSize) {
       this.warmUp();
     }
-    const readyWorkers = this.workers.filter((w) => w.isAvailable && w.worker && w.isInitialized);
-    if (readyWorkers.length > 0) {
-      this.consecutiveFailures = 0;
-    }
-    const available = readyWorkers.length > 0
-      ? readyWorkers
-      : this.workers.filter((w) => w.isAvailable && w.worker);
-
-    if (available.length === 0) {
+    if (this.workers.length === 0) {
       return Promise.resolve(null);
     }
-    const load = (w) => w.queue.length + (w.isProcessing ? 1 : 0);
-    const leastBusy = available.reduce((best, w) => (load(w) < load(best) ? w : best));
-    return leastBusy.evaluate(fen, depth, maxWaitMs);
+
+    return new Promise((resolve) => {
+      this.queue.push({ fen, depth, maxWaitMs, resolve });
+      this.dispatch();
+    });
   }
 }
+
 var stockfishService = new StockfishPool();

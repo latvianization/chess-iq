@@ -25,13 +25,9 @@ class ImportModal {
         this.username = saved.username || '';
         this.activeTab = 'chesscom';
         this.fetchedGames = saved.games;
-        backgroundAnalysisQueue.setQueue(saved.games, this.username);
       }
     } catch {}
 
-    window.addEventListener('chess_iq_game_analyzed', () => {
-      if (this.fetchedGames.length > 0) this.renderTabContent();
-    });
     window.addEventListener('chess_iq_cache_cleared', () => {
       if (this.fetchedGames.length > 0) this.renderTabContent();
     });
@@ -153,7 +149,6 @@ class ImportModal {
       if (games.length === 0) {
         this.fetchError = 'No recent games found for this player.';
       } else {
-        backgroundAnalysisQueue.setQueue(games, this.username);
         try {
           localStorage.setItem('chess_iq_imported_games', JSON.stringify({
             platform: 'chesscom',
@@ -252,9 +247,6 @@ class ImportModal {
             <div class="d-flex align-items-center justify-content-between">
               <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
               <div class="d-flex align-items-center gap-2">
-                <button type="button" class="btn btn-warning btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-open-insights" style="font-size: 11px;">
-                  <i class="bi bi-graph-up-arrow me-1"></i>In-depth Insights (100 games)
-                </button>
                 ${getCacheStats().count > 0 ? `
                   <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-2 fw-bold comic-btn" id="btn-clear-game-cache" style="font-size: 11px;">
                     <i class="bi bi-trash3 me-1"></i>Clear Cache (${getCacheStats().count})
@@ -267,7 +259,7 @@ class ImportModal {
                 const isUserWhite = g.white.toLowerCase() === this.username.trim().toLowerCase();
                 const isUserBlack = g.black.toLowerCase() === this.username.trim().toLowerCase();
                 const userColor = isUserWhite ? 'w' : (isUserBlack ? 'b' : 'w');
-                const cacheInfo = getGameCacheInfo(g.id || g.pgn, userColor);
+                const cacheInfo = getGameCacheInfo(g.pgn || g.id, userColor) || getGameCacheInfo(g.id, userColor);
                 const isReviewed = Boolean(cacheInfo);
 
                 let userWon = false;
@@ -364,15 +356,6 @@ class ImportModal {
     input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.handleFetch(); });
     container.querySelector('#btn-fetch-platform')?.addEventListener('click', () => this.handleFetch());
 
-    container.querySelector('#btn-open-insights')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openInsights({
-        platform: 'chesscom',
-        username: this.username,
-        onSelectGame: (pgn, userColor) => this.onSelectPgn && this.onSelectPgn(pgn, userColor)
-      });
-    });
-
     container.querySelector('#btn-clear-game-cache')?.addEventListener('click', (e) => {
       e.stopPropagation();
       clearGameCache();
@@ -387,7 +370,7 @@ class ImportModal {
         if (game && this.onSelectPgn) {
           const isWhite = game.white.toLowerCase() === this.username.trim().toLowerCase();
           const userColor = isWhite ? 'w' : 'b';
-          const cacheInfo = getGameCacheInfo(game.id || game.pgn, userColor);
+          const cacheInfo = getGameCacheInfo(game.pgn || game.id, userColor) || getGameCacheInfo(game.id, userColor);
 
           if (cacheInfo) {
             this.onSelectPgn(game.pgn, userColor);

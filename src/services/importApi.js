@@ -1,3 +1,8 @@
+function escapeHtml(text) {
+  return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+var insEscape = escapeHtml;
+
 function parseClockToSeconds(clockStr) {
   const match = clockStr.match(/(\d+):(\d+):?(\d+)?(\.\d+)?/);
   if (!match) return null;
@@ -66,7 +71,7 @@ function extractMovesAndClocks(pgn) {
 
   return { moves, clocks };
 }
-async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, skipExtras = false) {
+async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress) {
   const chess = new Chess();
   try {
     if (typeof chess.loadPgn === "function") {
@@ -169,11 +174,11 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
   if (hasPrefetch) {
     await prefetchEvaluations(fensToEvaluate, isDeep, async (done, total) => {
       if (onProgress) {
-        const plyTarget = Math.max(1, Math.min(totalPlies - 1, Math.round((done / total) * totalPlies * 0.88)));
+        const plyTarget = Math.max(1, Math.min(totalPlies, Math.round((done / total) * totalPlies)));
         if (plyTarget > lastReportedPly) {
           lastReportedPly = plyTarget;
           const p = onProgress(lastReportedPly, totalPlies);
-          if (p && typeof p.then === 'function') await p;
+          if (p && typeof p.then === "function") await p;
         }
       }
     });
@@ -201,9 +206,6 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
 
   for (let i = 0; i < totalPlies; i++) {
     const item = precomputed[i];
-    if (i === 0 || i % 20 === 0 || i === totalPlies - 1) {
-      console.log(`[Analysis] Move evaluation progress: ${i + 1}/${totalPlies} plies`);
-    }
     if (item.isBook) {
       const playedUci2 = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
       const isImpulsive2 = item.timeSpent !== null && item.timeSpent < 2 && !item.isTimeTrouble;
@@ -271,7 +273,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
         }
       }
       const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
-      const oppBestUci = (engineAfter.pv && engineAfter.pv[0]) || "";
+      const oppBestUci = (engineAfter.pv && engineAfter.pv[0]) || engineAfter.bestMoveUci || "";
       const multiPv2WinProb = engineBefore.multiPv2ScoreCp !== void 0 ? cpToWinProb(engineBefore.multiPv2ScoreCp) : void 0;
       const moverMultiPv2WinProb = multiPv2WinProb !== void 0
         ? (item.side === "w" ? multiPv2WinProb : 1 - multiPv2WinProb)
@@ -293,11 +295,11 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
       const isImpulsive = item.timeSpent !== null && item.timeSpent < 2 && (classification === "blunder" || classification === "mistake") && !item.isTimeTrouble;
       let threat = null;
       let explanation = null;
-      if (!skipExtras && (classification === "blunder" || winProbLoss > 0.15)) {
-        threat = await detectThreat(item.fenAfter);
+      if (classification === "blunder" || winProbLoss > 0.15) {
+        threat = detectThreat(item.fenAfter, oppBestUci);
       }
-      if (!skipExtras && (classification === "blunder" || classification === "mistake" || classification === "inaccuracy" || classification === "missed_win")) {
-        explanation = await prepareMoveExplanation({
+      if (classification === "blunder" || classification === "mistake" || classification === "inaccuracy" || classification === "missed_win" || classification === "brilliant") {
+        explanation = prepareMoveExplanation({
           fen: item.fenAfter,
           fenBefore: item.fenBefore,
           from: item.moveObj.from,
@@ -306,6 +308,8 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
           color: item.side,
           bestMoveUci,
           bestMoveSan: bestMoveSan || item.moveObj.san,
+          secondBestMoveUci,
+          secondBestMoveSan,
           punishmentPv: engineAfter.pv,
           bestPv: engineBefore.pv,
           winProbBefore: moverWinProbBefore,
@@ -351,18 +355,10 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = false, onProgress, 
         phase: item.phase
       };
     }
-    if (onProgress) {
-      const postPly = hasPrefetch
-        ? Math.max(lastReportedPly, Math.min(totalPlies, Math.round((totalPlies * 0.88) + ((i + 1) / totalPlies) * (totalPlies * 0.12))))
-        : i + 1;
-      if (postPly > lastReportedPly || i === totalPlies - 1) {
-        lastReportedPly = postPly;
-        const pRes = onProgress(lastReportedPly, totalPlies);
-        if (pRes && typeof pRes.then === 'function') await pRes;
-      }
-    } else if (i % 8 === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+  }
+  if (onProgress && lastReportedPly < totalPlies) {
+    const pRes = onProgress(totalPlies, totalPlies);
+    if (pRes && typeof pRes.then === "function") await pRes;
   }
   const createEmptyCounts = () => ({
     brilliant: 0,
