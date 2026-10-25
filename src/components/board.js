@@ -12,7 +12,7 @@ const FILES_REV = [...FILES].reverse();
 const RANKS_REV = [...RANKS].reverse();
 
 const THEMES = {
-  green: { light: '#ebecd0', dark: '#739552' },
+  green: { light: '#ebecd0', dark: '#739552' }
 };
 
 function getCapturedPiecesAndDiff(fen) {
@@ -101,6 +101,13 @@ class Chessboard {
     this.activeKeyDownHandler = null;
 
     this.render();
+  }
+
+  setTheme(themeName) {
+    if (THEMES[themeName] && this.theme !== themeName) {
+      this.theme = themeName;
+      this.render();
+    }
   }
 
   cleanupDrag() {
@@ -328,7 +335,7 @@ class Chessboard {
     const isWhiteOrientation = this.orientation === 'w';
     const files = isWhiteOrientation ? FILES : FILES_REV;
     const ranks = isWhiteOrientation ? RANKS : RANKS_REV;
-    const themeColors = THEMES.green;
+    const themeColors = THEMES[this.theme] || THEMES.green;
     const pendingAnimations = [];
 
     let checkSquare = null;

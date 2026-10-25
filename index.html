@@ -10,6 +10,12 @@
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
 
+    <!-- Favicon & App Icons -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22bg%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23fbbf24%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23d97706%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2260%22%20height%3D%2260%22%20rx%3D%2214%22%20fill%3D%22url(%23bg)%22%20stroke%3D%22%23b45309%22%20stroke-width%3D%222%22%2F%3E%3Cpath%20d%3D%22M35%207L17%2033h15L26%2057l21-28H32z%22%20fill%3D%22%230b0e14%22%2F%3E%3C%2Fsvg%3E" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="alternate icon" type="image/x-icon" href="./favicon.ico" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+
     <!-- CDNs: Bootstrap 5.3.3 & Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -37,28 +43,41 @@
           </div>
         </div>
 
-        <!-- Right: Actions & Theme Toggle -->
-        <div class="d-flex align-items-center gap-1 gap-sm-2 flex-shrink-0">
-          <!-- Sound Toggle (Mute / Unmute) -->
-          <button type="button" class="arcade-btn-icon" id="nav-btn-sound" aria-label="Toggle Sound" title="Toggle Sound">
-            <i class="bi bi-volume-up-fill" id="sound-toggle-icon"></i>
-          </button>
-
-          <!-- Theme Toggle (Light / Dark) -->
-          <button type="button" class="arcade-btn-icon" id="nav-btn-theme" aria-label="Toggle Theme" title="Toggle Theme">
-            <i class="bi bi-sun-fill fg-warning" id="theme-toggle-icon"></i>
-          </button>
-
-          <!-- Help & Guide Modal Trigger -->
-          <button type="button" class="arcade-btn-icon" id="nav-btn-help" aria-label="Chess IQ Guide & Glossary" title="Chess IQ Guide & Glossary">
-            <i class="bi bi-question-circle-fill text-warning"></i>
-          </button>
-
-          <!-- Import Game Button (Bootstrap 5 Modal Trigger) -->
+        <!-- Right: Primary Import & Unified Settings Dropdown -->
+        <div class="d-flex align-items-center gap-1.5 gap-sm-2 flex-shrink-0">
+          <!-- Primary Action: Import Game (Modal Trigger) -->
           <button type="button" class="arcade-btn-primary px-2.5 px-sm-3.5 py-1.5 d-flex align-items-center justify-content-center gap-1.5" id="nav-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal" title="Import Game" aria-label="Import Game">
             <i class="bi bi-cloud-arrow-up-fill"></i>
             <span class="d-none d-sm-inline">Import</span>
           </button>
+
+          <!-- Unified Settings & Options Dropdown -->
+          <div class="dropdown">
+            <button class="arcade-btn-icon" type="button" id="nav-options-dropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Settings & Options" aria-label="Settings and Options">
+              <i class="bi bi-gear-fill"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-lg py-2" aria-labelledby="nav-options-dropdown" style="min-width: 230px;">
+              <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Display & Theme</li>
+              <li>
+                <button class="dropdown-item d-flex align-items-center justify-content-between py-1.5 px-3" id="menu-btn-theme" type="button">
+                  <span><i class="bi bi-sun-fill me-2 text-warning" id="menu-theme-icon"></i>Theme Mode</span>
+                  <span class="badge bg-secondary font-monospace" id="menu-theme-label">Light</span>
+                </button>
+              </li>
+              <li>
+                <button class="dropdown-item d-flex align-items-center justify-content-between py-1.5 px-3" id="menu-btn-sound" type="button">
+                  <span><i class="bi bi-volume-up-fill me-2 text-primary" id="menu-sound-icon"></i>Sound Effects</span>
+                  <span class="badge bg-success font-monospace" id="menu-sound-label">On</span>
+                </button>
+              </li>
+              <li><hr class="dropdown-divider my-1.5"></li>
+              <li>
+                <button class="dropdown-item d-flex align-items-center py-1.5 px-3 text-danger" id="menu-btn-clear-cache" type="button">
+                  <i class="bi bi-trash3-fill me-2"></i>Clear Saved Data
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
     </header>
@@ -118,6 +137,12 @@
     <script src="./src/components/reviewAdvantageChart.js"></script>
     <script src="./src/components/reviewWhyModal.js"></script>
     <script src="./src/components/reviewWinningPathModal.js"></script>
+    <script src="./src/components/reviewPillars.js"></script>
+    <script src="./src/components/reviewOpeningModal.js"></script>
+    <script src="./src/components/reviewBlunderBankModal.js"></script>
+    <script src="./src/components/reviewReportModal.js"></script>
+    <script src="./src/components/reviewTrainingModes.js"></script>
+    <script src="./src/components/reviewMoveTable.js"></script>
     <script src="./src/components/importModal.js"></script>
     <script src="./src/components/reviewDashboard.js"></script>
 

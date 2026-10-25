@@ -77,7 +77,19 @@ function getBlunderBankPuzzles(filter = 'all') {
   const all = loadBlunderBank();
   if (filter === 'all') return all;
   if (filter === 'unmastered') return all.filter((item) => !item.mastered);
+  if (filter === 'daily') return getDailyWorkoutPuzzles(5);
   return all.filter((item) => Array.isArray(item.motifs) && item.motifs.includes(filter));
+}
+
+function getDailyWorkoutPuzzles(count = 5) {
+  const all = loadBlunderBank();
+  if (all.length === 0) return [];
+  const sorted = [...all].sort((a, b) => {
+    if (a.mastered !== b.mastered) return a.mastered ? 1 : -1;
+    if ((a.streak || 0) !== (b.streak || 0)) return (a.streak || 0) - (b.streak || 0);
+    return (a.lastAttemptAt || 0) - (b.lastAttemptAt || 0);
+  });
+  return sorted.slice(0, count);
 }
 
 function recordBlunderBankAttempt(puzzleId, solved) {
@@ -163,6 +175,7 @@ if (typeof window !== 'undefined') {
   window.saveBlunderBank = saveBlunderBank;
   window.syncGameToBlunderBank = syncGameToBlunderBank;
   window.getBlunderBankPuzzles = getBlunderBankPuzzles;
+  window.getDailyWorkoutPuzzles = getDailyWorkoutPuzzles;
   window.recordBlunderBankAttempt = recordBlunderBankAttempt;
   window.getBlunderBankStats = getBlunderBankStats;
   window.removeGameFromBlunderBank = removeGameFromBlunderBank;

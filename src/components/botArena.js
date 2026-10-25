@@ -16,12 +16,14 @@ class BotArena {
   constructor(containerEl, options = {}) {
     this.container = containerEl;
     this.onAnalyzeGame = options.onAnalyzeGame || null; // (pgn, userColor) => {}
-    this.theme = options.theme || 'green';
+    this.theme = 'green';
 
     this.chess = new Chess();
     this.userColor = 'w';
     this.selectedBot = BOTS_33[0]; // 400 Elo Pawn Piper
     this.activeTier = 'rookie';
+    this.activeTierFilter = 'all'; // 'all' | 'rookie' | 'challenger' | 'hero' | 'titan'
+    this.botSearchQuery = '';
     this.speechText = this.selectedBot.speech.onStart[0];
     this.isSpeechVisible = false;
     this.speechTimeout = null;
@@ -580,12 +582,45 @@ class BotArena {
       document.querySelectorAll('.game-over-modal-backdrop, .modal-backdrop, .why-modal-backdrop').forEach((el) => el.remove());
 
       const records = this.getBotRecords();
+      const currentTierFilter = this.activeTierFilter || 'all';
+      const query = (this.botSearchQuery || '').trim().toLowerCase();
+
+      const displayedTiers = BOT_TIERS.filter((tier) => {
+        if (currentTierFilter !== 'all' && tier.id !== currentTierFilter) return false;
+        return true;
+      });
 
       this.container.innerHTML = `
         <div class="d-flex flex-column gap-3 w-100 py-1 position-relative">
+          <!-- Bot Filter Bar & Search (De-cluttering 33 bots) -->
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1 p-2 comic-card">
+            <div class="btn-group btn-group-sm rounded-pill p-0.5 bg-body-tertiary border flex-wrap" role="group" aria-label="Bot Tier Filter">
+              <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-bold ${currentTierFilter === 'all' ? 'btn-warning text-dark' : 'btn-ghost text-secondary'}" data-bot-tier-filter="all">All Tiers (33)</button>
+              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'rookie' ? 'btn-warning text-dark' : 'btn-ghost text-secondary'}" data-bot-tier-filter="rookie">🌱 Rookies</button>
+              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'challenger' ? 'btn-warning text-dark' : 'btn-ghost text-secondary'}" data-bot-tier-filter="challenger">⚡ Challengers</button>
+              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'hero' ? 'btn-warning text-dark' : 'btn-ghost text-secondary'}" data-bot-tier-filter="hero">🦸 Heroes</button>
+              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'titan' ? 'btn-warning text-dark' : 'btn-ghost text-secondary'}" data-bot-tier-filter="titan">👑 Titans</button>
+            </div>
+            <div class="d-flex align-items-center gap-1.5 flex-grow-1 max-w-sm ms-auto">
+              <div class="input-group input-group-sm">
+                <span class="input-group-text bg-body-tertiary border-end-0"><i class="bi bi-search text-secondary"></i></span>
+                <input type="text" class="form-control border-start-0" id="bot-search-input" placeholder="Search bots by name, Elo, or style..." value="${typeof insEscape === 'function' ? insEscape(this.botSearchQuery) : this.botSearchQuery}">
+              </div>
+            </div>
+          </div>
+
           <!-- All Bots Grouped in Separate Cards by Tier -->
-          ${BOT_TIERS.map((tier) => {
-            const tierBots = BOTS_33.filter((b) => b.tier === tier.id);
+          ${displayedTiers.map((tier) => {
+            let tierBots = BOTS_33.filter((b) => b.tier === tier.id);
+            if (query) {
+              tierBots = tierBots.filter((b) =>
+                b.name.toLowerCase().includes(query) ||
+                String(b.elo).includes(query) ||
+                (b.title && b.title.toLowerCase().includes(query)) ||
+                (b.description && b.description.toLowerCase().includes(query))
+              );
+            }
+            if (tierBots.length === 0) return '';
             return `
               <div class="comic-card p-3 p-sm-4" id="tier-sec-${tier.id}">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 pb-2.5 mb-3 border-bottom" style="border-color: var(--arcade-border) !important;">
@@ -649,6 +684,28 @@ class BotArena {
         }
       };
       window.addEventListener('scroll', this.scrollHandler, { passive: true });
+
+      // Bind Tier Filters
+      this.container.querySelectorAll('[data-bot-tier-filter]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          this.activeTierFilter = btn.getAttribute('data-bot-tier-filter') || 'all';
+          this.render();
+        });
+      });
+
+      // Bind Search Input
+      const searchInput = this.container.querySelector('#bot-search-input');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          this.botSearchQuery = e.target.value;
+          this.render();
+          const nextInput = this.container.querySelector('#bot-search-input');
+          if (nextInput) {
+            nextInput.focus();
+            nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
+          }
+        });
+      }
 
       // Bind click and keyboard handlers to each bot card to start new game with random side
       this.container.querySelectorAll('[data-bot-id]').forEach((card) => {

@@ -19,8 +19,15 @@
 - **`src/components/`**:
   - `board.js`: Interactive SVG chessboard, captured piece bars, drag-and-drop, check highlight.
   - `botArena.js`: 33-bot gameplay arena and bot AI logic.
-  - `reviewDashboard.js`: Game review dashboard, eval bar, move classification, phase ratings.
+  - `reviewDashboard.js`: Game review dashboard coordinator, eval bar, and board layout.
   - `reviewWhyModal.js`: "Why?" blunder explanation modal with immediate loading state.
+  - `reviewWinningPathModal.js`: Decisive winning continuation engine explorer modal.
   - `reviewAdvantageChart.js`: Interactive evaluation timeline chart.
+  - `reviewPillars.js`: 4-pillar positional evaluation (Material, Activity, Safety, Structure) and guide modal.
+  - `reviewOpeningModal.js`: ECO opening book and departure explorer modal.
+  - `reviewBlunderBankModal.js`: Spaced-repetition blunder & mistake practice modal.
+  - `reviewReportModal.js`: Full game executive performance report modal.
+  - `reviewTrainingModes.js`: Interactive training modes (Retry Mistakes, Guess-the-Move, Sandbox, Vision).
+  - `reviewMoveTable.js`: Move history table, move filtering, and classification summary badges.
   - `importModal.js`: Game import dialog and user games list.
 - **`src/main.js`**: App coordinator, theme switching, and mode toggling.

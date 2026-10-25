@@ -174,12 +174,30 @@ class App {
     if (icon) {
       icon.className = this.isDarkMode ? 'bi bi-moon-stars-fill text-warning' : 'bi bi-sun-fill text-warning';
     }
+    const menuIcon = document.getElementById('menu-theme-icon');
+    const menuLabel = document.getElementById('menu-theme-label');
+    if (menuIcon) {
+      menuIcon.className = this.isDarkMode ? 'bi bi-moon-stars-fill me-2 text-warning' : 'bi bi-sun-fill me-2 text-warning';
+    }
+    if (menuLabel) {
+      menuLabel.textContent = this.isDarkMode ? 'Dark' : 'Light';
+      menuLabel.className = this.isDarkMode ? 'badge bg-warning text-dark font-monospace' : 'badge bg-secondary font-monospace';
+    }
   }
 
   updateSoundIcon() {
     const icon = document.getElementById('sound-toggle-icon');
     if (icon) {
       icon.className = soundService.isMuted ? 'bi bi-volume-mute-fill text-danger' : 'bi bi-volume-up-fill';
+    }
+    const menuIcon = document.getElementById('menu-sound-icon');
+    const menuLabel = document.getElementById('menu-sound-label');
+    if (menuIcon) {
+      menuIcon.className = soundService.isMuted ? 'bi bi-volume-mute-fill me-2 text-danger' : 'bi bi-volume-up-fill me-2 text-success';
+    }
+    if (menuLabel) {
+      menuLabel.textContent = soundService.isMuted ? 'Muted' : 'On';
+      menuLabel.className = soundService.isMuted ? 'badge bg-danger font-monospace' : 'badge bg-success font-monospace';
     }
   }
 
@@ -197,7 +215,11 @@ class App {
     if (typeof closeWhyModal === 'function' && this.reviewDashboard) {
       closeWhyModal(this.reviewDashboard);
     }
+    if (typeof closeWinningPathModal === 'function') {
+      closeWinningPathModal();
+    }
     document.getElementById('why-blunder-modal')?.remove();
+    document.getElementById('winning-path-modal')?.remove();
     document.getElementById('blunder-bank-modal')?.remove();
     document.getElementById('positional-pillars-modal')?.remove();
     document.getElementById('iq-guide-modal-root')?.remove();
@@ -235,7 +257,11 @@ class App {
     if (typeof closeWhyModal === 'function' && this.reviewDashboard) {
       closeWhyModal(this.reviewDashboard);
     }
+    if (typeof closeWinningPathModal === 'function') {
+      closeWinningPathModal();
+    }
     document.getElementById('why-blunder-modal')?.remove();
+    document.getElementById('winning-path-modal')?.remove();
     document.getElementById('blunder-bank-modal')?.remove();
     document.getElementById('positional-pillars-modal')?.remove();
     if (typeof closeGameOverModal === 'function') {
@@ -271,13 +297,25 @@ class App {
       this.importModal?.show();
     });
     document.getElementById('nav-btn-theme')?.addEventListener('click', () => this.toggleTheme());
+    document.getElementById('menu-btn-theme')?.addEventListener('click', () => this.toggleTheme());
     document.getElementById('nav-btn-sound')?.addEventListener('click', () => {
       soundService.toggleMute();
       this.updateSoundIcon();
     });
-    document.getElementById('nav-btn-help')?.addEventListener('click', () => {
-      if (typeof openIqGuideModal === 'function') {
-        openIqGuideModal();
+    document.getElementById('menu-btn-sound')?.addEventListener('click', () => {
+      soundService.toggleMute();
+      this.updateSoundIcon();
+    });
+    document.getElementById('menu-btn-clear-cache')?.addEventListener('click', () => {
+      if (confirm('Clear all cached games, analysis results, and blunder bank data? This cannot be undone.')) {
+        try {
+          if (typeof clearGameCache === 'function') clearGameCache();
+          if (typeof clearBlunderBank === 'function') clearBlunderBank();
+          localStorage.removeItem('chess_toon_theme');
+          window.location.reload();
+        } catch (e) {
+          console.warn('Failed to clear cache:', e);
+        }
       }
     });
   }

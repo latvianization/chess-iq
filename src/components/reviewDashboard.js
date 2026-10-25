@@ -13,7 +13,8 @@ class ReviewDashboard {
     this.onPlayFromFen = options.onPlayFromFen || null;
     this.onSelectGame = options.onSelectGame || null;
     this.onReanalyzeGame = options.onReanalyzeGame || null;
-    this.theme = options.theme || 'green';
+    this.theme = 'green';
+    this.reviewTab = 'moves'; // 'moves' | 'coach'
 
     this.game = null; // AnalyzedGame object
     this.isAnalyzing = false;
@@ -57,8 +58,14 @@ class ReviewDashboard {
       const reviewView = document.getElementById('review-view');
       if (reviewView && reviewView.classList.contains('d-none')) return;
 
-      // Don't intercept if any modal is active (Bootstrap modal or Why-blunder modal)
-      if (document.querySelector('.modal.show') || document.getElementById('why-blunder-modal')) return;
+      // Don't intercept if any modal is active (Bootstrap modal, Why-blunder modal, Winning-path modal, etc.)
+      if (
+        document.querySelector('.modal.show') ||
+        document.getElementById('why-blunder-modal') ||
+        document.getElementById('winning-path-modal') ||
+        document.querySelector('.why-modal-backdrop') ||
+        document.body.classList.contains('modal-open')
+      ) return;
 
       if (!this.game) return;
 
@@ -244,251 +251,49 @@ class ReviewDashboard {
     }
   }
 
+
   async handleBoardMove(from, to) {
-    if (!this.game) return;
-
-    // 1. Retry Mistakes Puzzle Mode
-    if (this.retryPuzzleState?.active && !this.retryPuzzleState.solved) {
-      const cur = this.getCurrentEval();
-      if (!cur) return;
-      try {
-        const c = new Chess(cur.fenBefore);
-        const move = c.move({ from, to, promotion: 'q' });
-        if (!move) return;
-
-        const playedUci = `${move.from}${move.to}`;
-        const bestPrefix = (cur.bestMoveUci || '').slice(0, 4).toLowerCase();
-        const isCorrect = playedUci.toLowerCase() === bestPrefix || move.san === cur.bestMoveSan;
-
-        if (isCorrect) {
-          this.retryPuzzleState.solved = true;
-          this.retryPuzzleState.boardFen = c.fen();
-          this.retryPuzzleState.lastMove = { from: move.from, to: move.to };
-          this.retryPuzzleState.message = `✅ Found it! ${move.san} is the top engine move.`;
-          this.retryPuzzleState.isError = false;
-          if (this.board) this.board.userHighlights.clear();
-          soundService.playBrilliant();
-        } else {
-          this.retryPuzzleState.message = `❌ ${move.san} is not the best move here — try again or use Hint!`;
-          this.retryPuzzleState.isError = true;
-          soundService.playBlunder();
-        }
-        this.updateBoardAndControls();
-      } catch {}
-      return;
+    if (typeof handleReviewBoardMove === 'function') {
+      return await handleReviewBoardMove(this, from, to);
     }
-
-    // 2. Guess the Move Active Mode
-    if (this.guessMoveState?.active && !this.guessMoveState.answered) {
-      const cur = this.getCurrentEval();
-      if (!cur) return;
-      try {
-        const c = new Chess(cur.fenBefore);
-        const move = c.move({ from, to, promotion: 'q' });
-        if (!move) return;
-
-        const playedUci = `${move.from}${move.to}`.toLowerCase();
-        const bestPrefix = (cur.bestMoveUci || '').slice(0, 4).toLowerCase();
-        const secondPrefix = (cur.secondBestMoveUci || '').slice(0, 4).toLowerCase();
-        const actualGameSan = cur.san;
-
-        this.guessMoveState.answered = true;
-        this.guessMoveState.boardFen = c.fen();
-        this.guessMoveState.lastMove = { from: move.from, to: move.to };
-        this.guessMoveState.maxScore += 3;
-
-        if (playedUci === bestPrefix || move.san === cur.bestMoveSan) {
-          this.guessMoveState.score += 3;
-          this.guessMoveState.grade = '⭐⭐⭐ Engine #1!';
-          this.guessMoveState.isError = false;
-          this.guessMoveState.message = `Spot on! ${move.san} is Stockfish's #1 choice (in the game you played ${actualGameSan}).`;
-          soundService.playBrilliant();
-        } else if (playedUci === secondPrefix || move.san === cur.secondBestMoveSan || (move.san === actualGameSan && ['best', 'excellent', 'great', 'good'].includes(cur.classification))) {
-          this.guessMoveState.score += 2;
-          this.guessMoveState.grade = '⭐⭐ Solid Move';
-          this.guessMoveState.isError = false;
-          this.guessMoveState.message = `Good choice! ${move.san} is a strong continuation (Engine #1: ${cur.bestMoveSan}, game move: ${actualGameSan}).`;
-          soundService.playMove();
-        } else {
-          this.guessMoveState.grade = '⚠️ Inaccurate';
-          this.guessMoveState.isError = true;
-          this.guessMoveState.message = `You guessed ${move.san}. Engine preferred ${cur.bestMoveSan} (in the game you played ${actualGameSan}).`;
-          soundService.playBlunder();
-        }
-        this.updateBoardAndControls();
-      } catch {}
-      return;
-    }
-
-    // 3. Interactive What-If Sandbox Mode
-    try {
-      const baseFen = this.getActiveBoardFen();
-      const c = new Chess(baseFen);
-      const move = c.move({ from, to, promotion: 'q' });
-      if (!move) return;
-
-      if (move.captured) soundService.playCapture();
-      else soundService.playMove();
-
-      const newFen = c.fen();
-      const prevMoves = this.sandboxState?.moveHistorySan || [];
-      this.sandboxState = {
-        fen: newFen,
-        lastMove: { from: move.from, to: move.to },
-        moveHistorySan: [...prevMoves, move.san],
-        evalResult: null,
-        isEvaluating: true
-      };
-      this.updateBoardAndControls();
-
-      const evalRes = await evaluateFenHybrid(newFen, false);
-      if (this.sandboxState && this.sandboxState.fen === newFen) {
-        this.sandboxState.evalResult = evalRes;
-        this.sandboxState.isEvaluating = false;
-        this.updateBoardAndControls();
-      }
-    } catch {}
   }
 
   startRetryMistakes() {
-    const mistakes = this.getUserMistakePlies();
-    if (mistakes.length === 0) return;
-    this.sandboxState = null;
-    this.guessMoveState = null;
-    if (this.board) this.board.userHighlights.clear();
-    const first = mistakes[0];
-    this.currentPly = first.ply;
-    this.retryPuzzleState = {
-      active: true,
-      mistakes,
-      currentIndex: 0,
-      solved: false,
-      hintShown: false,
-      boardFen: first.fenBefore,
-      lastMove: null,
-      message: `You played ${first.san} (${first.classification.replace('_', ' ')}). Drag the best move on the board!`,
-      isError: false
-    };
-    this.updateBoardAndControls();
+    if (typeof startRetryMistakes === 'function') startRetryMistakes(this);
   }
 
   loadMistakeAtIndex(idx) {
-    if (!this.retryPuzzleState?.active) return;
-    const mistakes = this.retryPuzzleState.mistakes;
-    if (idx < 0 || idx >= mistakes.length) return;
-    if (this.board) this.board.userHighlights.clear();
-    const target = mistakes[idx];
-    this.currentPly = target.ply;
-    this.retryPuzzleState.currentIndex = idx;
-    this.retryPuzzleState.solved = false;
-    this.retryPuzzleState.hintShown = false;
-    this.retryPuzzleState.boardFen = target.fenBefore;
-    this.retryPuzzleState.lastMove = null;
-    this.retryPuzzleState.message = `You played ${target.san} (${target.classification.replace('_', ' ')}). Drag the best move on the board!`;
-    this.retryPuzzleState.isError = false;
-    this.updateBoardAndControls();
+    if (typeof loadMistakeAtIndex === 'function') loadMistakeAtIndex(this, idx);
   }
 
   showPuzzleHint() {
-    if (!this.retryPuzzleState?.active) return;
-    const cur = this.getCurrentEval();
-    if (!cur || !cur.bestMoveUci || cur.bestMoveUci.length < 4) return;
-    const fromSq = cur.bestMoveUci.slice(0, 2);
-    this.retryPuzzleState.hintShown = true;
-    this.retryPuzzleState.message = `💡 Hint: Move the piece on ${fromSq.toUpperCase()}!`;
-    this.retryPuzzleState.isError = false;
-    if (this.board) {
-      this.board.userHighlights.clear();
-      this.board.userHighlights.add(fromSq);
-    }
-    this.updateBoardAndControls();
+    if (typeof showPuzzleHint === 'function') showPuzzleHint(this);
   }
 
   revealPuzzleSolution() {
-    if (!this.retryPuzzleState?.active) return;
-    const cur = this.getCurrentEval();
-    if (!cur) return;
-    this.retryPuzzleState.solved = true;
-    this.retryPuzzleState.boardFen = cur.fen;
-    this.retryPuzzleState.lastMove = { from: cur.from, to: cur.to };
-    this.retryPuzzleState.message = `👁 Solution: ${cur.bestMoveSan} was the best move (you played ${cur.san}).`;
-    this.retryPuzzleState.isError = false;
-    if (this.board) this.board.userHighlights.clear();
-    this.updateBoardAndControls();
+    if (typeof revealPuzzleSolution === 'function') revealPuzzleSolution(this);
   }
 
   startGuessTheMove() {
-    if (!this.game || !Array.isArray(this.game.plies)) return;
-    const userColor = this.game.userColor || 'w';
-    const userTurns = this.game.plies.filter((p) => p && p.color === userColor && p.ply > 6 && p.classification !== 'book');
-    if (userTurns.length === 0) return;
-
-    this.sandboxState = null;
-    this.retryPuzzleState = null;
-    if (this.board) this.board.userHighlights.clear();
-
-    const first = userTurns[0];
-    this.currentPly = first.ply;
-    this.guessMoveState = {
-      active: true,
-      turns: userTurns,
-      currentIndex: 0,
-      answered: false,
-      score: 0,
-      maxScore: 0,
-      grade: '',
-      boardFen: first.fenBefore,
-      lastMove: null,
-      message: `Move ${Math.ceil(first.ply / 2)}: What move would you play here? Drag a piece on the board!`,
-      isError: false
-    };
-    this.updateBoardAndControls();
+    if (typeof startGuessTheMove === 'function') startGuessTheMove(this);
   }
 
   loadGuessTurnAtIndex(idx) {
-    if (!this.guessMoveState?.active) return;
-    const turns = this.guessMoveState.turns;
-    if (idx < 0 || idx >= turns.length) return;
-    if (this.board) this.board.userHighlights.clear();
-    const target = turns[idx];
-    this.currentPly = target.ply;
-    this.guessMoveState.currentIndex = idx;
-    this.guessMoveState.answered = false;
-    this.guessMoveState.grade = '';
-    this.guessMoveState.boardFen = target.fenBefore;
-    this.guessMoveState.lastMove = null;
-    this.guessMoveState.message = `Move ${Math.ceil(target.ply / 2)}: What move would you play here?`;
-    this.guessMoveState.isError = false;
-    this.updateBoardAndControls();
+    if (typeof loadGuessTurnAtIndex === 'function') loadGuessTurnAtIndex(this, idx);
   }
 
   exitSpecialMode() {
-    this.sandboxState = null;
-    this.retryPuzzleState = null;
-    this.guessMoveState = null;
-    if (this.board) this.board.userHighlights.clear();
-    this.updateBoardAndControls();
+    if (typeof exitSpecialMode === 'function') exitSpecialMode(this);
   }
 
   toggleVisionOverlay(mode) {
-    if (mode === 'loose') {
-      this.showLoosePieces = !this.showLoosePieces;
-    } else {
-      this.visionOverlay = this.visionOverlay === mode ? 'none' : mode;
-    }
-    this.updateBoardAndControls();
+    if (typeof toggleVisionOverlay === 'function') toggleVisionOverlay(this, mode);
   }
 
   playFromCurrentPosition(overridePly = null) {
-    if (!this.game || !this.onPlayFromFen) return;
-    if (overridePly !== null && overridePly > 0 && this.game.plies[overridePly - 1]) {
-      this.goToPly(overridePly);
-    }
-    const fen = this.getActiveBoardFen();
-    const userColor = this.game.userColor || 'w';
-    const oppElo = userColor === 'w' ? (this.game.blackElo || 1200) : (this.game.whiteElo || 1200);
-    this.onPlayFromFen(fen, userColor, oppElo);
+    if (typeof playFromCurrentPosition === 'function') playFromCurrentPosition(this, overridePly);
   }
+
 
   goToPly(ply) {
     if (!this.game) return;
@@ -637,11 +442,19 @@ class ReviewDashboard {
   }
 
   closeWhyModal() {
-    closeWhyModal(this);
+    if (typeof closeWhyModal === 'function') closeWhyModal(this);
   }
 
   openWhyModal(targetEval = null) {
-    return openWhyModal(this, targetEval);
+    if (typeof openWhyModal === 'function') return openWhyModal(this, targetEval);
+  }
+
+  closeWinningPathModal() {
+    if (typeof closeWinningPathModal === 'function') closeWinningPathModal();
+  }
+
+  openWinningPathModal(plyOverride = null) {
+    if (typeof openWinningPathModal === 'function') openWinningPathModal(this, plyOverride);
   }
 
   getCurrentEval() {
@@ -938,487 +751,55 @@ class ReviewDashboard {
         btn.classList.toggle('active', this.visionOverlay === mode);
       }
     });
+
+    // Vision Dropdown Badges Visuals
+    const heatmapBadge = this.container.querySelector('#badge-vision-heatmap');
+    if (heatmapBadge) {
+      heatmapBadge.textContent = this.visionOverlay === 'heatmap' ? 'ON' : 'OFF';
+      heatmapBadge.className = `badge font-monospace ${this.visionOverlay === 'heatmap' ? 'bg-warning text-dark' : 'bg-secondary'}`;
+    }
+    const looseBadge = this.container.querySelector('#badge-vision-loose');
+    if (looseBadge) {
+      looseBadge.textContent = this.showLoosePieces ? 'ON' : 'OFF';
+      looseBadge.className = `badge font-monospace ${this.showLoosePieces ? 'bg-warning text-dark' : 'bg-secondary'}`;
+    }
+    const threatBadge = this.container.querySelector('#badge-vision-threat');
+    if (threatBadge) {
+      threatBadge.textContent = this.isThreatActive ? 'ON' : 'OFF';
+      threatBadge.className = `badge font-monospace ${this.isThreatActive ? 'bg-warning text-dark' : 'bg-secondary'}`;
+    }
+    const bestBadge = this.container.querySelector('#badge-vision-best');
+    if (bestBadge) {
+      bestBadge.textContent = this.showBestMove ? 'ON' : 'OFF';
+      bestBadge.className = `badge font-monospace ${this.showBestMove ? 'bg-warning text-dark' : 'bg-secondary'}`;
+    }
   }
 
+
   updateModeBanner(cur) {
-    const bannerEl = this.container.querySelector('#pv-banner-area');
-    if (!bannerEl) return;
-
-    if (this.retryPuzzleState?.active) {
-      const st = this.retryPuzzleState;
-      const target = st.mistakes[st.currentIndex];
-      const total = st.mistakes.length;
-      const idx = st.currentIndex;
-
-      let statusAlert = '';
-      if (st.solved) {
-        statusAlert = `
-          <div class="alert alert-success py-1.5 px-2.5 mb-0 mt-2 d-flex align-items-center justify-content-between small fw-bold">
-            <span>${insEscape(st.message || 'Correct move!')}</span>
-            <div class="d-flex align-items-center gap-1.5">
-              ${idx + 1 < total ? `
-                <button type="button" class="btn btn-xs btn-success comic-btn fw-black py-0.5 px-2" id="btn-puzzle-next">
-                  Next Mistake <i class="bi bi-arrow-right ms-1"></i>
-                </button>
-              ` : `
-                <button type="button" class="btn btn-xs btn-dark comic-btn fw-black py-0.5 px-2" id="btn-puzzle-finish">
-                  Done <i class="bi bi-trophy-fill ms-1 text-warning"></i>
-                </button>
-              `}
-            </div>
-          </div>
-        `;
-      } else if (st.isError) {
-        statusAlert = `
-          <div class="alert alert-danger py-1.5 px-2.5 mb-0 mt-2 d-flex align-items-center justify-content-between small fw-bold">
-            <span>${insEscape(st.message || 'Try another move!')}</span>
-          </div>
-        `;
-      } else if (st.message) {
-        statusAlert = `<div class="small fw-semibold text-secondary mt-1">${insEscape(st.message)}</div>`;
-      }
-
-      bannerEl.classList.remove('d-none');
-      bannerEl.innerHTML = `
-        <div class="comic-card-sm p-2.5 mb-2 border-2 border-warning" style="background: rgba(245, 158, 11, 0.1);">
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge bg-warning text-dark border border-dark fw-black">🎯 RETRY MISTAKE ${idx + 1} / ${total}</span>
-              ${typeof renderInfoIcon === 'function' ? renderInfoIcon('ctrl_retry_mistakes') : ''}
-              <span class="small fw-bold">Move ${Math.ceil((target?.ply || 1) / 2)}: You played <span class="text-danger font-monospace fw-black">${insEscape(target?.san || '?')}</span></span>
-            </div>
-            <div class="d-flex align-items-center gap-1.5">
-              <button type="button" class="btn btn-sm btn-outline-warning comic-btn py-0.5 px-2 fw-bold" id="btn-puzzle-hint" style="font-size: 11px;">
-                <i class="bi bi-lightbulb-fill me-1"></i>Hint
-              </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary comic-btn py-0.5 px-2 fw-bold" id="btn-puzzle-solution" style="font-size: 11px;">
-                <i class="bi bi-eye-fill me-1"></i>Solution
-              </button>
-              <button type="button" class="btn btn-sm btn-dark comic-btn py-0.5 px-2 fw-bold" id="btn-puzzle-exit" title="Exit Workout" aria-label="Exit Workout" style="font-size: 11px;">
-                <i class="bi bi-x-lg"></i>
-              </button>
-            </div>
-          </div>
-          ${statusAlert}
-        </div>
-      `;
-
-      bannerEl.querySelector('#btn-puzzle-hint')?.addEventListener('click', () => this.showPuzzleHint());
-      bannerEl.querySelector('#btn-puzzle-solution')?.addEventListener('click', () => this.revealPuzzleSolution());
-      bannerEl.querySelector('#btn-puzzle-exit')?.addEventListener('click', () => this.exitSpecialMode());
-      bannerEl.querySelector('#btn-puzzle-next')?.addEventListener('click', () => this.loadMistakeAtIndex(idx + 1));
-      bannerEl.querySelector('#btn-puzzle-finish')?.addEventListener('click', () => this.exitSpecialMode());
-      return;
-    }
-
-    if (this.guessMoveState?.active) {
-      const gm = this.guessMoveState;
-      const total = gm.turns.length;
-      const idx = gm.currentIndex;
-
-      bannerEl.classList.remove('d-none');
-      bannerEl.innerHTML = `
-        <div class="comic-card-sm p-2.5 mb-2 border-2 border-primary" style="background: rgba(59, 130, 246, 0.1);">
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge bg-primary text-white border border-dark fw-black">🤔 GUESS THE MOVE ${idx + 1} / ${total}</span>
-              <span class="badge bg-warning text-dark font-monospace fw-bold">Score: ${gm.score} / ${gm.maxScore}</span>
-              ${gm.grade ? `<span class="badge ${gm.isError ? 'bg-danger' : 'bg-success'} fw-black">${gm.grade}</span>` : ''}
-            </div>
-            <div class="d-flex align-items-center gap-1.5">
-              ${gm.answered && idx + 1 < total ? `
-                <button type="button" class="btn btn-sm btn-primary comic-btn py-0.5 px-2.5 fw-black" id="btn-guess-next" style="font-size: 11px;">
-                  Next Turn <i class="bi bi-arrow-right ms-1"></i>
-                </button>
-              ` : ''}
-              <button type="button" class="btn btn-sm btn-dark comic-btn py-0.5 px-2 fw-bold" id="btn-guess-exit" style="font-size: 11px;">
-                <i class="bi bi-x-lg"></i>
-              </button>
-            </div>
-          </div>
-          <div class="small fw-bold mt-1.5 ${gm.isError ? 'text-danger' : (gm.answered ? 'text-success' : 'text-body')}">
-            ${insEscape(gm.message)}
-          </div>
-        </div>
-      `;
-      bannerEl.querySelector('#btn-guess-next')?.addEventListener('click', () => this.loadGuessTurnAtIndex(idx + 1));
-      bannerEl.querySelector('#btn-guess-exit')?.addEventListener('click', () => this.exitSpecialMode());
-      return;
-    }
-
-    if (this.sandboxState) {
-      const sb = this.sandboxState;
-      const movesArr = sb.moveHistorySan || sb.moves || [];
-      const movesStr = movesArr.join(' → ');
-      let evalBadge = '';
-      if (sb.isEvaluating || sb.evaluating) {
-        evalBadge = `<span class="badge bg-secondary font-monospace"><span class="spinner-border spinner-border-sm me-1" style="width: 10px; height: 10px;"></span>Stockfish thinking...</span>`;
-      } else if (sb.evalResult) {
-        const cp = (sb.evalResult.scoreCp || 0) / 100;
-        const cpStr = sb.evalResult.mate !== null && sb.evalResult.mate !== undefined
-          ? `M${Math.abs(sb.evalResult.mate)}`
-          : (cp > 0 ? `+${cp.toFixed(1)}` : cp.toFixed(1));
-        const bestSan = sb.evalResult.bestMoveSan ? ` · Best next: ${sb.evalResult.bestMoveSan}` : '';
-        evalBadge = `<span class="badge bg-info text-dark border border-dark font-monospace fw-bold">Eval: ${cpStr}${insEscape(bestSan)}</span>`;
-      }
-
-      bannerEl.classList.remove('d-none');
-      bannerEl.innerHTML = `
-        <div class="comic-card-sm p-2.5 mb-2 border-2 border-info" style="background: rgba(6, 182, 212, 0.1);">
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-              <span class="badge bg-info text-dark border border-dark fw-black"><i class="bi bi-compass-fill me-1"></i>WHAT-IF SANDBOX</span>
-              <span class="small font-monospace fw-bold">${insEscape(movesStr)}</span>
-              ${evalBadge}
-            </div>
-            <div class="d-flex align-items-center gap-1.5">
-              <button type="button" class="btn btn-sm btn-warning comic-btn py-0.5 px-2.5 fw-black" id="btn-sandbox-reset" style="font-size: 11px;">
-                <i class="bi bi-arrow-counterclockwise me-1"></i>Return to Game
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-      bannerEl.querySelector('#btn-sandbox-reset')?.addEventListener('click', () => this.exitSpecialMode());
-      return;
-    }
-
-    bannerEl.classList.add('d-none');
-    bannerEl.innerHTML = '';
+    if (typeof updateModeBanner === 'function') updateModeBanner(this, cur);
   }
 
   buildPositionalPillarsHtml(fen) {
-    if (typeof computePositionalPillars !== 'function' || !fen) return '';
-    const p = computePositionalPillars(fen);
-    const items = [
-      { key: 'material', icon: '⚖️', title: 'Material', tipKey: 'pillar_material', data: p.material },
-      { key: 'activity', icon: '⚡', title: 'Piece Activity', tipKey: 'pillar_activity', data: p.activity },
-      { key: 'kingSafety', icon: '🛡️', title: 'King Safety', tipKey: 'pillar_king_safety', data: p.kingSafety },
-      { key: 'pawnStructure', icon: '♟️', title: 'Pawn Structure', tipKey: 'pillar_pawn_structure', data: p.pawnStructure }
-    ];
-
-    return `
-      <div class="d-flex align-items-center justify-content-between mb-1.5 px-1">
-        <div class="d-flex align-items-center gap-1.5">
-          <span class="small fw-black text-uppercase" style="font-size: 10px; letter-spacing: 0.5px;">
-            <i class="bi bi-sliders me-1 text-info"></i>4-Pillar Positional X-Ray
-          </span>
-          <button type="button" class="btn btn-sm btn-link p-0 text-info fw-bold text-decoration-none d-inline-flex align-items-center gap-1" id="btn-pillars-guide" data-iq-tip="card_positional_pillars" title="Learn what these bars mean and how they are calculated">
-            <i class="bi bi-info-circle-fill" style="font-size: 11px;"></i>
-            <span class="d-none d-sm-inline" style="font-size: 10px; opacity: 0.9;">How it works</span>
-          </button>
-        </div>
-        <span class="text-secondary font-monospace" style="font-size: 10px;">⚪ White vs ⚫ Black</span>
-      </div>
-      <div class="row g-1.5">
-        ${items.map((it) => `
-          <div class="col-6">
-            <div class="p-1.5 rounded positional-pillar-card" data-iq-tip="${it.tipKey}" data-pillar-key="${it.key}" title="Click to view full calculation guide" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
-              <div class="d-flex align-items-center justify-content-between mb-1" style="font-size: 10px;">
-                <span class="fw-bold d-flex align-items-center gap-1">
-                  <span>${it.icon}</span>
-                  <span class="text-truncate" style="max-width: 82px;">${it.title}</span>
-                  <i class="bi bi-question-circle text-secondary opacity-50" style="font-size: 9px;"></i>
-                </span>
-                <span class="font-monospace text-secondary fw-semibold">${insEscape(it.data.label)}</span>
-              </div>
-              <div class="positional-pillar-track" title="White: ${it.data.white}% vs Black: ${it.data.black}%">
-                <div class="positional-pillar-white" style="width: ${it.data.white}%;"></div>
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    `;
+    return typeof buildPositionalPillarsHtml === 'function' ? buildPositionalPillarsHtml(fen) : '';
   }
 
   bindPositionalPillarsEvents(el) {
-    if (!el) return;
-    el.querySelector('#btn-pillars-guide')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.openPillarsGuideModal();
-    });
-
-    el.querySelectorAll('.positional-pillar-card').forEach((card) => {
-      card.addEventListener('click', () => {
-        const key = card.getAttribute('data-pillar-key');
-        this.openPillarsGuideModal(key);
-      });
-    });
+    if (typeof bindPositionalPillarsEvents === 'function') bindPositionalPillarsEvents(this, el);
   }
 
   updatePositionalPillars(fen) {
-    const el = this.container.querySelector('#positional-pillars-area');
-    if (!el || typeof computePositionalPillars !== 'function') return;
-    this.lastRenderedFen = fen;
-    el.innerHTML = this.buildPositionalPillarsHtml(fen);
-    this.bindPositionalPillarsEvents(el);
+    if (typeof updatePositionalPillars === 'function') updatePositionalPillars(this, fen);
+  }
+
+  closePillarsGuideModal() {
+    if (typeof closePillarsGuideModal === 'function') closePillarsGuideModal();
   }
 
   openPillarsGuideModal(activeKey = null) {
-    const existing = document.getElementById('positional-pillars-modal');
-    if (existing) existing.remove();
-
-    const fen = this.lastRenderedFen || (this.board ? this.board.fen : null);
-    const p = typeof computePositionalPillars === 'function' && fen ? computePositionalPillars(fen) : null;
-    const curMove = this.game && this.currentPly > 0 ? this.game.moves[this.currentPly - 1] : null;
-    const moveInfo = curMove ? `Move ${Math.ceil(this.currentPly / 2)}${curMove.color === 'b' ? '...' : '.'} ${curMove.san}` : 'Current Position';
-
-    const modal = document.createElement('div');
-    modal.className = 'why-modal-backdrop';
-    modal.id = 'positional-pillars-modal';
-
-    const pillars = [
-      {
-        key: 'activity',
-        icon: '⚡',
-        title: 'Piece Activity & Board Control',
-        badge: 'DYNAMIC MOBILITY',
-        badgeClass: 'bg-warning text-dark',
-        summary: 'Measures how actively pieces are deployed across the chessboard and how much territory they dominate.',
-        why: 'Pieces stuck on back ranks or corners have low mobility. Active pieces control key squares, restrict enemy pieces to passive defense, and create unstoppable tactical combinations.',
-        liveData: p?.activity,
-        calculation: [
-          {
-            label: 'Square Influence Count',
-            text: 'Counts the total number of squares currently attacked, protected, or reachable by each side\'s pieces across all 64 squares.'
-          },
-          {
-            label: '1.5× Center Dominance Multiplier',
-            text: 'Squares located in the central 4×4 box (c3–f6, including d4, e4, d5, e5) receive a 1.5× multiplier bonus. Central real estate is strategically paramount because pieces in the center can swiftly pivot to either wing.'
-          },
-          {
-            label: 'Tug-of-War Balance Ratio',
-            text: 'Calculates the difference between White\'s weighted square attacks and Black\'s, converting it into a 0–100% comparative split (scaled with a 0.85 factor centered at 50%).'
-          }
-        ],
-        tip: 'Develop knights toward the center (e.g. Nf3/Nc3, not Nh3/Na3) and open diagonal highways for your bishops early in the opening.'
-      },
-      {
-        key: 'kingSafety',
-        icon: '🛡️',
-        title: 'King Safety & Shelter',
-        badge: 'ATTACK ZONE SECURITY',
-        badgeClass: 'bg-danger text-white',
-        summary: 'Evaluates the defensive resilience of each king against opponent tactical invasions, checks, and mating nets.',
-        why: 'King safety supersedes all other advantages. Even if you are up a queen in material, having an exposed king will lead to checkmate or devastating double attacks.',
-        liveData: p?.kingSafety,
-        calculation: [
-          {
-            label: 'Baseline Fortress Score (78 pts)',
-            text: 'Both kings begin with a baseline safety score of 78 points.'
-          },
-          {
-            label: '+12 Points Castled Bonus',
-            text: 'Kings castled behind a pawn wall to the safety of the corners (g1 or c1 for White, g8 or c8 for Black) receive a +12 point castle bonus.'
-          },
-          {
-            label: '−9 Points per King Ring Attacker',
-            text: 'Evaluates the 3×3 "King Ring" (the king\'s square and all 8 surrounding neighbor squares). Every enemy piece exerting an attack on any square in this ring subtracts 9 points from the king\'s safety score.'
-          },
-          {
-            label: 'Score Clamping & Tug-of-War',
-            text: 'Raw safety scores are clamped between 10 (mating danger) and 98 (impenetrable fortress). The relative difference is mapped onto the 0–100% White vs Black balance bar.'
-          }
-        ],
-        tip: 'Castle within the first 10 moves. Never advance pawns directly in front of your castled king unless forced, as pawn moves create permanent holes.'
-      },
-      {
-        key: 'material',
-        icon: '⚖️',
-        title: 'Material Balance',
-        badge: 'PIECE VALUE COUNT',
-        badgeClass: 'bg-primary text-white',
-        summary: 'The total fighting force and piece point valuation remaining on the board.',
-        why: 'Material superiority is the most reliable path to victory. Being ahead in material lets you force piece simplifications into an easily winning endgame.',
-        liveData: p?.material,
-        calculation: [
-          {
-            label: 'Standard Piece Values',
-            text: 'Pawn = 1.0 · Knight = 3.0 · Bishop = 3.15 · Rook = 5.0 · Queen = 9.0 points.'
-          },
-          {
-            label: '+0.5 Bishop Pair Bonus',
-            text: 'Holding both light- and dark-squared bishops grants an extra +0.5 point bonus for long-range complementary diagonal control.'
-          },
-          {
-            label: 'Advantage Bar',
-            text: 'The net difference between White and Black material is scaled into the balance percentage and displayed with the exact point lead (e.g., White +2).'
-          }
-        ],
-        tip: 'When ahead in material, trade pieces (queens, rooks, minor pieces) to extinguish counterplay, but keep pawns on the board to promote.'
-      },
-      {
-        key: 'pawnStructure',
-        icon: '♟️',
-        title: 'Pawn Structure Health',
-        badge: 'CHAIN INTEGRITY',
-        badgeClass: 'bg-secondary text-white',
-        summary: 'Analyzes the compactness, cohesion, and vulnerability of the pawn skeleton.',
-        why: 'Pawns can never move backwards. Every pawn weakness—such as doubled or isolated pawns—remains a permanent target for enemy rooks and knights to exploit.',
-        liveData: p?.pawnStructure,
-        calculation: [
-          {
-            label: '−12 Points Doubled Pawns Penalty',
-            text: 'Deducts 12 points for each additional pawn stacked vertically on the same column (file). Stacked pawns block each other\'s movement and cannot defend one another.'
-          },
-          {
-            label: '−8 Points Isolated Pawns Penalty',
-            text: 'Deducts 8 points for any pawn with zero friendly pawns on adjacent files. Isolated pawns require babysitting by heavy pieces and cannot be defended by fellow pawns.'
-          },
-          {
-            label: 'Comparative Cleanliness',
-            text: 'The structural health scores of both sides are balanced against each other to compute the percentage bar (e.g., White Cleaner).'
-          }
-        ],
-        tip: 'Keep your pawn chains connected. Avoid creating doubled or isolated pawns unless you get open files or active attacking piece play in return.'
-      }
-    ];
-
-    modal.innerHTML = `
-      <div class="why-dialog p-3 p-md-4 shadow-lg" style="max-width: 760px; width: 100%; border-radius: 1.25rem; background: var(--arcade-card); border: 1.5px solid var(--arcade-border);">
-        <!-- Modal Header -->
-        <div class="d-flex align-items-center justify-content-between pb-2.5 mb-3 border-bottom" style="border-color: var(--arcade-border) !important;">
-          <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-info text-dark border border-dark px-2.5 py-1.5 fw-black">
-              <i class="bi bi-sliders me-1"></i>4-PILLAR POSITIONAL X-RAY
-            </span>
-            <span class="text-secondary small fw-bold d-none d-sm-inline">How Metrics Are Calculated</span>
-          </div>
-          <button type="button" class="btn-close" id="pillars-modal-close" aria-label="Close"></button>
-        </div>
-
-        <!-- Tug of War Visual Guide Box -->
-        <div class="p-3 rounded mb-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
-          <div class="d-flex align-items-center justify-content-between mb-1.5 flex-wrap gap-1">
-            <span class="fw-bold small d-flex align-items-center gap-1.5">
-              <i class="bi bi-info-circle-fill text-info"></i>
-              How the Tug-of-War Balance Bars Work
-            </span>
-            ${p ? `<span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">${insEscape(moveInfo)}</span>` : ''}
-          </div>
-          <p class="small text-secondary mb-2" style="font-size: 11.5px; line-height: 1.45;">
-            Each bar measures the real-time strategic balance between <strong>⚪ White</strong> and <strong>⚫ Black</strong>:
-          </p>
-          <div class="positional-pillar-track mb-1.5" style="height: 10px;">
-            <div class="positional-pillar-white" style="width: 50%;"></div>
-          </div>
-          <div class="d-flex justify-content-between font-monospace text-secondary" style="font-size: 10.5px;">
-            <span>⚪ 0% (Black Dominates)</span>
-            <span class="fw-bold text-body">50% (Equal / Balanced)</span>
-            <span>(White Dominates) 100% ⚫</span>
-          </div>
-        </div>
-
-        <!-- Pillar Detailed Cards List -->
-        <div class="d-flex flex-column gap-3" id="pillars-list-container">
-          ${pillars.map((pil) => {
-            const isTarget = activeKey === pil.key;
-            return `
-              <div class="p-3 rounded ${isTarget ? 'pillar-guide-highlight' : ''}" id="pillar-card-${pil.key}" style="background: var(--arcade-card); border: 1.5px solid ${isTarget ? '#38bdf8' : 'var(--arcade-border)'}; transition: border-color 0.2s ease, box-shadow 0.2s ease;">
-                <!-- Pillar Header Row -->
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom" style="border-color: var(--arcade-border) !important;">
-                  <div class="d-flex align-items-center gap-2">
-                    <span class="fs-5">${pil.icon}</span>
-                    <h6 class="fw-black mb-0 text-body" style="font-size: 14px;">${insEscape(pil.title)}</h6>
-                    <span class="badge ${pil.badgeClass} font-monospace" style="font-size: 9px;">${insEscape(pil.badge)}</span>
-                  </div>
-                  ${pil.liveData ? `
-                    <div class="d-flex align-items-center gap-1.5 font-monospace small">
-                      <span class="text-secondary" style="font-size: 11px;">Current:</span>
-                      <span class="badge bg-secondary-subtle text-body border border-secondary-subtle fw-bold" style="font-size: 11px;">
-                        ${insEscape(pil.liveData.label)} (${pil.liveData.white}% White)
-                      </span>
-                    </div>
-                  ` : ''}
-                </div>
-
-                <!-- What & Why Summary -->
-                <div class="mb-2.5">
-                  <div class="small mb-1 text-body" style="font-size: 12px; line-height: 1.45;">
-                    <strong class="text-warning">What it means:</strong> ${insEscape(pil.summary)}
-                  </div>
-                  <div class="small text-secondary" style="font-size: 11.5px; line-height: 1.4;">
-                    <strong class="text-info">Strategic Importance:</strong> ${insEscape(pil.why)}
-                  </div>
-                </div>
-
-                <!-- How it is Calculated Details -->
-                <div class="p-2.5 rounded mb-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.02)); border: 1px solid var(--arcade-border);">
-                  <div class="small fw-bold text-success mb-1.5 d-flex align-items-center gap-1" style="font-size: 11px;">
-                    <i class="bi bi-calculator-fill"></i>
-                    <span>HOW IT IS CALCULATED:</span>
-                  </div>
-                  <ul class="list-unstyled mb-0 d-flex flex-column gap-1.5" style="font-size: 11px; line-height: 1.4;">
-                    ${pil.calculation.map((c) => `
-                      <li class="d-flex align-items-start gap-1.5">
-                        <i class="bi bi-check-circle-fill text-success mt-0.5" style="font-size: 10px; flex-shrink: 0;"></i>
-                        <div>
-                          <strong>${insEscape(c.label)}:</strong>
-                          <span class="text-secondary">${insEscape(c.text)}</span>
-                        </div>
-                      </li>
-                    `).join('')}
-                  </ul>
-                </div>
-
-                <!-- Pro Tip -->
-                <div class="small text-body-secondary d-flex align-items-center gap-1.5 pt-1 fst-italic" style="font-size: 11px;">
-                  <i class="bi bi-lightbulb-fill text-warning flex-shrink-0"></i>
-                  <span><strong>Coach Tip:</strong> ${insEscape(pil.tip)}</span>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-
-        <!-- Footer -->
-        <div class="pt-3 mt-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2" style="border-color: var(--arcade-border) !important;">
-          <span class="small text-secondary" style="font-size: 11px;">
-            <i class="bi bi-cpu me-1 text-info"></i>Evaluated via hybrid attack maps & Stockfish positional heuristics.
-          </span>
-          <button type="button" class="btn btn-sm btn-outline-secondary comic-btn px-4 fw-bold" id="pillars-modal-ok-btn">
-            Got It
-          </button>
-        </div>
-      </div>
-    `;
-
-    const closeModal = () => {
-      modal.remove();
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.classList.remove('modal-open');
-    };
-
-    const dialogEl = modal.querySelector('.why-dialog');
-    const safeClose = typeof setupModalSwipeAndHistory === 'function'
-      ? setupModalSwipeAndHistory(modal, dialogEl, closeModal)
-      : closeModal;
-
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        safeClose();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-
-    modal.querySelector('#pillars-modal-close')?.addEventListener('click', safeClose);
-    modal.querySelector('#pillars-modal-ok-btn')?.addEventListener('click', safeClose);
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        safeClose();
-      }
-    });
-
-    document.body.classList.add('modal-open');
-    document.body.appendChild(modal);
-
-    if (activeKey) {
-      setTimeout(() => {
-        modal.querySelector(`#pillar-card-${activeKey}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 80);
-    }
+    if (typeof openPillarsGuideModal === 'function') openPillarsGuideModal(this, activeKey);
   }
+
 
   buildCoachStudyPlanCard() {
     if (!this.game) return '';
@@ -1491,237 +872,15 @@ class ReviewDashboard {
     `;
   }
 
-  openBlunderBankModal(initialFilter = 'all') {
-    const existing = document.getElementById('blunder-bank-modal');
-    if (existing) existing.remove();
 
-    let currentFilter = initialFilter;
-    let puzzles = typeof getBlunderBankPuzzles === 'function' ? getBlunderBankPuzzles(currentFilter) : [];
-    let currentIdx = 0;
-    let solved = false;
-    let feedback = '';
-    let isErr = false;
-    let modalBoard = null;
-
-    const modal = document.createElement('div');
-    modal.className = 'why-modal-backdrop';
-    modal.id = 'blunder-bank-modal';
-
-    const renderModalContent = () => {
-      const stats = typeof getBlunderBankStats === 'function' ? getBlunderBankStats() : { total: 0, mastered: 0, due: 0, motifCounts: {} };
-      puzzles = typeof getBlunderBankPuzzles === 'function' ? getBlunderBankPuzzles(currentFilter) : [];
-      if (currentIdx >= puzzles.length) currentIdx = 0;
-      const curPuzzle = puzzles[currentIdx] || null;
-
-      const motifFilters = [
-        { id: 'all', label: `All (${stats.total})` },
-        { id: 'unmastered', label: `Due (${stats.due})` },
-        ...Object.entries(stats.motifCounts || {}).map(([mId, cnt]) => {
-          const cat = (typeof TACTICAL_MOTIF_CATALOG !== 'undefined' && TACTICAL_MOTIF_CATALOG[mId]) || { icon: '⚡', label: mId };
-          return { id: mId, label: `${cat.icon} ${cat.label} (${cnt})` };
-        })
-      ];
-
-      modal.innerHTML = `
-        <div class="why-dialog p-3 p-md-4 shadow-lg" style="max-width: 780px; width: 100%; border-radius: 1.25rem; background: var(--arcade-card); border: 1px solid var(--arcade-border);">
-          <div class="d-flex align-items-center justify-content-between pb-2.5 mb-3 border-bottom" style="border-color: var(--arcade-border) !important;">
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge bg-warning text-dark border border-dark px-2.5 py-1.5 fw-black">🧠 PERSONAL BLUNDER BANK</span>
-              <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace fw-bold">
-                Mastered: ${stats.mastered} / ${stats.total}
-              </span>
-            </div>
-            <button type="button" class="btn-close" id="bb-btn-close" aria-label="Close"></button>
-          </div>
-
-          <div class="d-flex align-items-center flex-wrap gap-1.5 mb-3">
-            ${motifFilters.map((f) => `
-              <button type="button" class="btn btn-xs move-filter-pill ${currentFilter === f.id ? 'active' : ''}" data-bb-filter="${f.id}">
-                ${f.label}
-              </button>
-            `).join('')}
-          </div>
-
-          ${!curPuzzle ? `
-            <div class="text-center py-5 text-secondary">
-              <div class="fs-1 mb-2">🎉</div>
-              <h6 class="fw-black text-body">No Puzzles in This Filter!</h6>
-              <p class="small mb-0">Analyze games to automatically populate your personal Blunder Bank with mistakes from your own matches.</p>
-            </div>
-          ` : `
-            <div class="row g-3 align-items-stretch">
-              <div class="col-12 col-md-7 d-flex justify-content-center">
-                <div id="bb-modal-board" style="width: 100%; max-width: 360px; aspect-ratio: 1/1;"></div>
-              </div>
-              <div class="col-12 col-md-5 d-flex flex-column justify-content-between">
-                <div>
-                  <div class="d-flex align-items-center justify-content-between mb-2">
-                    <span class="badge bg-secondary font-monospace">Puzzle ${currentIdx + 1} of ${puzzles.length}</span>
-                    <div class="d-flex align-items-center gap-1.5">
-                      ${curPuzzle.mastered ? `<span class="badge bg-success"><i class="bi bi-check2-all me-1"></i>Mastered</span>` : `<span class="badge bg-warning text-dark">Needs Practice</span>`}
-                      <button type="button" class="btn btn-outline-danger btn-sm p-1 py-0.5 comic-btn" id="bb-btn-delete-puzzle" title="Remove this move/puzzle from Blunder Bank" style="font-size: 11px;">
-                        <i class="bi bi-trash3"></i>
-                      </button>
-                    </div>
-                  </div>
-                  <div class="p-2.5 rounded mb-2" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
-                    <div class="small fw-bold mb-1">${insEscape(curPuzzle.white)} vs ${insEscape(curPuzzle.black)}</div>
-                    <div class="text-secondary small" style="font-size: 11px;">
-                      Move ${Math.ceil((curPuzzle.ply || 1) / 2)} · In the game you played <span class="text-danger font-monospace fw-black">${insEscape(curPuzzle.playedSan)}</span> (${insEscape(curPuzzle.classification)})
-                    </div>
-                  </div>
-                  <div class="alert ${solved ? 'alert-success' : (isErr ? 'alert-danger' : 'alert-warning')} py-2 px-2.5 small fw-bold mb-2">
-                    ${insEscape(feedback || `Playing as ${curPuzzle.userColor === 'w' ? 'White' : 'Black'}: Find the best move on the board!`)}
-                  </div>
-                </div>
-
-                <div class="d-flex flex-column gap-2">
-                  <div class="d-flex align-items-center gap-1.5">
-                    <button type="button" class="btn btn-sm btn-outline-warning comic-btn flex-grow-1 fw-bold" id="bb-btn-hint">
-                      <i class="bi bi-lightbulb-fill me-1"></i>Hint
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary comic-btn flex-grow-1 fw-bold" id="bb-btn-solution">
-                      <i class="bi bi-eye-fill me-1"></i>Solution
-                    </button>
-                  </div>
-                  <div class="d-flex align-items-center justify-content-between gap-2">
-                    <button type="button" class="btn btn-sm btn-light comic-btn px-3 fw-bold" id="bb-btn-prev" ${puzzles.length <= 1 ? 'disabled' : ''}>
-                      <i class="bi bi-chevron-left me-1"></i>Prev
-                    </button>
-                    <button type="button" class="btn btn-sm btn-warning text-dark comic-btn flex-grow-1 fw-black" id="bb-btn-next" ${puzzles.length <= 1 ? 'disabled' : ''}>
-                      Next Puzzle <i class="bi bi-chevron-right ms-1"></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          `}
-        </div>
-      `;
-
-      modal.querySelector('#bb-btn-close')?.addEventListener('click', () => modal.remove());
-      modal.querySelectorAll('[data-bb-filter]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          currentFilter = btn.getAttribute('data-bb-filter') || 'all';
-          currentIdx = 0;
-          solved = false;
-          feedback = '';
-          isErr = false;
-          renderModalContent();
-        });
-      });
-
-      if (curPuzzle) {
-        const mount = modal.querySelector('#bb-modal-board');
-        const bestMoveArrow = solved && curPuzzle.bestMoveUci && curPuzzle.bestMoveUci.length >= 4
-          ? { from: curPuzzle.bestMoveUci.slice(0, 2), to: curPuzzle.bestMoveUci.slice(2, 4) }
-          : null;
-
-        modalBoard = new Chessboard(mount, {
-          fen: curPuzzle.fenBefore,
-          orientation: curPuzzle.userColor || 'w',
-          theme: this.theme,
-          interactive: !solved,
-          bestMove: bestMoveArrow,
-          showPlayerBars: false,
-          legalMovesFrom: (sq) => {
-            try {
-              const c = new Chess(curPuzzle.fenBefore);
-              return c.moves({ square: sq, verbose: true }).map((m) => m.to);
-            } catch {
-              return [];
-            }
-          },
-          onMove: (from, to) => {
-            try {
-              const c = new Chess(curPuzzle.fenBefore);
-              const m = c.move({ from, to, promotion: 'q' });
-              if (!m) return;
-              const uci = `${m.from}${m.to}`.toLowerCase();
-              const targetPrefix = (curPuzzle.bestMoveUci || '').slice(0, 4).toLowerCase();
-              if (uci === targetPrefix || m.san === curPuzzle.bestMoveSan) {
-                solved = true;
-                isErr = false;
-                feedback = `✅ Mastered! ${m.san} is the top move.`;
-                if (typeof recordBlunderBankAttempt === 'function') recordBlunderBankAttempt(curPuzzle.id, true);
-                soundService.playBrilliant();
-              } else {
-                isErr = true;
-                feedback = `❌ ${m.san} is not the best move — try again!`;
-                if (typeof recordBlunderBankAttempt === 'function') recordBlunderBankAttempt(curPuzzle.id, false);
-                soundService.playBlunder();
-              }
-              renderModalContent();
-            } catch {}
-          }
-        });
-
-        modal.querySelector('#bb-btn-delete-puzzle')?.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (curPuzzle && typeof removeBlunderBankItem === 'function') {
-            removeBlunderBankItem(curPuzzle.id);
-            feedback = 'Puzzle removed from your Blunder Bank.';
-            solved = false;
-            isErr = false;
-            renderModalContent();
-          }
-        });
-
-        modal.querySelector('#bb-btn-hint')?.addEventListener('click', () => {
-          const fromSq = (curPuzzle.bestMoveUci || '').slice(0, 2);
-          if (fromSq && modalBoard) {
-            modalBoard.userHighlights.clear();
-            modalBoard.userHighlights.add(fromSq);
-            modalBoard.render();
-            feedback = `💡 Hint: Move the piece on ${fromSq.toUpperCase()}!`;
-            isErr = false;
-          }
-        });
-
-        modal.querySelector('#bb-btn-solution')?.addEventListener('click', () => {
-          solved = true;
-          isErr = false;
-          feedback = `👁 Solution: ${curPuzzle.bestMoveSan} was the best move.`;
-          renderModalContent();
-        });
-
-        modal.querySelector('#bb-btn-prev')?.addEventListener('click', () => {
-          currentIdx = (currentIdx - 1 + puzzles.length) % puzzles.length;
-          solved = false;
-          feedback = '';
-          isErr = false;
-          renderModalContent();
-        });
-
-        modal.querySelector('#bb-btn-next')?.addEventListener('click', () => {
-          currentIdx = (currentIdx + 1) % puzzles.length;
-          solved = false;
-          feedback = '';
-          isErr = false;
-          renderModalContent();
-        });
-      }
-    };
-
-    const closeBlunderBank = () => {
-      modal.remove();
-      document.body.classList.remove('modal-open');
-    };
-
-    const dialogEl = modal.querySelector('.why-dialog');
-    const safeClose = typeof setupModalSwipeAndHistory === 'function'
-      ? setupModalSwipeAndHistory(modal, dialogEl, closeBlunderBank)
-      : closeBlunderBank;
-
-    modal.querySelector('#bb-btn-close')?.addEventListener('click', safeClose);
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) safeClose();
-    });
-
-    document.body.classList.add('modal-open');
-    document.body.appendChild(modal);
-    renderModalContent();
+  closeBlunderBankModal() {
+    if (typeof closeBlunderBankModal === 'function') closeBlunderBankModal();
   }
+
+  openBlunderBankModal(initialFilter = 'all') {
+    if (typeof openBlunderBankModal === 'function') openBlunderBankModal(this, initialFilter);
+  }
+
 
   buildCoachingCallouts() {
     if (!this.game) return '';
@@ -1978,1152 +1137,307 @@ class ReviewDashboard {
     return list;
   }
 
+
   buildDetailedPerformanceHtml() {
-    if (!this.game) return '';
-    const userColor = this.game.userColor || 'w';
-    const isWhiteUser = userColor === 'w';
+    return typeof buildDetailedPerformanceHtml === 'function' ? buildDetailedPerformanceHtml(this) : '';
+  }
 
-    const userAcc = Number(this.game.userAccuracy ?? this.game.accuracy ?? this.game.overallAccuracy ?? 85).toFixed(1);
-    const oppAcc = Number(this.game.opponentAccuracy ?? 85).toFixed(1);
 
-    const userPhases = this.game.userPhaseElos || this.game.phaseElos || {};
-    const oppPhases = this.game.opponentPhaseElos || {};
 
-    const userPhaseAcc = this.game.userPhaseAccuracy || {};
-    const oppPhaseAcc = this.game.opponentPhaseAccuracy || {};
-
-    const userOpeningAcc = userPhaseAcc.opening !== null && userPhaseAcc.opening !== undefined ? `${userPhaseAcc.opening}%` : '—';
-    const userMiddleAcc = userPhaseAcc.middlegame !== null && userPhaseAcc.middlegame !== undefined ? `${userPhaseAcc.middlegame}%` : '—';
-    const userEndAcc = userPhaseAcc.endgame !== null && userPhaseAcc.endgame !== undefined ? `${userPhaseAcc.endgame}%` : '—';
-
-    const oppOpeningAcc = oppPhaseAcc.opening !== null && oppPhaseAcc.opening !== undefined ? `${oppPhaseAcc.opening}%` : '—';
-    const oppMiddleAcc = oppPhaseAcc.middlegame !== null && oppPhaseAcc.middlegame !== undefined ? `${oppPhaseAcc.middlegame}%` : '—';
-    const oppEndAcc = oppPhaseAcc.endgame !== null && oppPhaseAcc.endgame !== undefined ? `${oppPhaseAcc.endgame}%` : '—';
-
-    const userOpeningElo = userPhases.opening ?? 1500;
-    const userMiddlegameElo = userPhases.middlegame ?? 1500;
-    const userEndgameElo = userPhases.endgame ?? 1500;
-
-    const oppOpeningElo = oppPhases.opening ?? 1500;
-    const oppMiddlegameElo = oppPhases.middlegame ?? 1500;
-    const oppEndgameElo = oppPhases.endgame ?? 1500;
-
-    return `
-      <!-- Dual Accuracy Comparison -->
-      <div class="row g-2 mb-2">
-        <div class="col-6">
-          <div class="arcade-stat-chip p-2 text-start cursor-help" data-iq-tip="stat_accuracy">
-            <div class="d-flex align-items-center justify-content-between mb-1">
-              <span class="fw-bold text-truncate" style="font-size: 11px;">${isWhiteUser ? '⚪ White' : '⚫ Black'} (You)</span>
-              <span class="badge bg-success text-white font-monospace fw-black px-1.5 py-0.5 rounded-pill" style="font-size: 9px;">YOU</span>
-            </div>
-            <div class="d-flex align-items-baseline gap-1.5">
-              <span class="fw-black fs-4 text-emerald font-monospace">${userAcc}%</span>
-              <span class="small fw-bold text-uppercase" style="font-size: 10px; color: var(--arcade-text-muted);">Accuracy</span>
-            </div>
-          </div>
-        </div>
-        <div class="col-6">
-          <div class="arcade-stat-chip p-2 text-start cursor-help" data-iq-tip="stat_accuracy">
-            <div class="d-flex align-items-center justify-content-between mb-1">
-              <span class="fw-bold text-truncate" style="font-size: 11px;">${isWhiteUser ? '⚫ Black' : '⚪ White'}</span>
-              <span class="badge bg-primary text-white font-monospace fw-black px-1.5 py-0.5 rounded-pill" style="font-size: 9px;">OPP</span>
-            </div>
-            <div class="d-flex align-items-baseline gap-1.5">
-              <span class="fw-black fs-4 text-cyan font-monospace">${oppAcc}%</span>
-              <span class="small fw-bold text-uppercase" style="font-size: 10px; color: var(--arcade-text-muted);">Accuracy</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Phase Rating & Accuracy Comparison (Opening, Middle, Endgame) -->
-      <div class="row g-1.5 text-center mb-2">
-        <div class="col-4">
-          <div class="arcade-stat-chip p-1.5 cursor-help" data-iq-tip="phase_opening">
-            <span class="small d-block fw-black mb-1 text-uppercase" style="font-size: 10.5px; letter-spacing: 0.5px;"><i class="bi bi-compass me-1 text-primary"></i>Opening</span>
-            <div class="d-flex justify-content-around align-items-center">
-              <div class="text-center">
-                <span class="d-block text-warning fw-black" style="font-size: 9px;">YOU</span>
-                <span class="fw-black fs-6 text-primary font-monospace d-block">${userOpeningAcc}</span>
-                <span class="badge phase-elo-chip font-monospace mt-0.5" style="font-size: 9.5px;" title="Opening Phase Rating">${userOpeningElo} Elo</span>
-              </div>
-              <div class="vr opacity-25 my-auto" style="height: 32px;"></div>
-              <div class="text-center">
-                <span class="d-block text-cyan fw-black" style="font-size: 9px;">OPP</span>
-                <span class="fw-black fs-6 text-cyan font-monospace d-block">${oppOpeningAcc}</span>
-                <span class="badge phase-elo-chip font-monospace mt-0.5" style="font-size: 9.5px;" title="Opponent Opening Phase Rating">${oppOpeningElo} Elo</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-4">
-          <div class="arcade-stat-chip p-1.5 cursor-help" data-iq-tip="phase_middle">
-            <span class="small d-block fw-black mb-1 text-uppercase" style="font-size: 10.5px; letter-spacing: 0.5px;"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle</span>
-            <div class="d-flex justify-content-around align-items-center">
-              <div class="text-center">
-                <span class="d-block text-warning fw-black" style="font-size: 9px;">YOU</span>
-                <span class="fw-black fs-6 text-warning font-monospace d-block">${userMiddleAcc}</span>
-                <span class="badge phase-elo-chip font-monospace mt-0.5" style="font-size: 9.5px;" title="Middlegame Phase Rating">${userMiddlegameElo} Elo</span>
-              </div>
-              <div class="vr opacity-25 my-auto" style="height: 32px;"></div>
-              <div class="text-center">
-                <span class="d-block text-cyan fw-black" style="font-size: 9px;">OPP</span>
-                <span class="fw-black fs-6 text-cyan font-monospace d-block">${oppMiddleAcc}</span>
-                <span class="badge phase-elo-chip font-monospace mt-0.5" style="font-size: 9.5px;" title="Opponent Middlegame Phase Rating">${oppMiddlegameElo} Elo</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-4">
-          <div class="arcade-stat-chip p-1.5 cursor-help" data-iq-tip="phase_endgame">
-            <span class="small d-block fw-black mb-1 text-uppercase" style="font-size: 10.5px; letter-spacing: 0.5px;"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame</span>
-            <div class="d-flex justify-content-around align-items-center">
-              <div class="text-center">
-                <span class="d-block text-warning fw-black" style="font-size: 9px;">YOU</span>
-                <span class="fw-black fs-6 text-success font-monospace d-block">${userEndAcc}</span>
-                <span class="badge phase-elo-chip font-monospace mt-0.5" style="font-size: 9.5px;" title="Endgame Phase Rating">${userEndgameElo} Elo</span>
-              </div>
-              <div class="vr opacity-25 my-auto" style="height: 32px;"></div>
-              <div class="text-center">
-                <span class="d-block text-cyan fw-black" style="font-size: 9px;">OPP</span>
-                <span class="fw-black fs-6 text-cyan font-monospace d-block">${oppEndAcc}</span>
-                <span class="badge phase-elo-chip font-monospace mt-0.5" style="font-size: 9.5px;" title="Opponent Endgame Phase Rating">${oppEndgameElo} Elo</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Move Classification Breakdown (Player vs Opponent) -->
-      <div class="border-top pt-2">
-        <div class="d-flex align-items-center justify-content-between px-2 pb-1" style="font-size: 10.5px; font-weight: 800; letter-spacing: 0.5px;">
-          <span style="width: 42px;" class="text-end text-warning fw-black">YOU</span>
-          <span class="text-uppercase fw-bold" style="color: var(--arcade-text-muted);">MOVE QUALITY</span>
-          <span style="width: 42px;" class="text-start text-cyan fw-black">OPP</span>
-        </div>
-        <div class="d-flex flex-column gap-1">
-          ${this.buildBadgesSummary()}
-        </div>
-      </div>
-    `;
+  closeOpeningModal() {
+    if (typeof closeOpeningModal === 'function') closeOpeningModal();
   }
 
   openOpeningModal() {
-    if (!this.game) return;
-    const existing = document.getElementById('opening-explorer-modal');
-    if (existing) existing.remove();
+    if (typeof openOpeningModal === 'function') openOpeningModal(this);
+  }
 
-    const ecoCode = this.game.ecoCode || 'PGN';
-    const ecoName = this.game.ecoName || 'Chess Opening';
-    const ecoMeta = (typeof getEcoMetadata === 'function')
-      ? getEcoMetadata(ecoCode, ecoName)
-      : {
-          code: ecoCode,
-          name: ecoName,
-          volume: 'Encyclopaedia of Chess Openings',
-          category: 'Standard Chess Opening',
-          theme: 'Standard opening classification in the ECO encyclopedia.',
-          strategicSummary: 'Classical opening principles: contest central squares, develop knights and bishops actively, and secure king safety through castling.',
-          canonicalMoves: [],
-          canonicalMovesStr: '',
-          links: {
-            chess365: `https://www.365chess.com/eco/${encodeURIComponent(ecoCode)}`,
-            lichess: `https://lichess.org/analysis`,
-            chessCom: `https://www.chess.com/openings`
-          }
-        };
 
-    const od = this.game.openingDeviation;
-    const middlegameMove = Math.ceil((this.game.middlegameStartPly || 20) / 2);
 
-    const modal = document.createElement('div');
-    modal.id = 'opening-explorer-modal';
-    modal.className = 'why-modal-backdrop';
-    modal.innerHTML = `
-      <div class="why-dialog opening-explorer-dialog comic-card p-3 p-sm-4 shadow-2xl">
-        <!-- Header -->
-        <div class="d-flex align-items-center justify-content-between pb-2 mb-3 border-bottom" style="border-color: var(--arcade-border) !important;">
-          <div class="d-flex align-items-center gap-2 flex-wrap min-w-0">
-            <span class="badge bg-warning text-dark font-monospace fw-black px-2.5 py-1.5 fs-6">${insEscape(ecoMeta.code)}</span>
-            <div class="min-w-0">
-              <h5 class="fw-black mb-0 text-truncate" style="font-size: 16px;">${insEscape(ecoMeta.name)}</h5>
-              <span class="text-secondary small font-monospace">${insEscape(ecoMeta.volume)} · ${insEscape(ecoMeta.category)}</span>
-            </div>
-          </div>
-          <button type="button" class="btn btn-sm btn-dark comic-btn py-1 px-2.5 fw-bold" id="btn-close-opening-modal" title="Close">
-            <i class="bi bi-x-lg"></i>
-          </button>
-        </div>
-
-        <!-- Body -->
-        <div class="d-flex flex-column gap-2.5">
-          <!-- Strategic Theme Card -->
-          <div class="p-2.5 rounded" style="background: var(--arcade-card); border: 1px solid var(--arcade-border);">
-            <div class="d-flex align-items-center gap-1.5 mb-1.5">
-              <i class="bi bi-compass-fill text-warning fs-6"></i>
-              <strong class="small fw-black text-uppercase" style="letter-spacing: 0.5px;">Opening Strategic Theme</strong>
-            </div>
-            <p class="mb-1.5 small text-body" style="line-height: 1.5;">${insEscape(ecoMeta.theme)}</p>
-            <p class="mb-0 small text-secondary fst-italic" style="font-size: 11.5px; line-height: 1.4;">${insEscape(ecoMeta.strategicSummary)}</p>
-          </div>
-
-          <!-- Theoretical Move Sequence -->
-          ${ecoMeta.canonicalMovesStr ? `
-            <div class="p-2.5 rounded" style="background: var(--arcade-card); border: 1px solid var(--arcade-border);">
-              <div class="d-flex align-items-center justify-content-between mb-1.5">
-                <span class="small fw-black text-uppercase text-secondary" style="font-size: 10.5px; letter-spacing: 0.5px;">
-                  <i class="bi bi-book-half text-primary me-1"></i>Canonical Starting Moves
-                </span>
-                <span class="badge bg-secondary font-monospace" style="font-size: 10px;">${ecoMeta.canonicalMoves.length} plies</span>
-              </div>
-              <div class="font-monospace fw-bold p-2 rounded text-primary" style="background: var(--arcade-surface, rgba(0,0,0,0.06)); font-size: 13px; word-break: break-word;">
-                ${insEscape(ecoMeta.canonicalMovesStr)}
-              </div>
-            </div>
-          ` : ''}
-
-          <!-- Game Theory Connection -->
-          <div class="p-2.5 rounded" style="background: var(--arcade-card); border: 1px solid var(--arcade-border);">
-            <div class="d-flex align-items-center justify-content-between mb-1">
-              <span class="small fw-black text-uppercase text-secondary" style="font-size: 10.5px; letter-spacing: 0.5px;">
-                <i class="bi bi-shield-check text-success me-1"></i>Match Opening Trajectory
-              </span>
-              <span class="badge bg-secondary font-monospace" style="font-size: 10px;">Phase: Moves 1-${middlegameMove}</span>
-            </div>
-            ${od ? `
-              <div class="small mb-2">
-                The game followed standard theoretical opening lines until <strong>Move ${Math.ceil(od.ply / 2)}${od.ply % 2 === 1 ? '.' : '...'} ${insEscape(od.san)}</strong> (Ply ${od.ply}), where play branched from established theory.
-              </div>
-              <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold py-1 px-2.5 w-100" id="btn-jump-opening-dev" data-dev-ply="${od.ply}">
-                <i class="bi bi-crosshair me-1"></i>Jump to Book Departure on Board (Move ${Math.ceil(od.ply / 2)})
-              </button>
-            ` : `
-              <div class="small text-secondary">
-                Both players transitioned smoothly from the opening into the middlegame phase at Move ${middlegameMove}.
-              </div>
-            `}
-          </div>
-
-          <!-- Why ECO Codes Exist Explanation -->
-          <div class="p-2.5 rounded" style="background: rgba(251, 191, 36, 0.08); border: 1px dashed rgba(245, 158, 11, 0.4);">
-            <div class="d-flex align-items-center gap-1.5 mb-1">
-              <i class="bi bi-lightbulb-fill text-warning"></i>
-              <strong class="small fw-black text-warning text-uppercase" style="font-size: 11px;">What is an ECO Code?</strong>
-            </div>
-            <p class="small mb-0 text-body" style="font-size: 11.5px; line-height: 1.45;">
-              ECO stands for <strong>Encyclopaedia of Chess Openings</strong>. It is an international 5-volume classification system (A00–E99) used by FIDE, Chess.com, and Lichess. Because openings have varied names across languages, ECO codes provide a universal, unambiguous catalog number to study master win rates, opening traps, and pawn structures.
-            </p>
-          </div>
-
-          <!-- External Research Links -->
-          <div class="pt-1">
-            <span class="text-secondary small fw-bold text-uppercase d-block mb-1.5" style="font-size: 10px;">
-              <i class="bi bi-box-arrow-up-right me-1"></i>Study Master Games in External Databases:
-            </span>
-            <div class="d-flex align-items-center gap-1.5 flex-wrap">
-              <a href="${ecoMeta.links.chess365}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary comic-btn fw-bold flex-grow-1 py-1" style="font-size: 11px;">
-                <i class="bi bi-database me-1"></i>365Chess (${insEscape(ecoMeta.code)})
-              </a>
-              <a href="${ecoMeta.links.lichess}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary comic-btn fw-bold flex-grow-1 py-1" style="font-size: 11px;">
-                <i class="bi bi-globe me-1"></i>Lichess Explorer
-              </a>
-              <a href="${ecoMeta.links.chessCom}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary comic-btn fw-bold flex-grow-1 py-1" style="font-size: 11px;">
-                <i class="bi bi-book me-1"></i>Chess.com Openings
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="mt-3 pt-2 border-top d-flex justify-content-end" style="border-color: var(--arcade-border) !important;">
-          <button type="button" class="btn btn-sm btn-secondary comic-btn fw-bold px-3 py-1" id="btn-close-opening-modal-footer">
-            Close
-          </button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-    document.body.classList.add('modal-open');
-
-    const safeClose = () => {
-      modal.remove();
-      document.body.classList.remove('modal-open');
-    };
-
-    modal.querySelector('#btn-close-opening-modal')?.addEventListener('click', safeClose);
-    modal.querySelector('#btn-close-opening-modal-footer')?.addEventListener('click', safeClose);
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) safeClose();
-    });
-
-    modal.querySelector('#btn-jump-opening-dev')?.addEventListener('click', (e) => {
-      const ply = parseInt(e.currentTarget.getAttribute('data-dev-ply'), 10);
-      safeClose();
-      if (!isNaN(ply)) {
-        this.goToPly(ply);
-      }
-    });
-
-    const escHandler = (e) => {
-      if (e.key === 'Escape') {
-        safeClose();
-        window.removeEventListener('keydown', escHandler);
-      }
-    };
-    window.addEventListener('keydown', escHandler);
+  closeFullReportModal() {
+    if (typeof closeFullReportModal === 'function') closeFullReportModal();
   }
 
   openDetailedPerformanceModal() {
-    this.openFullReportModal();
+    if (typeof openDetailedPerformanceModal === 'function') openDetailedPerformanceModal(this);
   }
 
   openFullReportModal() {
+    if (typeof openFullReportModal === 'function') openFullReportModal(this);
+  }
+
+
+  setReviewTab(tabName) {
+    if (!['moves', 'coach'].includes(tabName)) return;
+    this.reviewTab = tabName;
+    this.container.querySelectorAll('[data-review-tab]').forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-review-tab') === tabName);
+    });
+    this.container.querySelectorAll('.review-tab-pane').forEach((pane) => {
+      pane.classList.toggle('d-none', pane.getAttribute('data-pane-tab') !== tabName);
+    });
+    if (tabName === 'moves') {
+      setTimeout(() => this.renderAdvantageChart(), 10);
+    }
+  }
+
+  downloadAnnotatedPgn() {
     if (!this.game) return;
-    const existing = document.getElementById('review-detailed-modal');
-    if (existing) existing.remove();
+    const lines = [];
+    lines.push(`[Event "${this.game.event || 'Chess IQ Review'}"]`);
+    lines.push(`[Site "${this.game.site || 'Chess IQ'}"]`);
+    lines.push(`[Date "${this.game.date || new Date().toISOString().slice(0, 10).replace(/-/g, '.')}"]`);
+    lines.push(`[White "${this.game.white || 'White'}"]`);
+    lines.push(`[Black "${this.game.black || 'Black'}"]`);
+    lines.push(`[Result "${this.game.result || '*'}"]`);
+    if (this.game.whiteElo) lines.push(`[WhiteElo "${this.game.whiteElo}"]`);
+    if (this.game.blackElo) lines.push(`[BlackElo "${this.game.blackElo}"]`);
+    if (this.game.ecoCode) lines.push(`[ECO "${this.game.ecoCode}"]`);
+    if (this.game.ecoName) lines.push(`[Opening "${this.game.ecoName}"]`);
+    lines.push(`[Annotator "Stockfish 16 (Chess IQ)"]`);
+    lines.push('');
 
-    const userColor = this.game.userColor || 'w';
-    const isWhiteUser = userColor === 'w';
-
-    const whiteName = insEscape(this.game.white || 'White');
-    const blackName = insEscape(this.game.black || 'Black');
-    const whiteElo = this.game.whiteElo || 1500;
-    const blackElo = this.game.blackElo || 1500;
-
-    const userAcc = Number(this.game.userAccuracy ?? this.game.accuracy ?? this.game.overallAccuracy ?? 85).toFixed(1);
-    const oppAcc = Number(this.game.opponentAccuracy ?? 85).toFixed(1);
-    const whiteAcc = isWhiteUser ? userAcc : oppAcc;
-    const blackAcc = isWhiteUser ? oppAcc : userAcc;
-
-    const userGameElo = this.game.userGameElo || this.game.overallGameElo || (isWhiteUser ? whiteElo : blackElo);
-    const oppGameElo = this.game.oppGameElo || this.game.opponentGameElo || (isWhiteUser ? blackElo : whiteElo);
-    const whiteGameElo = isWhiteUser ? userGameElo : oppGameElo;
-    const blackGameElo = isWhiteUser ? oppGameElo : userGameElo;
-
-    const userPhases = this.game.userPhaseElos || this.game.phaseElos || {};
-    const oppPhases = this.game.opponentPhaseElos || {};
-    const userPhaseAcc = this.game.userPhaseAccuracy || {};
-    const oppPhaseAcc = this.game.opponentPhaseAccuracy || {};
-
-    const whitePhaseAcc = isWhiteUser ? userPhaseAcc : oppPhaseAcc;
-    const blackPhaseAcc = isWhiteUser ? oppPhaseAcc : userPhaseAcc;
-    const whitePhaseElos = isWhiteUser ? userPhases : oppPhases;
-    const blackPhaseElos = isWhiteUser ? oppPhases : userPhases;
-
-    const whiteOpeningAcc = whitePhaseAcc.opening !== null && whitePhaseAcc.opening !== undefined ? `${whitePhaseAcc.opening}%` : '—';
-    const whiteMiddleAcc = whitePhaseAcc.middlegame !== null && whitePhaseAcc.middlegame !== undefined ? `${whitePhaseAcc.middlegame}%` : '—';
-    const whiteEndAcc = whitePhaseAcc.endgame !== null && whitePhaseAcc.endgame !== undefined ? `${whitePhaseAcc.endgame}%` : '—';
-
-    const blackOpeningAcc = blackPhaseAcc.opening !== null && blackPhaseAcc.opening !== undefined ? `${blackPhaseAcc.opening}%` : '—';
-    const blackMiddleAcc = blackPhaseAcc.middlegame !== null && blackPhaseAcc.middlegame !== undefined ? `${blackPhaseAcc.middlegame}%` : '—';
-    const blackEndAcc = blackPhaseAcc.endgame !== null && blackPhaseAcc.endgame !== undefined ? `${blackPhaseAcc.endgame}%` : '—';
-
-    const whiteOpeningElo = whitePhaseElos.opening ?? whiteElo;
-    const whiteMiddleElo = whitePhaseElos.middlegame ?? whiteElo;
-    const whiteEndElo = whitePhaseElos.endgame ?? whiteElo;
-
-    const blackOpeningElo = blackPhaseElos.opening ?? blackElo;
-    const blackMiddleElo = blackPhaseElos.middlegame ?? blackElo;
-    const blackEndElo = blackPhaseElos.endgame ?? blackElo;
-
-    const getAccuracyTier = (acc) => {
-      const n = parseFloat(acc);
-      if (n >= 96) return { label: 'Grandmaster Precision', color: '#10b981', icon: '💎' };
-      if (n >= 88) return { label: 'Master Execution', color: '#06b6d4', icon: '⭐' };
-      if (n >= 80) return { label: 'Solid Tactical Play', color: '#fbbf24', icon: '🎯' };
-      if (n >= 70) return { label: 'Fighting Game', color: '#f59e0b', icon: '⚔️' };
-      return { label: 'Volatile Battle', color: '#f43f5e', icon: '🌪️' };
+    let movesText = '';
+    const glyphMap = {
+      blunder: '??',
+      mistake: '?',
+      inaccuracy: '?!',
+      great: '!',
+      brilliant: '!!',
+      missed_win: '??'
     };
 
-    const whiteTier = getAccuracyTier(whiteAcc);
-    const blackTier = getAccuracyTier(blackAcc);
-
-    let resTitle = 'Match Drawn (½-½)';
-    let whiteBadge = '<span class="badge bg-secondary font-monospace fw-bold px-2 py-1">DRAW</span>';
-    let blackBadge = '<span class="badge bg-secondary font-monospace fw-bold px-2 py-1">DRAW</span>';
-    if (this.game.result === '1-0') {
-      resTitle = `${whiteName} Won (1-0)`;
-      whiteBadge = '<span class="badge bg-success text-white font-monospace fw-black px-2 py-1">VICTORY</span>';
-      blackBadge = '<span class="badge bg-danger text-white font-monospace fw-black px-2 py-1">DEFEAT</span>';
-    } else if (this.game.result === '0-1') {
-      resTitle = `${blackName} Won (0-1)`;
-      whiteBadge = '<span class="badge bg-danger text-white font-monospace fw-black px-2 py-1">DEFEAT</span>';
-      blackBadge = '<span class="badge bg-success text-white font-monospace fw-black px-2 py-1">VICTORY</span>';
-    }
-
-    let userCounts = this.game.userCounts;
-    let oppCounts = this.game.opponentCounts;
-    if (!userCounts || !oppCounts) {
-      userCounts = {};
-      oppCounts = {};
-      (this.game.plies || []).forEach((p) => {
-        if (!p) return;
-        const isUser = p.color ? (p.color === userColor) : (p.ply % 2 === (userColor === 'w' ? 1 : 0));
-        const target = isUser ? userCounts : oppCounts;
-        target[p.classification] = (target[p.classification] || 0) + 1;
-      });
-    }
-    const whiteCounts = isWhiteUser ? userCounts : oppCounts;
-    const blackCounts = isWhiteUser ? oppCounts : userCounts;
-
-    const totalPlies = (this.game.plies || []).length;
-    const totalMoves = Math.ceil(totalPlies / 2);
-    const whiteMovesCount = (this.game.plies || []).filter((p) => p && p.color === 'w').length || 1;
-    const blackMovesCount = (this.game.plies || []).filter((p) => p && p.color === 'b').length || 1;
-
-    const whiteOptCount = (whiteCounts.brilliant || 0) + (whiteCounts.great || 0) + (whiteCounts.best || 0);
-    const blackOptCount = (blackCounts.brilliant || 0) + (blackCounts.great || 0) + (blackCounts.best || 0);
-    const whiteErrCount = (whiteCounts.inaccuracy || 0) + (whiteCounts.mistake || 0) + (whiteCounts.blunder || 0) + (whiteCounts.missed_win || 0);
-    const blackErrCount = (blackCounts.inaccuracy || 0) + (blackCounts.mistake || 0) + (blackCounts.blunder || 0) + (blackCounts.missed_win || 0);
-
-    const tp = this.game.turningPoint;
-    const od = this.game.openingDeviation;
-
-    // Critical user mistakes
-    const userMistakes = (this.game.plies || [])
-      .filter((p) => p && p.color === userColor && ['blunder', 'missed_win', 'mistake', 'inaccuracy'].includes(p.classification))
-      .sort((a, b) => {
-        const dropA = Math.abs((a.winProbBefore ?? 0.5) - (a.winProb ?? 0.5));
-        const dropB = Math.abs((b.winProbBefore ?? 0.5) - (b.winProb ?? 0.5));
-        return dropB - dropA;
-      });
-
-    // Time & Clock Stats
-    let whiteTimeTotal = 0, whiteTimeMoves = 0;
-    let blackTimeTotal = 0, blackTimeMoves = 0;
-    let fastestMove = null, slowestMove = null;
-    let timeTroubleCount = 0, impulsiveCount = 0;
-
-    (this.game.plies || []).forEach((p) => {
+    (this.game.plies || []).forEach((p, idx) => {
       if (!p) return;
-      if (typeof p.timeSpent === 'number' && p.timeSpent > 0) {
-        if (p.color === 'w') {
-          whiteTimeTotal += p.timeSpent;
-          whiteTimeMoves++;
-        } else {
-          blackTimeTotal += p.timeSpent;
-          blackTimeMoves++;
-        }
-        if (!fastestMove || p.timeSpent < fastestMove.timeSpent) fastestMove = p;
-        if (!slowestMove || p.timeSpent > slowestMove.timeSpent) slowestMove = p;
+      const moveNum = Math.floor(idx / 2) + 1;
+      const isWhite = idx % 2 === 0;
+
+      if (isWhite) {
+        movesText += `${moveNum}. `;
+      } else if (idx === 0) {
+        movesText += `${moveNum}... `;
       }
-      if (p.isTimeTrouble) timeTroubleCount++;
-      if (p.isImpulsive) impulsiveCount++;
+
+      movesText += p.san;
+      if (glyphMap[p.classification]) {
+        movesText += glyphMap[p.classification];
+      }
+
+      let evalComment = '';
+      if (p.mate !== null && p.mate !== undefined) {
+        evalComment = `[%eval #${p.mate}]`;
+      } else if (p.scoreCp !== null && p.scoreCp !== undefined) {
+        const val = (p.scoreCp / 100).toFixed(2);
+        const sign = p.scoreCp > 0 ? '+' : '';
+        evalComment = `[%eval ${sign}${val}]`;
+      }
+
+      if (['blunder', 'mistake', 'inaccuracy', 'missed_win'].includes(p.classification) && p.bestMoveSan && p.bestMoveSan !== p.san) {
+        evalComment = `${evalComment} (Best: ${p.bestMoveSan})`.trim();
+      }
+
+      if (evalComment) {
+        movesText += ` { ${evalComment} }`;
+      }
+      movesText += ' ';
     });
 
-    const whiteAvgTime = whiteTimeMoves > 0 ? (whiteTimeTotal / whiteTimeMoves).toFixed(1) + 's' : null;
-    const blackAvgTime = blackTimeMoves > 0 ? (blackTimeTotal / blackTimeMoves).toFixed(1) + 's' : null;
+    movesText += this.game.result || '*';
+    lines.push(movesText);
+    const content = lines.join('\n');
 
-    // Tactical Motifs
-    const motifMap = {};
-    (this.game.plies || []).forEach((p) => {
-      if (!p || !Array.isArray(p.motifs)) return;
-      p.motifs.forEach((m) => {
-        const key = m.label || m.name || m;
-        if (!motifMap[key]) {
-          motifMap[key] = { label: key, count: 0, icon: m.icon || '⚡', coachTip: m.coachTip || '' };
-        }
-        motifMap[key].count++;
+    const blob = new Blob([content], { type: 'application/x-chess-pgn;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeW = (this.game.white || 'White').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeB = (this.game.black || 'Black').replace(/[^a-zA-Z0-9_-]/g, '_');
+    a.href = url;
+    a.download = `chess_iq_${safeW}_vs_${safeB}.pgn`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    soundService.playSuccess();
+  }
+
+  copyCurrentFen() {
+    const fen = this.getActiveBoardFen();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(fen).then(() => {
+        soundService.playSuccess();
+        alert('FEN copied to clipboard!\n\n' + fen);
       });
-    });
-    const detectedMotifs = Object.values(motifMap).sort((a, b) => b.count - a.count);
-
-    // Dynamic executive narrative
-    let executiveNarrative = `A dynamic match fought in the <strong>${insEscape(this.game.ecoName || this.game.ecoCode || 'standard lines')}</strong>. `;
-    if (this.game.result === '1-0') {
-      executiveNarrative += isWhiteUser
-        ? `You seized the initiative with ${whiteAcc}% accuracy, converting your advantage to claim victory in ${totalMoves} moves.`
-        : `White played with strong precision (${whiteAcc}%), leveraging critical tactical turns to seal victory in ${totalMoves} moves.`;
-    } else if (this.game.result === '0-1') {
-      executiveNarrative += !isWhiteUser
-        ? `You navigated key complications with ${blackAcc}% accuracy, outplaying White to secure victory in ${totalMoves} moves.`
-        : `Black demonstrated clinical accuracy (${blackAcc}%), capitalizing on open lines to achieve victory in ${totalMoves} moves.`;
     } else {
-      executiveNarrative += `Both sides battled to a hard-fought draw with well-matched accuracy (${whiteAcc}% White vs ${blackAcc}% Black) over ${totalMoves} moves.`;
+      prompt('Copy board FEN:', fen);
     }
+  }
 
-    // Coach Study Plan stats
-    const summary = this.game.gameCoachSummary || {};
-    const bankStats = typeof getBlunderBankStats === 'function' ? getBlunderBankStats() : { total: 0, due: 0 };
-    let priorityTitle = 'Solid Positional Consistency';
-    let priorityDesc = 'You played a clean game with very few tactical oversights. Use Guess-the-Move mode to sharpen your grandmaster calculation!';
-    let priorityIcon = '🏆';
+  renderCoachTabHtml(userCounts, userOpeningAcc, userMiddleAcc, userEndAcc, userOpeningElo, userMiddlegameElo, userEndgameElo) {
+    const userColor = this.game?.userColor || 'w';
+    const userPlies = (this.game?.plies || []).filter((p) => p && p.color === userColor);
 
-    if (summary.topMotifId && typeof TACTICAL_MOTIF_CATALOG !== 'undefined' && TACTICAL_MOTIF_CATALOG[summary.topMotifId]) {
-      const cat = TACTICAL_MOTIF_CATALOG[summary.topMotifId];
-      priorityIcon = cat.icon;
-      priorityTitle = `Pattern Alert: ${cat.label} (${summary.topMotifCount}× in this game)`;
-      priorityDesc = cat.coachTip;
-    } else if ((this.game.impulsiveBlunders || 0) >= 1) {
-      priorityIcon = '⚡';
-      priorityTitle = `Clock Discipline: ${this.game.impulsiveBlunders} Rushed Mistake${this.game.impulsiveBlunders > 1 ? 's' : ''}`;
-      priorityDesc = 'You played critical mistakes in under 2 seconds despite having plenty of clock time. Take a deep breath and sit on your hands for 5 seconds before capturing or responding to threats!';
-    } else if (summary.weakestPhase && summary.weakestPhaseAcc < 78) {
-      priorityIcon = '📉';
-      const phCap = summary.weakestPhase.charAt(0).toUpperCase() + summary.weakestPhase.slice(1);
-      priorityTitle = `${phCap} Precision (${summary.weakestPhaseAcc}% Accuracy)`;
-      priorityDesc = `Your accuracy dipped most during the ${summary.weakestPhase}. Practice critical transitions from this phase against an Elo-matched bot!`;
-    } else if (userMistakes.length > 0) {
-      priorityIcon = '🎯';
-      priorityTitle = `Tactical Calculation (${userMistakes.length} Key Error${userMistakes.length > 1 ? 's' : ''})`;
-      priorityDesc = 'Re-play your mistakes on the board right now in puzzle workout mode to build muscle memory for the correct tactical continuation.';
-    }
+    let timedMoves = 0;
+    let totalTime = 0;
+    let impulsiveCount = 0;
+    let timeTroubleCount = 0;
 
-    const modal = document.createElement('div');
-    modal.id = 'review-detailed-modal';
-    modal.className = 'why-modal-backdrop';
-    modal.innerHTML = `
-      <div class="why-dialog full-report-dialog comic-card p-3 p-sm-4 shadow-2xl" style="max-width: 980px; width: 100%; max-height: min(94vh, 920px); overflow-y: auto;">
-        <!-- 1. Report Header & Utility Actions -->
-        <div class="d-flex align-items-center justify-content-between pb-2 mb-3 border-bottom flex-wrap gap-2" style="border-color: var(--arcade-border) !important;">
-          <div class="d-flex align-items-center gap-2 flex-wrap min-w-0">
-            <span class="badge bg-warning text-dark font-monospace fw-black px-2.5 py-1.5 fs-6">
-              <i class="bi bi-file-earmark-bar-graph-fill me-1.5"></i>Full Game Report
+    userPlies.forEach((p) => {
+      if (p.timeSpent !== null && p.timeSpent !== undefined) {
+        timedMoves++;
+        totalTime += p.timeSpent;
+      }
+      if (p.isImpulsive) impulsiveCount++;
+      if (p.isTimeTrouble && ['blunder', 'mistake', 'missed_win'].includes(p.classification)) timeTroubleCount++;
+    });
+
+    const avgTime = timedMoves > 0 ? (totalTime / timedMoves).toFixed(1) : null;
+    const totalErrors = (userCounts.blunder || 0) + (userCounts.mistake || 0) + (userCounts.missed_win || 0);
+
+    return `
+      <!-- 1. Key Moments Chips -->
+      <div class="comic-card p-2.5 mb-2">
+        <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
+          <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
+            <i class="bi bi-lightning-charge-fill text-warning me-1"></i>Key Moments
+          </span>
+          <span class="text-secondary small font-monospace" style="font-size: 10px;">Click to jump</span>
+        </div>
+        <div class="d-flex align-items-center flex-wrap gap-1.5">
+          ${userCounts.brilliant > 0 ? `
+            <span class="badge glance-chip bg-info text-dark font-monospace fw-black cursor-pointer" data-filter-jump="brilliant" title="Jump to Brilliant Move">
+              💎 ${userCounts.brilliant} Brilliant
             </span>
-            <button type="button" class="eco-interactive-btn cursor-pointer" id="btn-report-open-eco" data-iq-tip="eco_opening" title="Click to view Opening theory & ECO details">
-              <span class="badge bg-secondary font-monospace eco-code-badge">${this.game.ecoCode || 'PGN'}</span>
-              <span class="fw-black text-truncate eco-name-label" style="max-width: 280px; font-size: 14px;">${insEscape(this.game.ecoName || 'Chess Match')}</span>
-              <i class="bi bi-info-circle text-secondary" style="font-size: 11px;"></i>
-            </button>
-          </div>
-          <div class="d-flex align-items-center gap-1.5 no-print flex-shrink-0">
-            <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-2.5 py-1" id="btn-report-share" title="Share Game Review Link">
-              <i class="bi bi-share-fill me-1"></i>Share Link
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary comic-btn fw-bold px-2.5 py-1" id="btn-report-copy" title="Copy Full Report Summary to Clipboard">
-              <i class="bi bi-clipboard-check me-1"></i>Copy Summary
-            </button>
-            <button type="button" class="btn btn-sm btn-dark comic-btn py-1 px-2.5 fw-bold" id="btn-close-perf-modal" title="Close Report">
-              <i class="bi bi-x-lg"></i>
-            </button>
-          </div>
-        </div>
-
-        <!-- Metadata Strip -->
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 p-2 rounded mb-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border); font-size: 11.5px;">
-          <div class="d-flex align-items-center gap-2 flex-wrap">
-            <span><i class="bi bi-calendar3 me-1 text-secondary"></i><strong class="font-monospace">${this.game.date || 'Recent Match'}</strong></span>
-            <span class="text-secondary opacity-50">·</span>
-            ${this.game.isBotGame ? `
-              <span><i class="bi bi-robot me-1 text-secondary"></i><strong class="font-monospace">Untimed</strong></span>
-            ` : `
-              <span><i class="bi bi-stopwatch me-1 text-secondary"></i><strong class="font-monospace">${this.game.timeControl || 'Standard'}</strong></span>
-            `}
-            <span class="text-secondary opacity-50">·</span>
-            <span><i class="bi bi-trophy-fill me-1 text-warning"></i><strong class="font-monospace">${resTitle}</strong></span>
-          </div>
-          <div class="d-flex align-items-center gap-2 font-monospace">
-            <span><i class="bi bi-hash me-0.5 text-secondary"></i><strong>${totalMoves} moves (${totalPlies} plies)</strong></span>
-            <span class="text-secondary opacity-50">·</span>
-            <span class="badge bg-secondary-subtle text-secondary border font-monospace text-uppercase">${this.game.platform || 'PGN'}</span>
-          </div>
-        </div>
-
-        <div class="d-flex flex-column gap-3">
-          <!-- 2. Executive Head-to-Head Player Overview -->
-          <div class="row g-2.5">
-            <!-- White Player Card -->
-            <div class="col-12 col-md-6">
-              <div class="report-metric-card h-100 ${isWhiteUser ? 'border-warning' : ''}">
-                <div class="d-flex align-items-center justify-content-between mb-2 pb-1.5 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
-                  <div class="d-flex align-items-center gap-1.5 min-w-0">
-                    <span class="lh-1 fs-5">⚪</span>
-                    <span class="fw-black fs-6 text-truncate ${isWhiteUser ? 'text-warning' : ''}">${whiteName}</span>
-                    <span class="badge bg-secondary font-monospace" style="font-size: 10px;">${whiteElo}</span>
-                  </div>
-                  <div class="d-flex align-items-center gap-1">
-                    ${isWhiteUser ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.5 rounded-pill" style="font-size: 9px;">YOU</span>' : ''}
-                    ${whiteBadge}
-                  </div>
-                </div>
-
-                <div class="row g-2 align-items-baseline mb-2">
-                  <div class="col-6">
-                    <span class="small text-secondary fw-bold text-uppercase d-block" style="font-size: 10px;">Move Accuracy</span>
-                    <span class="fw-black fs-2 text-emerald font-monospace">${whiteAcc}%</span>
-                  </div>
-                  <div class="col-6">
-                    <span class="small text-secondary fw-bold text-uppercase d-block" style="font-size: 10px;">Performance Rating</span>
-                    <span class="fw-black fs-3 font-monospace text-warning">${whiteGameElo} <span class="fs-6 text-secondary fw-normal">Elo</span></span>
-                  </div>
-                </div>
-
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 pt-1.5 border-top border-opacity-10" style="border-color: var(--arcade-border) !important; font-size: 11px;">
-                  <span class="badge rounded-pill fw-bold" style="background: ${whiteTier.color}20; color: ${whiteTier.color}; border: 1px solid ${whiteTier.color}50;">
-                    ${whiteTier.icon} ${whiteTier.label}
-                  </span>
-                  <span class="text-secondary font-monospace">
-                    <strong class="text-success">${whiteOptCount}</strong> best · <strong class="text-danger">${whiteErrCount}</strong> errors
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Black Player Card -->
-            <div class="col-12 col-md-6">
-              <div class="report-metric-card h-100 ${!isWhiteUser ? 'border-warning' : ''}">
-                <div class="d-flex align-items-center justify-content-between mb-2 pb-1.5 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
-                  <div class="d-flex align-items-center gap-1.5 min-w-0">
-                    <span class="lh-1 fs-5">⚫</span>
-                    <span class="fw-black fs-6 text-truncate ${!isWhiteUser ? 'text-warning' : ''}">${blackName}</span>
-                    <span class="badge bg-secondary font-monospace" style="font-size: 10px;">${blackElo}</span>
-                  </div>
-                  <div class="d-flex align-items-center gap-1">
-                    ${!isWhiteUser ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.5 rounded-pill" style="font-size: 9px;">YOU</span>' : ''}
-                    ${blackBadge}
-                  </div>
-                </div>
-
-                <div class="row g-2 align-items-baseline mb-2">
-                  <div class="col-6">
-                    <span class="small text-secondary fw-bold text-uppercase d-block" style="font-size: 10px;">Move Accuracy</span>
-                    <span class="fw-black fs-2 text-cyan font-monospace">${blackAcc}%</span>
-                  </div>
-                  <div class="col-6">
-                    <span class="small text-secondary fw-bold text-uppercase d-block" style="font-size: 10px;">Performance Rating</span>
-                    <span class="fw-black fs-3 font-monospace text-info">${blackGameElo} <span class="fs-6 text-secondary fw-normal">Elo</span></span>
-                  </div>
-                </div>
-
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 pt-1.5 border-top border-opacity-10" style="border-color: var(--arcade-border) !important; font-size: 11px;">
-                  <span class="badge rounded-pill fw-bold" style="background: ${blackTier.color}20; color: ${blackTier.color}; border: 1px solid ${blackTier.color}50;">
-                    ${blackTier.icon} ${blackTier.label}
-                  </span>
-                  <span class="text-secondary font-monospace">
-                    <strong class="text-success">${blackOptCount}</strong> best · <strong class="text-danger">${blackErrCount}</strong> errors
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Executive Match Narrative -->
-          <div class="p-2.5 rounded" style="background: rgba(251, 191, 36, 0.08); border-left: 4px solid var(--arcade-gold); font-size: 12.5px;">
-            <div class="d-flex align-items-center gap-1.5 mb-1">
-              <i class="bi bi-journal-text text-warning"></i>
-              <strong class="text-warning text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">Executive Match Verdict</strong>
-            </div>
-            <div class="text-body">${executiveNarrative}</div>
-          </div>
-
-          <!-- 3. Phase-by-Phase Breakdown (Opening, Middlegame, Endgame) -->
-          <div>
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <h6 class="fw-black mb-0 d-flex align-items-center gap-1.5">
-                <i class="bi bi-compass text-warning"></i>Phase-by-Phase Mastery
-              </h6>
-              <span class="text-secondary font-monospace" style="font-size: 11px;">⚪ White vs ⚫ Black</span>
-            </div>
-            <div class="row g-2">
-              <!-- Opening -->
-              <div class="col-12 col-md-4">
-                <div class="report-phase-card d-flex flex-column justify-content-between">
-                  <div>
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                      <span class="fw-black text-uppercase text-primary" style="font-size: 11px;"><i class="bi bi-compass me-1"></i>Opening</span>
-                      <span class="badge bg-secondary font-monospace" style="font-size: 9.5px;">Moves 1–${Math.ceil((this.game.middlegameStartPly || 20) / 2)}</span>
-                    </div>
-                    <div class="d-flex justify-content-around align-items-center py-1 mb-2 rounded" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03));">
-                      <div class="text-center">
-                        <span class="d-block text-secondary small" style="font-size: 9.5px;">⚪ White</span>
-                        <span class="fw-black font-monospace text-primary fs-5">${whiteOpeningAcc}</span>
-                        <span class="badge phase-elo-chip font-monospace" style="font-size: 9px;">${whiteOpeningElo} Elo</span>
-                      </div>
-                      <div class="vr opacity-25 my-auto" style="height: 30px;"></div>
-                      <div class="text-center">
-                        <span class="d-block text-secondary small" style="font-size: 9.5px;">⚫ Black</span>
-                        <span class="fw-black font-monospace text-cyan fs-5">${blackOpeningAcc}</span>
-                        <span class="badge phase-elo-chip font-monospace" style="font-size: 9px;">${blackOpeningElo} Elo</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="small pt-1.5 border-top border-opacity-10 text-secondary" style="border-color: var(--arcade-border) !important; font-size: 11px;">
-                    ${od ? `
-                      <div class="d-flex align-items-center justify-content-between gap-1 flex-wrap">
-                        <span>Left book move ${Math.ceil(od.ply / 2)} (<strong class="font-monospace">${insEscape(od.san)}</strong>)</span>
-                        <button type="button" class="btn btn-xs btn-outline-warning comic-btn py-0 px-1.5 fw-bold" data-report-jump="${od.ply}">Jump</button>
-                      </div>
-                    ` : `
-                      <span>Adhered to established book theory.</span>
-                    `}
-                  </div>
-                </div>
-              </div>
-
-              <!-- Middlegame -->
-              <div class="col-12 col-md-4">
-                <div class="report-phase-card d-flex flex-column justify-content-between">
-                  <div>
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                      <span class="fw-black text-uppercase text-warning" style="font-size: 11px;"><i class="bi bi-shield-shaded me-1"></i>Middlegame</span>
-                      <span class="badge bg-secondary font-monospace" style="font-size: 9.5px;">Moves ${Math.ceil((this.game.middlegameStartPly || 20) / 2)}–${Math.ceil((this.game.endgameStartPly || 50) / 2)}</span>
-                    </div>
-                    <div class="d-flex justify-content-around align-items-center py-1 mb-2 rounded" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03));">
-                      <div class="text-center">
-                        <span class="d-block text-secondary small" style="font-size: 9.5px;">⚪ White</span>
-                        <span class="fw-black font-monospace text-warning fs-5">${whiteMiddleAcc}</span>
-                        <span class="badge phase-elo-chip font-monospace" style="font-size: 9px;">${whiteMiddleElo} Elo</span>
-                      </div>
-                      <div class="vr opacity-25 my-auto" style="height: 30px;"></div>
-                      <div class="text-center">
-                        <span class="d-block text-secondary small" style="font-size: 9.5px;">⚫ Black</span>
-                        <span class="fw-black font-monospace text-cyan fs-5">${blackMiddleAcc}</span>
-                        <span class="badge phase-elo-chip font-monospace" style="font-size: 9px;">${blackMiddleElo} Elo</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="small pt-1.5 border-top border-opacity-10 text-secondary" style="border-color: var(--arcade-border) !important; font-size: 11px;">
-                    ${tp && tp.ply >= (this.game.middlegameStartPly || 20) && tp.ply <= (this.game.endgameStartPly || 50) ? `
-                      <div class="d-flex align-items-center justify-content-between gap-1 flex-wrap">
-                        <span class="text-danger fw-bold">Turning point at move ${Math.ceil(tp.ply / 2)}</span>
-                        <button type="button" class="btn btn-xs btn-outline-danger comic-btn py-0 px-1.5 fw-bold" data-report-jump="${tp.ply}">Jump</button>
-                      </div>
-                    ` : `
-                      <span>Complicated tactical maneuvering and piece trades.</span>
-                    `}
-                  </div>
-                </div>
-              </div>
-
-              <!-- Endgame -->
-              <div class="col-12 col-md-4">
-                <div class="report-phase-card d-flex flex-column justify-content-between">
-                  <div>
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                      <span class="fw-black text-uppercase text-success" style="font-size: 11px;"><i class="bi bi-flag-fill me-1"></i>Endgame</span>
-                      <span class="badge bg-secondary font-monospace" style="font-size: 9.5px;">Moves ${Math.ceil((this.game.endgameStartPly || 50) / 2)}+</span>
-                    </div>
-                    <div class="d-flex justify-content-around align-items-center py-1 mb-2 rounded" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03));">
-                      <div class="text-center">
-                        <span class="d-block text-secondary small" style="font-size: 9.5px;">⚪ White</span>
-                        <span class="fw-black font-monospace text-success fs-5">${whiteEndAcc}</span>
-                        <span class="badge phase-elo-chip font-monospace" style="font-size: 9px;">${whiteEndElo} Elo</span>
-                      </div>
-                      <div class="vr opacity-25 my-auto" style="height: 30px;"></div>
-                      <div class="text-center">
-                        <span class="d-block text-secondary small" style="font-size: 9.5px;">⚫ Black</span>
-                        <span class="fw-black font-monospace text-cyan fs-5">${blackEndAcc}</span>
-                        <span class="badge phase-elo-chip font-monospace" style="font-size: 9px;">${blackEndElo} Elo</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="small pt-1.5 border-top border-opacity-10 text-secondary" style="border-color: var(--arcade-border) !important; font-size: 11px;">
-                    ${totalPlies >= (this.game.endgameStartPly || 50) ? `
-                      <span>Pawn promotion and king conversion endgame technique.</span>
-                    ` : `
-                      <span>Game concluded before the technical endgame phase.</span>
-                    `}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 4. Move Quality & Classification Matrix -->
-          <div>
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <h6 class="fw-black mb-0 d-flex align-items-center gap-1.5">
-                <i class="bi bi-bar-chart-steps text-warning"></i>Move Quality & Classification Breakdown
-              </h6>
-              <span class="text-secondary font-monospace" style="font-size: 11px;">White vs Black Distribution</span>
-            </div>
-            <div class="comic-card p-2.5">
-              <div class="d-flex align-items-center justify-content-between px-2 pb-1.5 border-bottom border-opacity-10 font-monospace" style="border-color: var(--arcade-border) !important; font-size: 11px; font-weight: 800;">
-                <span style="width: 80px;" class="text-start text-warning">⚪ White</span>
-                <span class="text-uppercase text-secondary fw-bold">Classification</span>
-                <span style="width: 80px;" class="text-end text-cyan">⚫ Black</span>
-              </div>
-              <div class="d-flex flex-column gap-1.5 pt-2">
-                ${['brilliant', 'great', 'best', 'excellent', 'good', 'book', 'inaccuracy', 'mistake', 'blunder', 'missed_win'].map((cls) => {
-                  const dict = COMIC_DICTIONARY[cls];
-                  if (!dict) return '';
-                  const wCnt = whiteCounts[cls] || 0;
-                  const bCnt = blackCounts[cls] || 0;
-                  const wPct = whiteMovesCount > 0 ? Math.round((wCnt / whiteMovesCount) * 100) : 0;
-                  const bPct = blackMovesCount > 0 ? Math.round((bCnt / blackMovesCount) * 100) : 0;
-                  const sumCnt = wCnt + bCnt;
-                  const wBarPct = sumCnt > 0 ? Math.round((wCnt / sumCnt) * 100) : 50;
-                  const bBarPct = sumCnt > 0 ? 100 - wBarPct : 50;
-
-                  return `
-                    <div class="p-1.5 rounded" style="background: var(--arcade-card-hover, rgba(0,0,0,0.02)); border: 1px solid var(--arcade-border);">
-                      <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
-                        <div style="width: 90px;" class="d-flex align-items-baseline gap-1">
-                          <strong class="font-monospace fs-6 ${wCnt > 0 ? 'text-warning' : 'text-secondary opacity-50'}">${wCnt}</strong>
-                          <span class="text-secondary small font-monospace" style="font-size: 10px;">(${wPct}%)</span>
-                        </div>
-
-                        <span class="badge rounded-pill d-inline-flex align-items-center gap-1 px-2.5 py-1" style="background-color: ${dict.bg}; color: ${dict.text}; font-weight: 800; font-size: 11px;">
-                          <span>${dict.symbol}</span>
-                          <span>${dict.words[0]}</span>
-                        </span>
-
-                        <div style="width: 90px;" class="d-flex align-items-baseline justify-content-end gap-1 text-end">
-                          <span class="text-secondary small font-monospace" style="font-size: 10px;">(${bPct}%)</span>
-                          <strong class="font-monospace fs-6 ${bCnt > 0 ? 'text-cyan' : 'text-secondary opacity-50'}">${bCnt}</strong>
-                        </div>
-                      </div>
-
-                      ${sumCnt > 0 ? `
-                        <div class="report-dual-bar-track" title="White: ${wCnt} (${wBarPct}%) vs Black: ${bCnt} (${bBarPct}%)">
-                          <div class="report-dual-bar-white" style="width: ${wBarPct}%;"></div>
-                          <div class="report-dual-bar-black" style="width: ${bBarPct}%;"></div>
-                        </div>
-                      ` : ''}
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          </div>
-
-          <!-- 5. Tactical Highlights: Turning Point & Top Mistakes -->
-          <div>
-            <h6 class="fw-black mb-2 d-flex align-items-center gap-1.5">
-              <i class="bi bi-lightning-charge-fill text-danger"></i>Critical Turning Points & Tactical Highlights
-            </h6>
-            <div class="row g-2.5">
-              ${tp ? `
-                <div class="col-12 ${userMistakes.length > 0 ? 'col-lg-6' : ''}">
-                  <div class="report-metric-card border-danger h-100 d-flex flex-column justify-content-between">
-                    <div>
-                      <div class="d-flex align-items-center justify-content-between mb-1.5">
-                        <span class="badge bg-danger text-white fw-black" style="font-size: 10px;">
-                          <i class="bi bi-lightning-fill me-1"></i>GAME TURNING POINT
-                        </span>
-                        <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">Move ${Math.ceil(tp.ply / 2)}${tp.color === 'b' ? '...' : '.'}${insEscape(tp.san)}</span>
-                      </div>
-                      <div class="small fw-bold mb-1.5">
-                        ${tp.isUserMove ? 'Your' : "Opponent's"} <span class="text-danger font-monospace fw-black">${Math.ceil(tp.ply / 2)}${tp.color === 'b' ? '...' : '.'}${insEscape(tp.san)}</span> shifted win probability by <span class="text-danger fw-black">${tp.swingPct}%</span> (${Math.round((tp.prevWinProb ?? 0.5) * 100)}% → ${Math.round((tp.winProb ?? 0.5) * 100)}% White).
-                      </div>
-                      ${tp.bestMoveSan ? `
-                        <div class="text-secondary small mb-2">
-                          <i class="bi bi-check2-circle text-success me-1"></i>Stockfish recommended <strong class="font-monospace text-success">${insEscape(tp.bestMoveSan)}</strong>
-                        </div>
-                      ` : ''}
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline-danger comic-btn fw-bold w-100 py-1" data-report-jump="${tp.ply}">
-                      <i class="bi bi-crosshair me-1"></i>View Turning Point on Board
-                    </button>
-                  </div>
-                </div>
-              ` : ''}
-
-              <!-- Top Mistakes List -->
-              <div class="col-12 ${tp ? 'col-lg-6' : ''}">
-                <div class="report-metric-card h-100 d-flex flex-column justify-content-between">
-                  <div>
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                      <span class="small fw-black text-uppercase text-danger" style="font-size: 10.5px;">
-                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Key Blunders & Missed Wins
-                      </span>
-                      <span class="badge bg-secondary font-monospace" style="font-size: 9.5px;">${userMistakes.length} error${userMistakes.length === 1 ? '' : 's'}</span>
-                    </div>
-
-                    ${userMistakes.length > 0 ? `
-                      <div class="d-flex flex-column gap-1.5 mb-2">
-                        ${userMistakes.slice(0, 4).map((m) => {
-                          const moveNum = Math.ceil(m.ply / 2);
-                          const dots = m.color === 'b' ? '...' : '.';
-                          const comic = getComicBadge(m.classification, m.san);
-                          const bestSan = m.bestMoveSan || (m.bestMoveUci ? `${m.bestMoveUci.slice(0, 2)}-${m.bestMoveUci.slice(2, 4)}` : '');
-                          return `
-                            <div class="report-blunder-row d-flex align-items-center justify-content-between gap-1.5">
-                              <div class="d-flex align-items-center gap-1.5 min-w-0">
-                                <span class="badge" style="background-color: ${comic.bg}; color: ${comic.text}; font-size: 10px; font-weight: 800;">
-                                  ${comic.symbol}
-                                </span>
-                                <span class="font-monospace fw-black small">${moveNum}${dots}${insEscape(m.san)}</span>
-                                ${bestSan ? `<span class="text-secondary small font-monospace d-none d-sm-inline">→ <strong class="text-success">${insEscape(bestSan)}</strong></span>` : ''}
-                              </div>
-                              <button type="button" class="btn btn-xs btn-outline-secondary comic-btn py-0.5 px-2 fw-bold flex-shrink-0" data-report-jump="${m.ply}">
-                                View <i class="bi bi-arrow-right ms-0.5"></i>
-                              </button>
-                            </div>
-                          `;
-                        }).join('')}
-                      </div>
-                    ` : `
-                      <div class="text-secondary small py-3 text-center">
-                        <i class="bi bi-shield-check text-success fs-4 d-block mb-1"></i>
-                        No critical blunders or missed wins found! Clean tactical game.
-                      </div>
-                    `}
-                  </div>
-
-                  ${userMistakes.length > 0 ? `
-                    <button type="button" class="btn btn-sm btn-danger comic-btn fw-black w-100 py-1" id="btn-report-retry-mistakes">
-                      <i class="bi bi-bullseye me-1"></i>Retry All Mistakes in Puzzle Workout (${userMistakes.length})
-                    </button>
-                  ` : ''}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 6. Tactical Motifs Diagnosed -->
-          ${detectedMotifs.length > 0 ? `
-            <div>
-              <div class="d-flex align-items-center justify-content-between mb-2">
-                <h6 class="fw-black mb-0 d-flex align-items-center gap-1.5">
-                  <i class="bi bi-puzzle-fill text-warning"></i>Tactical Motifs Diagnosed in this Game
-                </h6>
-                <span class="badge bg-secondary font-monospace" style="font-size: 10px;">${detectedMotifs.length} motifs detected</span>
-              </div>
-              <div class="row g-2">
-                ${detectedMotifs.slice(0, 6).map((m) => `
-                  <div class="col-12 col-sm-6 col-md-4">
-                    <div class="report-metric-card p-2 h-100">
-                      <div class="d-flex align-items-center justify-content-between mb-1">
-                        <span class="fw-black small d-flex align-items-center gap-1">
-                          <span>${m.icon}</span>
-                          <span>${insEscape(m.label)}</span>
-                        </span>
-                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle font-monospace fw-black" style="font-size: 9.5px;">${m.count}×</span>
-                      </div>
-                      ${m.coachTip ? `<div class="text-secondary small" style="font-size: 11px;">${insEscape(m.coachTip)}</div>` : ''}
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
           ` : ''}
-
-          <!-- 7. Time Management & Clock Discipline -->
-          ${whiteAvgTime || blackAvgTime ? `
-            <div>
-              <h6 class="fw-black mb-2 d-flex align-items-center gap-1.5">
-                <i class="bi bi-clock-history text-info"></i>Time Management & Clock Discipline
-              </h6>
-              <div class="row g-2">
-                <div class="col-6 col-md-3">
-                  <div class="report-metric-card text-center p-2">
-                    <span class="text-secondary text-uppercase fw-bold d-block" style="font-size: 9.5px;">⚪ White Avg Time</span>
-                    <strong class="fs-5 font-monospace text-warning">${whiteAvgTime || '—'}</strong>
-                  </div>
-                </div>
-                <div class="col-6 col-md-3">
-                  <div class="report-metric-card text-center p-2">
-                    <span class="text-secondary text-uppercase fw-bold d-block" style="font-size: 9.5px;">⚫ Black Avg Time</span>
-                    <strong class="fs-5 font-monospace text-cyan">${blackAvgTime || '—'}</strong>
-                  </div>
-                </div>
-                <div class="col-6 col-md-3">
-                  <div class="report-metric-card text-center p-2">
-                    <span class="text-secondary text-uppercase fw-bold d-block" style="font-size: 9.5px;">⚡ Rushed Moves (&lt;2s)</span>
-                    <strong class="fs-5 font-monospace text-danger">${impulsiveCount}</strong>
-                  </div>
-                </div>
-                <div class="col-6 col-md-3">
-                  <div class="report-metric-card text-center p-2">
-                    <span class="text-secondary text-uppercase fw-bold d-block" style="font-size: 9.5px;">🔥 Time Trouble (&lt;20s)</span>
-                    <strong class="fs-5 font-monospace text-warning">${timeTroubleCount}</strong>
-                  </div>
-                </div>
-              </div>
-            </div>
+          ${userCounts.great > 0 ? `
+            <span class="badge glance-chip bg-primary-subtle text-primary border border-primary font-monospace fw-black cursor-pointer" data-filter-jump="great" title="Jump to Great Move">
+              ⭐ ${userCounts.great} Great
+            </span>
           ` : ''}
+          ${userCounts.best > 0 ? `
+            <span class="badge glance-chip bg-success-subtle text-success border border-success font-monospace fw-bold" title="${userCounts.best} Best Moves played">
+              ✓ ${userCounts.best} Best
+            </span>
+          ` : ''}
+          ${userCounts.inaccuracy > 0 ? `
+            <span class="badge glance-chip bg-warning-subtle text-warning border border-warning font-monospace fw-bold cursor-pointer" data-filter-jump="inaccuracy" title="Jump to First Inaccuracy">
+              ⚠️ ${userCounts.inaccuracy} Inacc.
+            </span>
+          ` : ''}
+          ${userCounts.mistake > 0 ? `
+            <span class="badge glance-chip bg-warning text-dark font-monospace fw-black cursor-pointer" data-filter-jump="mistake" title="Jump to First Mistake">
+              ❓ ${userCounts.mistake} Mistake${userCounts.mistake > 1 ? 's' : ''}
+            </span>
+          ` : ''}
+          ${userCounts.blunder > 0 ? `
+            <span class="badge glance-chip bg-danger text-white font-monospace fw-black cursor-pointer" data-filter-jump="blunder" title="Jump to First Blunder">
+              💥 ${userCounts.blunder} Blunder${userCounts.blunder > 1 ? 's' : ''}
+            </span>
+          ` : ''}
+          ${userCounts.missed_win > 0 ? `
+            <span class="badge glance-chip bg-danger-subtle text-danger border border-danger font-monospace fw-black cursor-pointer" data-filter-jump="missed_win" title="Jump to Missed Win">
+              ❌ ${userCounts.missed_win} Missed Win${userCounts.missed_win > 1 ? 's' : ''}
+            </span>
+          ` : ''}
+          ${totalErrors === 0 && (userCounts.best || 0) > 0 ? `
+            <span class="badge bg-success-subtle text-success border border-success fw-bold px-2 py-1">
+              🌟 Impeccable Play! Zero Tactical Errors.
+            </span>
+          ` : ''}
+        </div>
+      </div>
 
-          <!-- 8. Positional Pillars Profile -->
-          <div>
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <h6 class="fw-black mb-0 d-flex align-items-center gap-1.5">
-                <i class="bi bi-sliders text-info"></i>4-Pillar Positional Assessment
-              </h6>
-              <span class="text-secondary font-monospace" style="font-size: 11px;">Material · Activity · King Safety · Structure</span>
-            </div>
-            <div class="row g-2">
-              <div class="col-6 col-md-3">
-                <div class="report-metric-card p-2">
-                  <div class="d-flex align-items-center gap-1.5 mb-1">
-                    <span class="fs-5">⚖️</span>
-                    <div>
-                      <strong class="d-block small fw-black">Material</strong>
-                      <span class="text-secondary font-monospace" style="font-size: 9.5px;">Piece exchanges</span>
-                    </div>
-                  </div>
-                  <div class="text-secondary" style="font-size: 11px;">Evaluates pawn units, minor piece trades, and unbalanced piece trades.</div>
-                </div>
-              </div>
-              <div class="col-6 col-md-3">
-                <div class="report-metric-card p-2">
-                  <div class="d-flex align-items-center gap-1.5 mb-1">
-                    <span class="fs-5">⚡</span>
-                    <div>
-                      <strong class="d-block small fw-black">Piece Activity</strong>
-                      <span class="text-secondary font-monospace" style="font-size: 9.5px;">Square control</span>
-                    </div>
-                  </div>
-                  <div class="text-secondary" style="font-size: 11px;">Measures center attacks, mobility, open lines, and pressure on enemy squares.</div>
-                </div>
-              </div>
-              <div class="col-6 col-md-3">
-                <div class="report-metric-card p-2">
-                  <div class="d-flex align-items-center gap-1.5 mb-1">
-                    <span class="fs-5">🛡️</span>
-                    <div>
-                      <strong class="d-block small fw-black">King Safety</strong>
-                      <span class="text-secondary font-monospace" style="font-size: 9.5px;">Shield & shelter</span>
-                    </div>
-                  </div>
-                  <div class="text-secondary" style="font-size: 11px;">Evaluates pawn shelter intactness, castling security, and open files toward the king.</div>
-                </div>
-              </div>
-              <div class="col-6 col-md-3">
-                <div class="report-metric-card p-2">
-                  <div class="d-flex align-items-center gap-1.5 mb-1">
-                    <span class="fs-5">♟️</span>
-                    <div>
-                      <strong class="d-block small fw-black">Pawn Structure</strong>
-                      <span class="text-secondary font-monospace" style="font-size: 9.5px;">Islands & chains</span>
-                    </div>
-                  </div>
-                  <div class="text-secondary" style="font-size: 11px;">Monitors doubled pawns, isolated pawns, backward weaknesses, and passed pawns.</div>
-                </div>
-              </div>
-            </div>
+      <!-- 2. Phase Accuracy Snapshot -->
+      <div class="comic-card p-2.5 mb-2">
+        <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
+          <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
+            <i class="bi bi-diagram-3-fill text-warning me-1"></i>Phase Accuracy (You)
+          </span>
+          ${typeof renderInfoIcon === 'function' ? renderInfoIcon('card_phase_accuracy') : ''}
+        </div>
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-1.5">
+          <div class="glance-phase-pill p-2 flex-grow-1 text-center cursor-help" data-iq-tip="phase_opening">
+            <div class="text-secondary small font-monospace"><i class="bi bi-compass text-primary me-1"></i>Opening</div>
+            <div class="fw-black text-primary font-monospace fs-6">${userOpeningAcc}</div>
+            <div class="text-secondary small font-monospace" style="font-size: 10px;">${userOpeningElo} Elo</div>
           </div>
-
-          <!-- 9. Personalized Coach Study Plan & Drills -->
-          <div class="border-top pt-3" style="border-color: var(--arcade-border) !important;">
-            <div class="comic-card p-3 coach-plan-card">
-              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom" style="border-color: var(--arcade-border) !important;">
-                <div class="d-flex align-items-center gap-2">
-                  <span class="badge bg-warning text-dark border border-dark fw-black px-2 py-1" style="font-size: 11px;">
-                    🎓 COACH'S STUDY PLAN
-                  </span>
-                  <span class="small fw-bold text-secondary">Personalized Takeaways & Active Drills</span>
-                </div>
-                ${summary.brightestMove ? `
-                  <button type="button" class="btn btn-xs btn-outline-info comic-btn fw-bold py-0.5 px-2" data-report-jump="${summary.brightestMove.ply}" title="Jump to your highest-rated move">
-                    ✨ Best Moment: Move ${Math.ceil(summary.brightestMove.ply / 2)} (${insEscape(summary.brightestMove.san)})
-                  </button>
-                ` : ''}
-              </div>
-
-              <div class="d-flex align-items-start gap-2.5 mb-3">
-                <div class="fs-3 lh-1 mt-0.5">${priorityIcon}</div>
-                <div class="flex-grow-1">
-                  <div class="fw-black small text-warning mb-0.5">${insEscape(priorityTitle)}</div>
-                  <div class="text-secondary small" style="font-size: 12px;">${insEscape(priorityDesc)}</div>
-                </div>
-              </div>
-
-              <div class="d-flex align-items-center flex-wrap gap-2 pt-1 border-top border-opacity-10" style="border-color: var(--arcade-border) !important;">
-                <button type="button" class="btn btn-sm btn-primary comic-btn fw-black py-1 px-2.5 flex-grow-1" id="btn-coach-guess-move" style="font-size: 11px;">
-                  <i class="bi bi-question-diamond-fill me-1"></i>Guess the Move Workout
-                </button>
-                <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black py-1 px-2.5 flex-grow-1" id="btn-coach-blunder-bank" style="font-size: 11px;">
-                  <i class="bi bi-bank2 me-1"></i>Open Blunder Bank (${bankStats.total})
-                </button>
-              </div>
-            </div>
+          <div class="glance-phase-pill p-2 flex-grow-1 text-center cursor-help" data-iq-tip="phase_middle">
+            <div class="text-secondary small font-monospace"><i class="bi bi-shield-shaded text-warning me-1"></i>Middle</div>
+            <div class="fw-black text-warning font-monospace fs-6">${userMiddleAcc}</div>
+            <div class="text-secondary small font-monospace" style="font-size: 10px;">${userMiddlegameElo} Elo</div>
           </div>
-
-          <!-- 10. Footer Utility Actions -->
-          <div class="d-flex align-items-center justify-content-between pt-2 border-top no-print flex-wrap gap-2" style="border-color: var(--arcade-border) !important;">
-            <div class="d-flex align-items-center gap-2">
-              <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-3 py-1" id="btn-report-copy-footer">
-                <i class="bi bi-clipboard-check me-1"></i>Copy Report Summary
-              </button>
-            </div>
-            <button type="button" class="btn btn-sm btn-dark comic-btn px-4 py-1 fw-bold" id="btn-report-close-footer">
-              Close Report
-            </button>
+          <div class="glance-phase-pill p-2 flex-grow-1 text-center cursor-help" data-iq-tip="phase_endgame">
+            <div class="text-secondary small font-monospace"><i class="bi bi-flag-fill text-success me-1"></i>Endgame</div>
+            <div class="fw-black text-success font-monospace fs-6">${userEndAcc}</div>
+            <div class="text-secondary small font-monospace" style="font-size: 10px;">${userEndgameElo} Elo</div>
           </div>
         </div>
       </div>
+
+      <!-- 3. Move Pace & Time-Trouble Diagnostic -->
+      <div class="comic-card p-2.5 mb-2">
+        <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
+          <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
+            <i class="bi bi-stopwatch-fill text-info me-1"></i>Move Pace & Clock Diagnostic
+          </span>
+          <span class="badge bg-secondary font-monospace" style="font-size: 9.5px;">${timedMoves > 0 ? 'Clock Tracked' : 'No Clocks'}</span>
+        </div>
+        ${timedMoves > 0 ? `
+          <div class="row g-2 mb-2">
+            <div class="col-4 text-center p-1.5 rounded" style="background: rgba(0,0,0,0.03);">
+              <div class="text-secondary small font-monospace" style="font-size: 10px;">Avg Time</div>
+              <div class="fw-black font-monospace fs-6 text-info">${avgTime}s</div>
+            </div>
+            <div class="col-4 text-center p-1.5 rounded" style="background: rgba(0,0,0,0.03);">
+              <div class="text-secondary small font-monospace" style="font-size: 10px;">Fast Blunders</div>
+              <div class="fw-black font-monospace fs-6 ${impulsiveCount > 0 ? 'text-danger' : 'text-success'}">${impulsiveCount}</div>
+            </div>
+            <div class="col-4 text-center p-1.5 rounded" style="background: rgba(0,0,0,0.03);">
+              <div class="text-secondary small font-monospace" style="font-size: 10px;">Time Trouble</div>
+              <div class="fw-black font-monospace fs-6 ${timeTroubleCount > 0 ? 'text-danger' : 'text-success'}">${timeTroubleCount}</div>
+            </div>
+          </div>
+          <p class="small text-secondary mb-0 leading-relaxed font-medium" style="font-size: 11.5px;">
+            ${impulsiveCount > 0
+              ? `⚡ <strong>Pace Alert:</strong> ${impulsiveCount} error(s) occurred when playing under 2 seconds. In complex positions, pause and verify opponent threats before committing!`
+              : timeTroubleCount > 0
+                ? `⏳ <strong>Time Trouble:</strong> Mistakes occurred under clock pressure. Focus on faster opening recall to preserve clock stamina for the endgame!`
+                : `✅ <strong>Solid Clock Discipline:</strong> No rushed blunders detected. Pace was steady and well-proportioned across phases.`}
+          </p>
+        ` : `
+          <p class="small text-secondary mb-0 leading-relaxed font-medium" style="font-size: 11.5px;">
+            <i class="bi bi-info-circle me-1 text-info"></i>
+            This match was reviewed without clock timestamps. When importing games from Chess.com with live clocks, Chess IQ tracks your time discipline and impulsive moves automatically.
+          </p>
+        `}
+      </div>
+
+      <!-- 4. Coach's Prescription & Actionable Drills -->
+      <div class="comic-card p-2.5">
+        <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
+          <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
+            <i class="bi bi-mortarboard-fill text-warning me-1"></i>Coach's Prescription
+          </span>
+          <button type="button" class="btn btn-xs btn-outline-warning comic-btn py-0 px-2 fw-bold" id="btn-coach-full-report" style="font-size: 10px;">
+            Report <i class="bi bi-arrow-right ms-0.5"></i>
+          </button>
+        </div>
+        <p class="small text-secondary mb-2.5 font-medium leading-relaxed" style="font-size: 11.5px;">
+          ${totalErrors > 0
+            ? `You have <strong>${totalErrors} key tactical moments</strong> to reinforce from this match. Active practice transforms temporary blunders into permanent tactical instincts.`
+            : `Outstanding tactical awareness in this game! To maintain your edge, review opening sidelines or spar against higher Elo bots.`}
+        </p>
+        <div class="d-flex align-items-center gap-1.5 flex-wrap">
+          ${totalErrors > 0 ? `
+            <button type="button" class="btn btn-sm btn-danger comic-btn flex-grow-1 fw-black py-1.5 px-2.5" id="btn-coach-retry-errors" style="font-size: 11.5px;">
+              <i class="bi bi-bullseye me-1"></i>Retry Mistakes (${totalErrors})
+            </button>
+          ` : ''}
+          <button type="button" class="btn btn-sm btn-warning comic-btn flex-grow-1 fw-bold text-dark py-1.5 px-2.5" id="btn-coach-goto-bank" style="font-size: 11.5px;">
+            <i class="bi bi-bank2 me-1"></i>Daily 5 Blunder Bank
+          </button>
+        </div>
+      </div>
     `;
-
-    document.body.appendChild(modal);
-    document.body.classList.add('modal-open');
-
-    const closeFn = () => {
-      modal.remove();
-      document.body.classList.remove('modal-open');
-    };
-
-    const dialogEl = modal.querySelector('.full-report-dialog') || modal.querySelector('.why-dialog');
-    const safeClose = typeof setupModalSwipeAndHistory === 'function'
-      ? setupModalSwipeAndHistory(modal, dialogEl, closeFn)
-      : closeFn;
-
-    modal.querySelector('#btn-close-perf-modal')?.addEventListener('click', safeClose);
-    modal.querySelector('#btn-report-close-footer')?.addEventListener('click', safeClose);
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) safeClose();
-    });
-    modal.querySelector('#btn-report-share')?.addEventListener('click', (e) => {
-      this.shareGameReviewLink(e.currentTarget);
-    });
-    modal.querySelector('#btn-report-open-eco')?.addEventListener('click', () => {
-      this.openOpeningModal();
-    });
-
-    // Copy Summary Helper
-    const copyReportSummary = (btn) => {
-      const summaryText = `⚡ CHESS IQ COMPREHENSIVE GAME REPORT
-Match: ${this.game.white || 'White'} (${whiteElo}) vs ${this.game.black || 'Black'} (${blackElo})
-Result: ${resTitle}
-ECO: ${this.game.ecoCode || 'PGN'} · ${this.game.ecoName || 'Chess Match'}
-Date: ${this.game.date || 'Recent Match'} | Time Control: ${this.game.isBotGame ? 'Untimed (No limit)' : (this.game.timeControl || 'Standard')}
-Moves: ${totalMoves} moves (${totalPlies} plies)
-
-📊 PERFORMANCE & ACCURACY:
-• White (${whiteName}): ${whiteAcc}% Accuracy | ${whiteGameElo} Performance Elo (${whiteTier.label})
-• Black (${blackName}): ${blackAcc}% Accuracy | ${blackGameElo} Performance Elo (${blackTier.label})
-
-🧭 PHASE BREAKDOWN:
-• Opening: White ${whiteOpeningAcc} (${whiteOpeningElo} Elo) vs Black ${blackOpeningAcc} (${blackOpeningElo} Elo)
-• Middlegame: White ${whiteMiddleAcc} (${whiteMiddleElo} Elo) vs Black ${blackMiddleAcc} (${blackMiddleElo} Elo)
-• Endgame: White ${whiteEndAcc} (${whiteEndElo} Elo) vs Black ${blackEndAcc} (${blackEndElo} Elo)
-${tp ? `
-⚡ TURNING POINT:
-Move ${Math.ceil(tp.ply / 2)}${tp.color === 'b' ? '...' : '.'}${tp.san} swung win probability by ${tp.swingPct}% (${Math.round((tp.prevWinProb ?? 0.5) * 100)}% → ${Math.round((tp.winProb ?? 0.5) * 100)}% White).
-${tp.bestMoveSan ? `Stockfish Recommended: ${tp.bestMoveSan}` : ''}` : ''}
-
-🎓 COACH TAKEAWAY:
-${priorityTitle}
-${priorityDesc}`;
-
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(summaryText).then(() => {
-          if (btn) {
-            const orig = btn.innerHTML;
-            btn.innerHTML = `<i class="bi bi-check2 me-1"></i>Copied!`;
-            setTimeout(() => { btn.innerHTML = orig; }, 2000);
-          }
-        });
-      }
-    };
-
-    modal.querySelector('#btn-report-copy')?.addEventListener('click', (e) => copyReportSummary(e.currentTarget));
-    modal.querySelector('#btn-report-copy-footer')?.addEventListener('click', (e) => copyReportSummary(e.currentTarget));
-
-    modal.querySelector('#btn-coach-guess-move')?.addEventListener('click', () => {
-      closeFn();
-      this.startGuessTheMove();
-    });
-    modal.querySelector('#btn-coach-blunder-bank')?.addEventListener('click', () => {
-      closeFn();
-      this.openBlunderBankModal('all');
-    });
-    modal.querySelector('#btn-report-retry-mistakes')?.addEventListener('click', () => {
-      closeFn();
-      this.startRetryMistakes();
-    });
-
-    modal.querySelectorAll('[data-report-jump]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const ply = parseInt(btn.getAttribute('data-report-jump'), 10);
-        if (!isNaN(ply)) {
-          closeFn();
-          this.goToPly(ply);
-        }
-      });
-    });
   }
 
   render() {
@@ -3576,7 +1890,11 @@ ${priorityDesc}`;
       });
     }
 
-    // Active Review Dashboard - Prominent Large Board & Compact Quick Sidebar Layout
+    const userMistakes = this.getUserMistakePlies();
+    const mistakesCount = userMistakes.length;
+    const bankStats = typeof getBlunderBankStats === 'function' ? getBlunderBankStats() : { total: 0 };
+
+    // Active Review Dashboard - Streamlined Prominent Large Board & Compact Tabbed Sidebar Layout
     this.container.innerHTML = `
       <div class="row g-2.5 g-xl-3 align-items-start w-100 mx-0">
         <!-- Column 1: Board & Tactical Controls (Dominant Large Desktop Workspace) -->
@@ -3592,7 +1910,7 @@ ${priorityDesc}`;
                 <div class="eval-score-badge text-white">0.0</div>
               </div>
 
-              <!-- Chessboard Mount (Sized so move notation card is visible without scrolling) -->
+              <!-- Chessboard Mount -->
               <div class="flex-grow-1 d-flex justify-content-center" id="review-board-mount"></div>
             </div>
 
@@ -3616,17 +1934,147 @@ ${priorityDesc}`;
             </div>
 
             <!-- Move Notation & Comic Sound Effect Strip -->
-            <div class="comic-card-sm p-1.5 mb-1 d-flex align-items-center justify-content-between w-100" id="review-move-strip"></div>
+            <div class="comic-card-sm p-1.5 mb-1.5 d-flex align-items-center justify-content-between w-100" id="review-move-strip"></div>
+
+            <!-- Streamlined Action Strip (3 Grouped Dropdowns + Key Moment) -->
+            <div class="comic-card-sm p-1.5 mb-1 d-flex align-items-center justify-content-between gap-1.5 flex-wrap w-100" id="review-action-strip">
+              <!-- Key Moment Button (Highest Frequency Action) -->
+              <button type="button" class="btn btn-warning comic-btn btn-sm py-1.5 px-2.5 fw-black flex-grow-1" id="btn-key-moment" title="Jump to Next Key Moment (Space)" style="font-size: 11.5px;">
+                <i class="bi bi-lightning-charge-fill me-1"></i>Key Moment
+              </button>
+
+              <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                <!-- 🥋 Train Dropdown -->
+                <div class="dropdown">
+                  <button class="btn btn-sm btn-outline-warning comic-btn dropdown-toggle fw-bold py-1.5 px-2.5 d-flex align-items-center" type="button" id="btn-dropdown-train" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 11.5px;">
+                    <i class="bi bi-mortarboard-fill me-1"></i>Train
+                    ${mistakesCount > 0 ? `<span class="badge bg-danger ms-1 font-monospace" style="font-size: 9.5px;">${mistakesCount}</span>` : ''}
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end shadow-lg py-2" aria-labelledby="btn-dropdown-train" style="min-width: 220px;">
+                    <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Active Drills</li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3 d-flex align-items-center justify-content-between" id="action-retry-mistakes" type="button" ${mistakesCount === 0 ? 'disabled' : ''}>
+                        <span><i class="bi bi-bullseye me-2 text-danger"></i>Retry Mistakes</span>
+                        <span class="badge ${mistakesCount > 0 ? 'bg-danger' : 'bg-secondary'} font-monospace">${mistakesCount}</span>
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3 d-flex align-items-center justify-content-between" id="action-guess-move" type="button">
+                        <span><i class="bi bi-patch-question-fill me-2 text-warning"></i>Guess Move Drill</span>
+                        <span class="badge bg-warning text-dark font-monospace">GM</span>
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3 d-flex align-items-center justify-content-between" id="action-blunder-bank" type="button">
+                        <span><i class="bi bi-bank2 me-2 text-primary"></i>Blunder Bank</span>
+                        <span class="badge bg-primary font-monospace">${bankStats.total}</span>
+                      </button>
+                    </li>
+                    <li><hr class="dropdown-divider my-1"></li>
+                    <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Position Sparring</li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3" id="action-show-win" type="button">
+                        <i class="bi bi-trophy-fill me-2 text-warning"></i>Show Winning Path
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3" id="action-play-bot" type="button">
+                        <i class="bi bi-robot me-2" style="color: #8b5cf6;"></i>Play vs Bot from Position
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- 👁️ Vision Dropdown -->
+                <div class="dropdown">
+                  <button class="btn btn-sm btn-outline-secondary comic-btn dropdown-toggle fw-bold py-1.5 px-2.5 d-flex align-items-center" type="button" id="btn-dropdown-vision" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 11.5px;">
+                    <i class="bi bi-eye-fill me-1"></i>Vision
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end shadow-lg py-2" aria-labelledby="btn-dropdown-vision" style="min-width: 220px;">
+                    <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Board Overlays</li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3 d-flex align-items-center justify-content-between" id="action-toggle-heatmap" type="button">
+                        <span>🔥 Control Heatmap</span>
+                        <span class="badge font-monospace ${this.visionOverlay === 'heatmap' ? 'bg-warning text-dark' : 'bg-secondary'}" id="badge-vision-heatmap">${this.visionOverlay === 'heatmap' ? 'ON' : 'OFF'}</span>
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3 d-flex align-items-center justify-content-between" id="action-toggle-loose" type="button">
+                        <span>⚠️ Loose Pieces (LPDO)</span>
+                        <span class="badge font-monospace ${this.showLoosePieces ? 'bg-warning text-dark' : 'bg-secondary'}" id="badge-vision-loose">${this.showLoosePieces ? 'ON' : 'OFF'}</span>
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3 d-flex align-items-center justify-content-between" id="action-toggle-threat" type="button">
+                        <span>🎯 Opponent Threat</span>
+                        <span class="badge font-monospace ${this.isThreatActive ? 'bg-warning text-dark' : 'bg-secondary'}" id="badge-vision-threat">${this.isThreatActive ? 'ON' : 'OFF'}</span>
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3 d-flex align-items-center justify-content-between" id="action-toggle-best-move" type="button">
+                        <span>💡 Best Move Arrow</span>
+                        <span class="badge font-monospace ${this.showBestMove ? 'bg-warning text-dark' : 'bg-secondary'}" id="badge-vision-best">${this.showBestMove ? 'ON' : 'OFF'}</span>
+                      </button>
+                    </li>
+                    <li><hr class="dropdown-divider my-1"></li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3 d-flex align-items-center justify-content-between" id="action-flip-board" type="button">
+                        <span><i class="bi bi-arrow-left-right me-2 text-info"></i>Flip Board</span>
+                        <kbd class="small text-secondary font-monospace">F</kbd>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- ⚡ More Tools Dropdown -->
+                <div class="dropdown">
+                  <button class="arcade-btn-icon" style="width: 32px; height: 32px; border-radius: 0.6rem;" type="button" id="btn-dropdown-more-tools" data-bs-toggle="dropdown" aria-expanded="false" title="More Tools & Export">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end shadow-lg py-2" aria-labelledby="btn-dropdown-more-tools" style="min-width: 220px;">
+                    <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Game Report & Share</li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3" id="action-open-full-report" type="button">
+                        <i class="bi bi-file-earmark-bar-graph-fill me-2 text-warning"></i>Full Game Report
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3" id="action-share-link" type="button">
+                        <i class="bi bi-share-fill me-2 text-info"></i>Share Review Link
+                      </button>
+                    </li>
+                    <li><hr class="dropdown-divider my-1"></li>
+                    <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Export & Notation</li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3" id="action-export-annotated-pgn" type="button">
+                        <i class="bi bi-file-earmark-arrow-down-fill me-2 text-success"></i>Export Annotated PGN
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3" id="action-copy-fen" type="button">
+                        <i class="bi bi-clipboard-check-fill me-2 text-primary"></i>Copy Current FEN
+                      </button>
+                    </li>
+                    <li><hr class="dropdown-divider my-1"></li>
+                    <li>
+                      <button class="dropdown-item py-1.5 px-3 text-secondary" id="action-reanalyze-review" type="button">
+                        <i class="bi bi-arrow-repeat me-2"></i>Re-analyze Game
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Column 2: Review Intelligence Sidebar (Glanceable Summary & Expandable Secondary Details) -->
+        <!-- Column 2: Review Intelligence Sidebar (Tabbed Layout: Moves & Eval / Coach) -->
         <div class="col-12 col-lg-5 col-xl-6 col-xxl-6 d-flex flex-column gap-2 px-1 px-sm-2 review-sidebar">
-          <!-- 1. Match Overview & Quick Performance Card (Glanceable) -->
+          <!-- Compact PvP Header Card -->
           <div class="comic-card p-2.5">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom" style="border-color: var(--arcade-border) !important;">
               <div class="d-flex align-items-center gap-1.5 flex-wrap min-w-0">
-                <span class="match-overview-pill"><i class="bi bi-diagram-3-fill me-1"></i>Overview</span>
+                <span class="match-overview-pill"><i class="bi bi-diagram-3-fill me-1"></i>Review</span>
                 <button type="button" class="eco-interactive-btn cursor-pointer" id="btn-open-eco-modal" data-iq-tip="eco_opening" title="Click to view Opening theory, moves & ECO classification">
                   <span class="badge bg-warning text-dark font-monospace fw-black px-2 py-1 eco-code-badge">${this.game.ecoCode || 'PGN'}</span>
                   <span class="fw-black text-truncate eco-name-label" style="max-width: 170px; font-size: 13px;">${this.game.ecoName || 'Chess Match'}</span>
@@ -3634,21 +2082,13 @@ ${priorityDesc}`;
                 </button>
                 ${this.game.date ? `<span class="text-secondary small font-monospace d-none d-sm-inline">· ${this.game.date}</span>` : ''}
               </div>
-              <div class="d-flex align-items-center gap-1.5 flex-shrink-0">
-                <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black px-3 py-1 report-hero-btn" id="btn-open-full-report-modal" title="View Full Performance & Comprehensive Game Report">
-                  <i class="bi bi-file-earmark-bar-graph-fill me-1.5"></i>Game Report
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-2 py-0.5" id="btn-share-game-link" title="Share link to this analyzed game review">
-                  <i class="bi bi-share-fill me-1"></i>Share Link
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary comic-btn fw-bold px-2 py-0.5" id="btn-reanalyze-review" title="Run fresh deep Stockfish analysis">
-                  <i class="bi bi-arrow-repeat me-1"></i>Re-analyze
-                </button>
-              </div>
+              <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black px-2.5 py-1" id="btn-open-full-report-modal" title="View Full Performance & Comprehensive Game Report" style="font-size: 11.5px;">
+                <i class="bi bi-file-earmark-bar-graph-fill me-1"></i>Report
+              </button>
             </div>
 
             <!-- Player VS Player Compact Header -->
-            <div class="row g-2 align-items-center mb-2">
+            <div class="row g-2 align-items-center">
               <!-- White Player -->
               <div class="col-5">
                 <div class="player-pvp-card ${isWhiteUser ? 'is-user' : ''} p-2 d-flex flex-column gap-1">
@@ -3692,147 +2132,50 @@ ${priorityDesc}`;
                 </div>
               </div>
             </div>
+          </div>
 
-            <!-- Glanceable Key Moments Badges Row -->
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 pt-1.5 border-top border-opacity-10" style="border-color: var(--arcade-border) !important;">
-              <span class="text-secondary fw-bold text-uppercase" style="font-size: 10px; letter-spacing: 0.5px;">Key Moments:</span>
-              <div class="d-flex align-items-center flex-wrap gap-1">
-                ${userCounts.brilliant > 0 ? `
-                  <span class="badge glance-chip bg-info text-dark font-monospace fw-black cursor-pointer" data-filter-jump="brilliant" title="Jump to Brilliant Move">
-                    💎 ${userCounts.brilliant} Brilliant
-                  </span>
-                ` : ''}
-                ${userCounts.great > 0 ? `
-                  <span class="badge glance-chip bg-primary-subtle text-primary border border-primary font-monospace fw-black cursor-pointer" data-filter-jump="great" title="Jump to Great Move">
-                    ⭐ ${userCounts.great} Great
-                  </span>
-                ` : ''}
-                ${userCounts.best > 0 ? `
-                  <span class="badge glance-chip bg-success-subtle text-success border border-success font-monospace fw-bold" title="${userCounts.best} Best Moves played">
-                    ✓ ${userCounts.best} Best
-                  </span>
-                ` : ''}
-                ${userCounts.inaccuracy > 0 ? `
-                  <span class="badge glance-chip bg-warning-subtle text-warning border border-warning font-monospace fw-bold cursor-pointer" data-filter-jump="inaccuracy" title="Jump to First Inaccuracy">
-                    ⚠️ ${userCounts.inaccuracy} Inacc.
-                  </span>
-                ` : ''}
-                ${userCounts.mistake > 0 ? `
-                  <span class="badge glance-chip bg-warning text-dark font-monospace fw-black cursor-pointer" data-filter-jump="mistake" title="Jump to First Mistake">
-                    ❓ ${userCounts.mistake} Mistake${userCounts.mistake > 1 ? 's' : ''}
-                  </span>
-                ` : ''}
-                ${userCounts.blunder > 0 ? `
-                  <span class="badge glance-chip bg-danger text-white font-monospace fw-black cursor-pointer" data-filter-jump="blunder" title="Jump to First Blunder">
-                    💥 ${userCounts.blunder} Blunder${userCounts.blunder > 1 ? 's' : ''}
-                  </span>
-                ` : ''}
-                ${userCounts.missed_win > 0 ? `
-                  <span class="badge glance-chip bg-danger-subtle text-danger border border-danger font-monospace fw-black cursor-pointer" data-filter-jump="missed_win" title="Jump to Missed Win">
-                    ❌ ${userCounts.missed_win} Missed Win${userCounts.missed_win > 1 ? 's' : ''}
-                  </span>
-                ` : ''}
-              </div>
-            </div>
+          <!-- Segmented Tab Group -->
+          <div class="arcade-tab-group mb-1" role="tablist">
+            <button type="button" class="arcade-tab-btn ${this.reviewTab === 'moves' ? 'active' : ''}" data-review-tab="moves">
+              <i class="bi bi-list-ol me-1.5"></i>Moves & Eval
+            </button>
+            <button type="button" class="arcade-tab-btn ${this.reviewTab === 'coach' ? 'active' : ''}" data-review-tab="coach">
+              <i class="bi bi-mortarboard-fill me-1.5"></i>Coach & Diagnostics
+            </button>
+          </div>
 
-            <!-- Glanceable Phase Snapshot Row (Attributed to YOU) -->
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2 pt-2 border-top border-opacity-10" style="border-color: var(--arcade-border) !important;">
-              <div class="d-flex align-items-center gap-1.5 min-w-0">
-                <span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.5 rounded-pill" style="font-size: 9.5px;">YOU</span>
-                <span class="text-secondary fw-bold text-uppercase" style="font-size: 10px; letter-spacing: 0.5px;">Your Phase Accuracy:</span>
-                ${typeof renderInfoIcon === 'function' ? renderInfoIcon('card_phase_accuracy') : ''}
+          <!-- TAB PANE 1: Moves & Eval -->
+          <div class="review-tab-pane ${this.reviewTab === 'moves' ? '' : 'd-none'}" data-pane-tab="moves">
+            <!-- Advantage Timeline Line Graph -->
+            <div class="comic-card-sm p-2 mb-2" id="advantage-chart-area"></div>
+
+            <!-- Move History Card -->
+            <div class="comic-card p-2" id="review-moves-card">
+              <div class="d-flex align-items-center justify-content-between mb-1.5 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
+                <div class="d-flex align-items-center gap-1.5">
+                  <i class="bi bi-list-ol text-warning"></i>
+                  <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">Move List</span>
+                  <span class="badge bg-secondary font-monospace" style="font-size: 10px;">${Math.ceil((this.game.plies?.length || 0) / 2)} moves</span>
+                </div>
+                <div class="btn-group btn-group-sm" role="group" aria-label="Move filter">
+                  <button type="button" class="btn btn-xs move-filter-pill ${this.moveFilter === 'all' ? 'active' : ''}" data-move-filter="all">All</button>
+                  <button type="button" class="btn btn-xs move-filter-pill ${this.moveFilter === 'key' ? 'active' : ''}" data-move-filter="key" title="Brilliant, Great, Inaccuracy, Mistake, Blunder, Missed Win">Key</button>
+                  <button type="button" class="btn btn-xs move-filter-pill ${this.moveFilter === 'errors' ? 'active' : ''}" data-move-filter="errors" title="Inaccuracies, Mistakes, Blunders, Missed Wins">Errors</button>
+                </div>
               </div>
-              <div class="d-flex align-items-center gap-1.5 flex-wrap">
-                <span class="glance-phase-pill cursor-help" data-iq-tip="phase_opening" title="Your opening move accuracy (Moves 1-${Math.ceil((this.game.middlegameStartPly || 20) / 2)})">
-                  <i class="bi bi-compass me-1 text-primary"></i>Opening: <strong class="font-monospace text-primary">${userOpeningAcc}</strong>
-                  <span class="text-secondary small font-monospace">(${userOpeningElo})</span>
-                </span>
-                <span class="glance-phase-pill cursor-help" data-iq-tip="phase_middle" title="Your middlegame move accuracy">
-                  <i class="bi bi-shield-shaded me-1 text-warning"></i>Middle: <strong class="font-monospace text-warning">${userMiddleAcc}</strong>
-                  <span class="text-secondary small font-monospace">(${userMiddlegameElo})</span>
-                </span>
-                <span class="glance-phase-pill cursor-help" data-iq-tip="phase_endgame" title="Your endgame move accuracy">
-                  <i class="bi bi-flag-fill me-1 text-success"></i>Endgame: <strong class="font-monospace text-success">${userEndAcc}</strong>
-                  <span class="text-secondary small font-monospace">(${userEndgameElo})</span>
-                </span>
+              <div class="move-history-container" style="max-height: 290px; overflow-y: auto;">
+                <table class="table table-sm table-hover align-middle mb-0" style="font-size: 12px;">
+                  <tbody id="move-history-tbody">
+                    ${this.buildMoveTableRows()}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
 
-          <!-- 2. Game Actions & Tools Card (Moved from under board) -->
-          <div class="comic-card p-2 d-flex flex-column gap-1.5" id="review-action-tools-card">
-            <div class="d-flex align-items-center justify-content-between pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
-              <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
-                <i class="bi bi-tools text-warning me-1.5"></i>Actions & Tools
-              </span>
-              <span class="text-secondary fw-semibold" style="font-size: 10.5px;">
-                <i class="bi bi-hand-index-thumb me-1 text-warning"></i>Drag piece to test lines
-              </span>
-            </div>
-
-            <div class="d-flex align-items-center gap-1.5 flex-wrap">
-              <button type="button" class="btn btn-warning comic-btn flex-grow-1 py-1.5 px-2.5 fw-black" id="btn-key-moment" title="Jump to Next Key Moment (Space)" style="font-size: 12px;">
-                <i class="bi bi-lightning-charge-fill me-1"></i>Key Moment
-              </button>
-
-              ${this.getUserMistakePlies().length > 0 ? `
-                <button type="button" class="btn btn-danger comic-btn flex-grow-1 py-1.5 px-2.5 fw-black" id="btn-retry-mistakes" title="Interactive Puzzle Mode: Replay your mistakes and find the best moves" style="font-size: 12px;">
-                  <i class="bi bi-bullseye me-1"></i>Retry Mistakes (${this.getUserMistakePlies().length})
-                </button>
-              ` : ''}
-
-              <button type="button" class="btn btn-warning comic-btn flex-grow-1 py-1.5 px-2.5 fw-black text-dark" id="btn-show-win" title="Generate winning engine moves until checkmate or unstoppable win" style="font-size: 12px;">
-                <i class="bi bi-trophy-fill me-1"></i>Show Win
-              </button>
-
-              <button type="button" class="btn btn-outline-primary comic-btn flex-grow-1 py-1.5 px-2.5 fw-bold" id="btn-play-from-here" title="Play against an Elo-matched Bot from this exact board position" style="font-size: 12px;">
-                <i class="bi bi-robot me-1"></i>Play vs Bot
-              </button>
-
-              <button type="button" class="btn btn-light comic-btn px-2.5 py-1.5" id="btn-flip" title="Flip Board (F)" style="font-size: 12px;">
-                <i class="bi bi-arrow-left-right me-1"></i>Flip
-              </button>
-
-              <button type="button" class="btn btn-xs xray-toggle-btn ${this.visionOverlay === 'heatmap' ? 'active' : ''} py-1.5 px-2" data-vision-toggle="heatmap" data-iq-tip="xray_heatmap" title="Show White vs Black square control intensity across all 64 squares">
-                🔥 Control Map
-              </button>
-            </div>
-          </div>
-
-          <!-- 3. Advantage Timeline Line Graph -->
-          <div class="comic-card-sm p-2" id="advantage-chart-area"></div>
-
-          <!-- 4. Move History (Collapsed by Default) -->
-          <div class="comic-card p-2" id="review-moves-card">
-            <div class="d-flex align-items-center justify-content-between cursor-pointer collapsed py-1 px-1" data-bs-toggle="collapse" data-bs-target="#collapse-moves-history" aria-expanded="false" aria-controls="collapse-moves-history" id="header-toggle-moves">
-              <div class="d-flex align-items-center gap-1.5">
-                <i class="bi bi-list-ol text-warning"></i>
-                <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">Moves</span>
-                <span class="badge bg-secondary font-monospace" style="font-size: 10px;">${Math.ceil((this.game.plies?.length || 0) / 2)} moves</span>
-                <span class="text-secondary small ms-1 collapse-hint-text" style="font-size: 10px;"></span>
-              </div>
-              <i class="bi bi-chevron-down text-secondary collapse-chevron" style="font-size: 12px;"></i>
-            </div>
-
-            <div class="collapse" id="collapse-moves-history">
-              <div class="pt-2 border-top border-opacity-10 mt-1" style="border-color: var(--arcade-border) !important;">
-                <div class="d-flex align-items-center justify-content-between mb-1.5 flex-wrap gap-1">
-                  <div class="btn-group btn-group-sm" role="group" aria-label="Move filter">
-                    <button type="button" class="btn btn-xs move-filter-pill ${this.moveFilter === 'all' ? 'active' : ''}" data-move-filter="all">All</button>
-                    <button type="button" class="btn btn-xs move-filter-pill ${this.moveFilter === 'key' ? 'active' : ''}" data-move-filter="key" title="Brilliant, Great, Inaccuracy, Mistake, Blunder, Missed Win">Key</button>
-                    <button type="button" class="btn btn-xs move-filter-pill ${this.moveFilter === 'errors' ? 'active' : ''}" data-move-filter="errors" title="Inaccuracies, Mistakes, Blunders, Missed Wins">Errors</button>
-                  </div>
-                  <span class="text-secondary font-monospace" style="font-size: 10px;">Click any move to jump</span>
-                </div>
-                <div class="move-history-container">
-                  <table class="table table-sm table-hover align-middle mb-0" style="font-size: 12px;">
-                    <tbody id="move-history-tbody">
-                      ${this.buildMoveTableRows()}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+          <!-- TAB PANE 2: Coach & Diagnostics -->
+          <div class="review-tab-pane ${this.reviewTab === 'coach' ? '' : 'd-none'}" data-pane-tab="coach" id="pane-tab-coach">
+            ${this.renderCoachTabHtml(userCounts, userOpeningAcc, userMiddleAcc, userEndAcc, userOpeningElo, userMiddlegameElo, userEndgameElo)}
           </div>
         </div>
       </div>
@@ -3867,11 +2210,64 @@ ${priorityDesc}`;
     bindNavBtn('#btn-next', () => this.goToPly(this.currentPly + 1));
     bindNavBtn('#btn-last', () => this.goToPly(this.game.plies.length));
     bindNavBtn('#btn-key-moment', () => this.nextKeyMoment());
+
+    // Bind Tab Switching
+    this.container.querySelectorAll('[data-review-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.getAttribute('data-review-tab');
+        if (tab) this.setReviewTab(tab);
+      });
+    });
+
+    // Bind Train Dropdown Actions
+    this.container.querySelector('#action-retry-mistakes')?.addEventListener('click', () => this.startRetryMistakes());
+    this.container.querySelector('#action-guess-move')?.addEventListener('click', () => this.startGuessTheMove());
+    this.container.querySelector('#action-blunder-bank')?.addEventListener('click', () => this.openBlunderBankModal('all'));
+    this.container.querySelector('#action-show-win')?.addEventListener('click', () => {
+      if (typeof openWinningPathModal === 'function') openWinningPathModal(this);
+    });
+    this.container.querySelector('#action-play-bot')?.addEventListener('click', () => this.playFromCurrentPosition());
+
+    // Bind Vision Dropdown Actions
+    this.container.querySelector('#action-toggle-heatmap')?.addEventListener('click', () => {
+      this.toggleVisionOverlay('heatmap');
+    });
+    this.container.querySelector('#action-toggle-loose')?.addEventListener('click', () => {
+      this.toggleVisionOverlay('loose');
+    });
+    this.container.querySelector('#action-toggle-threat')?.addEventListener('click', () => {
+      this.isThreatActive = !this.isThreatActive;
+      this.updateBoardAndControls();
+    });
+    this.container.querySelector('#action-toggle-best-move')?.addEventListener('click', () => {
+      this.showBestMove = !this.showBestMove;
+      this.updateBoardAndControls();
+    });
+    this.container.querySelector('#action-flip-board')?.addEventListener('click', () => {
+      this.orientation = this.orientation === 'w' ? 'b' : 'w';
+      this.updateBoardAndControls();
+    });
+
+    // Bind More Tools Dropdown Actions
+    this.container.querySelector('#action-open-full-report')?.addEventListener('click', () => this.openDetailedPerformanceModal());
+    this.container.querySelector('#action-share-link')?.addEventListener('click', (e) => this.shareGameReviewLink(e.currentTarget));
+    this.container.querySelector('#action-export-annotated-pgn')?.addEventListener('click', () => this.downloadAnnotatedPgn());
+    this.container.querySelector('#action-copy-fen')?.addEventListener('click', () => this.copyCurrentFen());
+    this.container.querySelector('#action-reanalyze-review')?.addEventListener('click', () => {
+      if (this.game && this.onReanalyzeGame) {
+        this.onReanalyzeGame(this.game.pgn || this.game.id, this.game.userColor || 'w');
+      }
+    });
+
+    // Bind Coach Tab Specific Actions
+    this.container.querySelector('#btn-coach-full-report')?.addEventListener('click', () => this.openDetailedPerformanceModal());
+    this.container.querySelector('#btn-coach-retry-errors')?.addEventListener('click', () => this.startRetryMistakes());
+    this.container.querySelector('#btn-coach-goto-bank')?.addEventListener('click', () => this.openBlunderBankModal('daily'));
+
+    // Legacy compatibility triggers
     bindNavBtn('#btn-retry-mistakes', () => this.startRetryMistakes());
     bindNavBtn('#btn-show-win', () => {
-      if (typeof openWinningPathModal === 'function') {
-        openWinningPathModal(this);
-      }
+      if (typeof openWinningPathModal === 'function') openWinningPathModal(this);
     });
     bindNavBtn('#btn-play-from-here', () => this.playFromCurrentPosition());
     bindNavBtn('#btn-flip', () => {
@@ -3962,173 +2358,33 @@ ${priorityDesc}`;
     this.setupEvalBarObserver();
   }
 
+
   bindMoveTableRowClicks() {
-    this.container.querySelectorAll('.move-list-row').forEach((row) => {
-      row.addEventListener('click', (e) => {
-        const ply = parseInt(e.currentTarget.dataset.ply, 10);
-        if (!isNaN(ply)) this.goToPly(ply);
-      });
-    });
+    if (typeof bindMoveTableRowClicks === 'function') bindMoveTableRowClicks(this);
   }
 
   matchesMoveFilter(plyObj) {
-    if (!plyObj) return false;
-    if (this.moveFilter === 'key') {
-      return ['brilliant', 'great', 'inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(plyObj.classification);
-    }
-    if (this.moveFilter === 'errors') {
-      return ['inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(plyObj.classification);
-    }
-    return true;
+    return typeof matchesMoveFilter === 'function' ? matchesMoveFilter(this, plyObj) : true;
   }
 
   renderMoveCellContent(plyObj) {
-    if (!plyObj) return '';
-    const timeStr = this.formatTimeSpent(plyObj.timeSpent);
-    let clockIndicator = '';
-    if (plyObj.isImpulsive) {
-      clockIndicator = `<span class="text-danger ms-1" title="Rushed move (${timeStr || 'fast'})" style="font-size: 10px;">⚡</span>`;
-    } else if (plyObj.isTimeTrouble) {
-      clockIndicator = `<span class="text-warning ms-1" title="Time trouble (${this.formatClock(plyObj.clockSeconds)})" style="font-size: 10px;">🔥</span>`;
-    } else if (timeStr) {
-      clockIndicator = `<span class="text-secondary opacity-75 ms-1 font-monospace" style="font-size: 10px;">${timeStr}</span>`;
-    }
-
-    return `
-      <div class="d-flex align-items-center justify-content-between">
-        <div class="d-flex align-items-baseline min-w-0">
-          <span class="font-monospace">${plyObj.san || '-'}</span>
-          ${clockIndicator}
-        </div>
-        ${this.renderMiniBadge(plyObj.classification)}
-      </div>
-    `;
+    return typeof renderMoveCellContent === 'function' ? renderMoveCellContent(this, plyObj) : '';
   }
 
   buildMoveTableRows() {
-    if (!this.game || !Array.isArray(this.game.plies) || this.game.plies.length === 0) {
-      return `
-        <tr>
-          <td colspan="3" class="text-center text-secondary py-4 small fw-bold">
-            <i class="bi bi-info-circle me-1"></i>No moves recorded for this game.
-          </td>
-        </tr>
-      `;
-    }
-    const plies = this.game.plies;
-    let html = '';
-    let matchCount = 0;
-
-    for (let i = 0; i < plies.length; i += 2) {
-      const moveNum = Math.floor(i / 2) + 1;
-      const whitePly = plies[i];
-      const blackPly = plies[i + 1] || null;
-      if (!whitePly) continue;
-
-      const showWhite = this.matchesMoveFilter(whitePly);
-      const showBlack = blackPly ? this.matchesMoveFilter(blackPly) : false;
-
-      if (!showWhite && !showBlack) continue;
-      matchCount++;
-
-      html += `
-        <tr>
-          <td class="text-secondary fw-bold text-end" style="width: 38px;">${moveNum}.</td>
-          ${showWhite ? `
-            <td class="move-list-row cursor-pointer rounded px-2 py-1" data-ply="${whitePly.ply}">
-              ${this.renderMoveCellContent(whitePly)}
-            </td>
-          ` : '<td class="text-secondary opacity-25 font-monospace px-2 py-1">...</td>'}
-          ${blackPly && showBlack ? `
-            <td class="move-list-row cursor-pointer rounded px-2 py-1" data-ply="${blackPly.ply}">
-              ${this.renderMoveCellContent(blackPly)}
-            </td>
-          ` : '<td></td>'}
-        </tr>
-      `;
-    }
-
-    if (matchCount === 0) {
-      return `
-        <tr>
-          <td colspan="3" class="text-center text-secondary py-4 small fw-bold">
-            <i class="bi bi-funnel me-1"></i>No moves match the "${insEscape(this.moveFilter)}" filter.
-          </td>
-        </tr>
-      `;
-    }
-
-    return html;
+    return typeof buildMoveTableRows === 'function' ? buildMoveTableRows(this) : '';
   }
 
   renderMiniBadge(cls) {
-    if (!cls || cls === 'good') return '';
-    const dict = COMIC_DICTIONARY[cls];
-    if (!dict) return '';
-    const isMultiChar = String(dict.symbol).length > 1;
-    return `
-      <span class="badge mini-move-badge ${isMultiChar ? 'multi-char' : ''} rounded-circle d-inline-flex align-items-center justify-content-center"
-        title="${dict.words[0]} (${dict.standardLabel})"
-        style="width: 22px; height: 22px; font-size: ${isMultiChar ? '10px' : '11px'}; font-weight: 800; ${isMultiChar ? 'letter-spacing: -0.6px;' : ''} background-color: ${dict.bg}; color: ${dict.text};">
-        ${dict.symbol}
-      </span>
-    `;
+    return typeof renderMiniBadge === 'function' ? renderMiniBadge(cls) : '';
   }
 
   buildBadgesSummary() {
-    if (!this.game) return '';
-    const userColor = this.game.userColor || 'w';
-    let userCounts = this.game.userCounts;
-    let oppCounts = this.game.opponentCounts;
-
-    if (!userCounts || !oppCounts) {
-      userCounts = {};
-      oppCounts = {};
-      (this.game.plies || []).forEach((p) => {
-        if (!p) return;
-        const isUser = p.color ? (p.color === userColor) : (p.ply % 2 === (userColor === 'w' ? 1 : 0));
-        const target = isUser ? userCounts : oppCounts;
-        target[p.classification] = (target[p.classification] || 0) + 1;
-      });
-    }
-
-    const classifications = [
-      'brilliant',
-      'great',
-      'best',
-      'excellent',
-      'good',
-      'book',
-      'inaccuracy',
-      'mistake',
-      'blunder',
-      'missed_win'
-    ];
-
-    return classifications
-      .map((cls) => {
-        const dict = COMIC_DICTIONARY[cls];
-        if (!dict) return '';
-        const userCnt = userCounts[cls] || 0;
-        const oppCnt = oppCounts[cls] || 0;
-        const hasAny = userCnt > 0 || oppCnt > 0;
-
-        return `
-          <div class="d-flex align-items-center justify-content-between py-1 px-2 rounded cursor-help move-quality-row ${hasAny ? 'has-moves' : 'no-moves'}" data-iq-tip="badge_${cls}">
-            <span class="font-monospace fw-black fs-6 text-end ${userCnt > 0 ? 'text-warning' : 'move-count-zero'}" style="width: 42px;">
-              ${userCnt}
-            </span>
-            <span class="badge rounded-pill move-quality-badge d-inline-flex align-items-center gap-1.5"
-              style="background-color: ${dict.bg}; color: ${dict.text};">
-              <span class="fs-6 lh-1">${dict.symbol}</span>
-              <span>${dict.words[0]}</span>
-            </span>
-            <span class="font-monospace fw-black fs-6 text-start ${oppCnt > 0 ? 'text-cyan' : 'move-count-zero'}" style="width: 42px;">
-              ${oppCnt}
-            </span>
-          </div>
-        `;
-      })
-      .join('');
+    return typeof buildBadgesSummary === 'function' ? buildBadgesSummary(this) : '';
   }
+
+}
+
+if (typeof window !== 'undefined') {
+  window.ReviewDashboard = ReviewDashboard;
 }
