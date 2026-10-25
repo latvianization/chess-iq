@@ -52,6 +52,7 @@ function syncGameToBlunderBank(game) {
         classification: p.classification,
         phase: p.phase || 'middlegame',
         motifs: motifIds,
+        gameId: game.id || null,
         white: game.white || 'White',
         black: game.black || 'Black',
         ecoName: game.ecoName || game.ecoCode || 'Match',
@@ -114,8 +115,57 @@ function getBlunderBankStats() {
   };
 }
 
+function removeGameFromBlunderBank(matchCriteria = {}) {
+  const all = loadBlunderBank();
+  if (all.length === 0) return 0;
+  const { gameId, white, black, date } = matchCriteria;
+  const filtered = all.filter((item) => {
+    if (gameId && item.gameId && item.gameId === gameId) return false;
+    if (white && black) {
+      const matchW = (item.white || '').toLowerCase() === white.toLowerCase();
+      const matchB = (item.black || '').toLowerCase() === black.toLowerCase();
+      if (matchW && matchB) {
+        if (!date || item.date === date) return false;
+      }
+    }
+    return true;
+  });
+
+  const removedCount = all.length - filtered.length;
+  if (removedCount > 0) {
+    saveBlunderBank(filtered);
+    window.dispatchEvent(new CustomEvent('chess_iq_blunder_bank_updated', { detail: { removedCount } }));
+  }
+  return removedCount;
+}
+
+function removeBlunderBankItem(puzzleId) {
+  if (!puzzleId) return false;
+  const all = loadBlunderBank();
+  const filtered = all.filter((item) => item.id !== puzzleId);
+  if (filtered.length !== all.length) {
+    saveBlunderBank(filtered);
+    window.dispatchEvent(new CustomEvent('chess_iq_blunder_bank_updated', { detail: { puzzleId } }));
+    return true;
+  }
+  return false;
+}
+
 function clearBlunderBank() {
   try {
     localStorage.removeItem(BLUNDER_BANK_STORAGE_KEY);
+    window.dispatchEvent(new CustomEvent('chess_iq_blunder_bank_updated'));
   } catch {}
+}
+
+if (typeof window !== 'undefined') {
+  window.loadBlunderBank = loadBlunderBank;
+  window.saveBlunderBank = saveBlunderBank;
+  window.syncGameToBlunderBank = syncGameToBlunderBank;
+  window.getBlunderBankPuzzles = getBlunderBankPuzzles;
+  window.recordBlunderBankAttempt = recordBlunderBankAttempt;
+  window.getBlunderBankStats = getBlunderBankStats;
+  window.removeGameFromBlunderBank = removeGameFromBlunderBank;
+  window.removeBlunderBankItem = removeBlunderBankItem;
+  window.clearBlunderBank = clearBlunderBank;
 }

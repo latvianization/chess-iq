@@ -913,9 +913,14 @@ function openIqGuideModal(initialSearch = '') {
       document.body.classList.remove('modal-open');
     };
 
-    modal.querySelector('#guide-modal-close')?.addEventListener('click', closeGuide);
+    const dialogEl = modal.querySelector('.why-dialog');
+    const safeClose = typeof setupModalSwipeAndHistory === 'function'
+      ? setupModalSwipeAndHistory(modal, dialogEl, closeGuide)
+      : closeGuide;
+
+    modal.querySelector('#guide-modal-close')?.addEventListener('click', safeClose);
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeGuide();
+      if (e.target === modal) safeClose();
     });
   };
 

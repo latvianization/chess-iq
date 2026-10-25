@@ -529,6 +529,72 @@ class ReviewDashboard {
     }
   }
 
+  syncEvalBarHeight() {
+    const evalBar = this.container.querySelector('#eval-bar');
+    const boardEl = this.container.querySelector('#review-board-mount .board-container');
+    if (!evalBar || !boardEl) return;
+    const boardHeight = boardEl.offsetHeight;
+    if (boardHeight > 50) {
+      evalBar.style.height = `${boardHeight}px`;
+      evalBar.style.minHeight = `${boardHeight}px`;
+      evalBar.style.alignSelf = 'center';
+    }
+  }
+
+  setupEvalBarObserver() {
+    if (this._evalBarObserver) {
+      this._evalBarObserver.disconnect();
+      this._evalBarObserver = null;
+    }
+    const boardEl = this.container.querySelector('#review-board-mount .board-container');
+    if (boardEl && typeof ResizeObserver !== 'undefined') {
+      this._evalBarObserver = new ResizeObserver(() => {
+        this.syncEvalBarHeight();
+      });
+      this._evalBarObserver.observe(boardEl);
+    }
+    this.syncEvalBarHeight();
+  }
+
+  shareGameReviewLink(btnEl) {
+    if (!this.game) return;
+    try {
+      const pgn = this.game.pgn || '';
+      const userColor = this.game.userColor || 'w';
+      const origin = (window.location.origin && window.location.origin !== 'null' && window.location.protocol !== 'file:')
+        ? window.location.origin
+        : '';
+      const path = window.location.pathname || '';
+      const pgnParam = encodeURIComponent(pgn);
+      const colorParam = encodeURIComponent(userColor);
+      const shareUrl = `${origin}${path}?pgn=${pgnParam}&color=${colorParam}`;
+
+      const onSuccess = () => {
+        if (btnEl) {
+          const originalHtml = btnEl.innerHTML;
+          btnEl.innerHTML = '<i class="bi bi-check2-circle me-1 text-success"></i>Copied!';
+          btnEl.classList.add('border-success');
+          setTimeout(() => {
+            if (btnEl) {
+              btnEl.innerHTML = originalHtml;
+              btnEl.classList.remove('border-success');
+            }
+          }, 2500);
+        }
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(shareUrl).then(onSuccess).catch(() => {
+          prompt('Copy this link to share the game review:', shareUrl);
+        });
+      } else {
+        prompt('Copy this link to share the game review:', shareUrl);
+      }
+    } catch (err) {
+      console.error('Failed to share game link:', err);
+    }
+  }
+
   closeWhyModal() {
     closeWhyModal(this);
   }
@@ -670,6 +736,7 @@ class ReviewDashboard {
       this.updateEvalBar(cur);
     }
     this.updateAdvantageScrubber();
+    this.syncEvalBarHeight();
 
     // Update Move Strip Badge & Notation
     const stripEl = this.container.querySelector('#review-move-strip');
@@ -1282,18 +1349,23 @@ class ReviewDashboard {
       document.body.classList.remove('modal-open');
     };
 
+    const dialogEl = modal.querySelector('.why-dialog');
+    const safeClose = typeof setupModalSwipeAndHistory === 'function'
+      ? setupModalSwipeAndHistory(modal, dialogEl, closeModal)
+      : closeModal;
+
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        closeModal();
+        safeClose();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
 
-    modal.querySelector('#pillars-modal-close')?.addEventListener('click', closeModal);
-    modal.querySelector('#pillars-modal-ok-btn')?.addEventListener('click', closeModal);
+    modal.querySelector('#pillars-modal-close')?.addEventListener('click', safeClose);
+    modal.querySelector('#pillars-modal-ok-btn')?.addEventListener('click', safeClose);
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {
-        closeModal();
+        safeClose();
       }
     });
 
@@ -1444,7 +1516,12 @@ class ReviewDashboard {
                 <div>
                   <div class="d-flex align-items-center justify-content-between mb-2">
                     <span class="badge bg-secondary font-monospace">Puzzle ${currentIdx + 1} of ${puzzles.length}</span>
-                    ${curPuzzle.mastered ? `<span class="badge bg-success"><i class="bi bi-check2-all me-1"></i>Mastered</span>` : `<span class="badge bg-warning text-dark">Needs Practice</span>`}
+                    <div class="d-flex align-items-center gap-1.5">
+                      ${curPuzzle.mastered ? `<span class="badge bg-success"><i class="bi bi-check2-all me-1"></i>Mastered</span>` : `<span class="badge bg-warning text-dark">Needs Practice</span>`}
+                      <button type="button" class="btn btn-outline-danger btn-sm p-1 py-0.5 comic-btn" id="bb-btn-delete-puzzle" title="Remove this move/puzzle from Blunder Bank" style="font-size: 11px;">
+                        <i class="bi bi-trash3"></i>
+                      </button>
+                    </div>
                   </div>
                   <div class="p-2.5 rounded mb-2" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
                     <div class="small fw-bold mb-1">${insEscape(curPuzzle.white)} vs ${insEscape(curPuzzle.black)}</div>
@@ -1538,6 +1615,17 @@ class ReviewDashboard {
           }
         });
 
+        modal.querySelector('#bb-btn-delete-puzzle')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (curPuzzle && typeof removeBlunderBankItem === 'function') {
+            removeBlunderBankItem(curPuzzle.id);
+            feedback = 'Puzzle removed from your Blunder Bank.';
+            solved = false;
+            isErr = false;
+            renderModalContent();
+          }
+        });
+
         modal.querySelector('#bb-btn-hint')?.addEventListener('click', () => {
           const fromSq = (curPuzzle.bestMoveUci || '').slice(0, 2);
           if (fromSq && modalBoard) {
@@ -1579,9 +1667,14 @@ class ReviewDashboard {
       document.body.classList.remove('modal-open');
     };
 
-    modal.querySelector('#bb-btn-close')?.addEventListener('click', closeBlunderBank);
+    const dialogEl = modal.querySelector('.why-dialog');
+    const safeClose = typeof setupModalSwipeAndHistory === 'function'
+      ? setupModalSwipeAndHistory(modal, dialogEl, closeBlunderBank)
+      : closeBlunderBank;
+
+    modal.querySelector('#bb-btn-close')?.addEventListener('click', safeClose);
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeBlunderBank();
+      if (e.target === modal) safeClose();
     });
 
     document.body.classList.add('modal-open');
@@ -2164,7 +2257,10 @@ class ReviewDashboard {
             <span class="fw-black text-truncate" style="max-width: 280px; font-size: 14px;">${insEscape(this.game.ecoName || 'Chess Match')}</span>
           </div>
           <div class="d-flex align-items-center gap-1.5 no-print flex-shrink-0">
-            <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-2.5 py-1" id="btn-report-copy" title="Copy Full Report Summary to Clipboard">
+            <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-2.5 py-1" id="btn-report-share" title="Share Game Review Link">
+              <i class="bi bi-share-fill me-1"></i>Share Link
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary comic-btn fw-bold px-2.5 py-1" id="btn-report-copy" title="Copy Full Report Summary to Clipboard">
               <i class="bi bi-clipboard-check me-1"></i>Copy Summary
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary comic-btn fw-bold px-2.5 py-1" id="btn-report-print" title="Print Game Report">
@@ -2719,10 +2815,18 @@ class ReviewDashboard {
       document.body.classList.remove('modal-open');
     };
 
-    modal.querySelector('#btn-close-perf-modal')?.addEventListener('click', closeFn);
-    modal.querySelector('#btn-report-close-footer')?.addEventListener('click', closeFn);
+    const dialogEl = modal.querySelector('.full-report-dialog') || modal.querySelector('.why-dialog');
+    const safeClose = typeof setupModalSwipeAndHistory === 'function'
+      ? setupModalSwipeAndHistory(modal, dialogEl, closeFn)
+      : closeFn;
+
+    modal.querySelector('#btn-close-perf-modal')?.addEventListener('click', safeClose);
+    modal.querySelector('#btn-report-close-footer')?.addEventListener('click', safeClose);
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeFn();
+      if (e.target === modal) safeClose();
+    });
+    modal.querySelector('#btn-report-share')?.addEventListener('click', (e) => {
+      this.shareGameReviewLink(e.currentTarget);
     });
 
     // Copy Summary Helper
@@ -3046,15 +3150,14 @@ ${priorityDesc}`;
                           `}
 
                           <div class="d-flex align-items-center gap-1.5 ms-auto">
-                            ${!item.isImported ? `
-                              <button type="button" class="btn btn-outline-danger btn-sm comic-btn fw-bold px-2 py-1 btn-delete-saved-game" data-game-key="${insEscape(item.key || item.id)}" title="Remove this non-imported game from list" style="font-size: 11px;">
-                                <i class="bi bi-trash3 me-1"></i>Remove
-                              </button>
-                            ` : `
+                            ${item.isImported ? `
                               <span class="badge bg-body-secondary text-secondary font-monospace border border-secondary-subtle px-1.5 py-1" style="font-size: 10px;" title="Imported from Chess.com">
                                 <i class="bi bi-cloud-arrow-down-fill me-0.5"></i>Imported
                               </span>
-                            `}
+                            ` : ''}
+                            <button type="button" class="btn btn-outline-danger btn-sm comic-btn fw-bold px-2 py-1 btn-delete-saved-game" data-game-key="${insEscape(item.key || item.id)}" title="Remove this game and moves from blunder bank" style="font-size: 11px;">
+                              <i class="bi bi-trash3 me-1"></i>Remove
+                            </button>
                             ${item.type === 'analyzed' ? `
                               <button type="button" class="btn btn-warning btn-sm comic-btn fw-bold px-2.5 py-1" data-action-review="${idx}">
                                 <i class="bi bi-search me-1"></i>Review
@@ -3120,6 +3223,22 @@ ${priorityDesc}`;
             if (typeof removeCachedGame === 'function') {
               removeCachedGame(key);
             }
+            const targetGame = filteredGames.find((g) => (g.key === key || g.id === key));
+            if (targetGame && typeof removeGameFromBlunderBank === 'function') {
+              removeGameFromBlunderBank({
+                gameId: targetGame.id,
+                white: targetGame.white,
+                black: targetGame.black,
+                date: targetGame.date
+              });
+            }
+            try {
+              const savedImport = JSON.parse(localStorage.getItem('chess_iq_imported_games') || 'null');
+              if (savedImport && Array.isArray(savedImport.games)) {
+                savedImport.games = savedImport.games.filter((g) => g.id !== key && (!targetGame || g.id !== targetGame.id));
+                localStorage.setItem('chess_iq_imported_games', JSON.stringify(savedImport));
+              }
+            } catch {}
             if (typeof soundService !== 'undefined' && soundService.playMove) {
               soundService.playMove();
             }
@@ -3282,6 +3401,9 @@ ${priorityDesc}`;
                 ${this.game.date ? `<span class="text-secondary small font-monospace d-none sm:inline">· ${this.game.date}</span>` : ''}
               </div>
               <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-2 py-0.5" id="btn-share-game-link" title="Share link to this analyzed game review">
+                  <i class="bi bi-share-fill me-1"></i>Share Link
+                </button>
                 <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black px-2.5 py-1" id="btn-open-full-report-modal" title="View Full Performance & Comprehensive Game Report">
                   <i class="bi bi-file-earmark-bar-graph-fill me-1"></i>Report
                 </button>
@@ -3412,6 +3534,10 @@ ${priorityDesc}`;
                 </button>
               ` : ''}
 
+              <button type="button" class="btn btn-warning comic-btn flex-grow-1 py-1.5 px-2.5 fw-black text-dark" id="btn-show-win" title="Generate winning engine moves until checkmate or unstoppable win" style="font-size: 12px;">
+                <i class="bi bi-trophy-fill me-1"></i>Show Win
+              </button>
+
               <button type="button" class="btn btn-outline-primary comic-btn flex-grow-1 py-1.5 px-2.5 fw-bold" id="btn-play-from-here" title="Play against an Elo-matched Bot from this exact board position" style="font-size: 12px;">
                 <i class="bi bi-robot me-1"></i>Play vs Bot
               </button>
@@ -3495,6 +3621,11 @@ ${priorityDesc}`;
     bindNavBtn('#btn-last', () => this.goToPly(this.game.plies.length));
     bindNavBtn('#btn-key-moment', () => this.nextKeyMoment());
     bindNavBtn('#btn-retry-mistakes', () => this.startRetryMistakes());
+    bindNavBtn('#btn-show-win', () => {
+      if (typeof openWinningPathModal === 'function') {
+        openWinningPathModal(this);
+      }
+    });
     bindNavBtn('#btn-play-from-here', () => this.playFromCurrentPosition());
     bindNavBtn('#btn-flip', () => {
       this.orientation = this.orientation === 'w' ? 'b' : 'w';
@@ -3588,9 +3719,14 @@ Result: ${this.game.result || '*'}`;
       });
     });
 
+    this.container.querySelector('#btn-share-game-link')?.addEventListener('click', (e) => {
+      this.shareGameReviewLink(e.currentTarget);
+    });
+
     this.bindMoveTableRowClicks();
     this.renderAdvantageChart();
     this.updateBoardAndControls();
+    this.setupEvalBarObserver();
   }
 
   bindMoveTableRowClicks() {

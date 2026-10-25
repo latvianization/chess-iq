@@ -482,6 +482,8 @@ class Chessboard {
           const comic = getComicBadge(this.badge.classification, square);
           const badgeEl = document.createElement('div');
           badgeEl.className = 'comic-square-badge';
+          if (rIdx === 0) badgeEl.classList.add('badge-edge-top');
+          if (fIdx === 7) badgeEl.classList.add('badge-edge-right');
           badgeEl.style.backgroundColor = comic.bg;
           badgeEl.style.color = comic.text;
           badgeEl.style.zIndex = '40';

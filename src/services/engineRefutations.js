@@ -564,7 +564,11 @@ function analyzeBoardVision(fen) {
           minOppVal < pieceVal ||
           oppAtt.length > ownAtt.length
         );
-        const isLoose = !isHanging && ownAtt.length === 0 && p.type !== "p";
+        const isShelteredRook = p.type === "r" && (
+          (p.color === "w" && r === 7 && board[6][c] && board[6][c].color === "w" && board[6][c].type === "p") ||
+          (p.color === "b" && r === 0 && board[1][c] && board[1][c].color === "b" && board[1][c].type === "p")
+        );
+        const isLoose = !isHanging && ownAtt.length === 0 && p.type !== "p" && !isShelteredRook;
 
         if (isHanging) {
           if (p.color === "w") result.whiteHangingCount++;

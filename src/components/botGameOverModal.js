@@ -113,17 +113,24 @@ function showGameOverModal(arena, reason = 'Game Completed') {
   document.body.classList.add('modal-open');
   document.body.appendChild(modal);
 
+  const dialogEl = modal.querySelector('.game-over-dialog');
+  const safeClose = typeof setupModalSwipeAndHistory === 'function'
+    ? setupModalSwipeAndHistory(modal, dialogEl, closeGameOverModal)
+    : closeGameOverModal;
+
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeGameOverModal();
+    if (e.target === modal) safeClose();
   });
 
   const handleEsc = (e) => {
     if (e.key === 'Escape') {
-      closeGameOverModal();
+      safeClose();
       window.removeEventListener('keydown', handleEsc);
     }
   };
   window.addEventListener('keydown', handleEsc);
+
+  modal.querySelector('#modal-btn-close')?.addEventListener('click', safeClose);
 
   modal.querySelector('#modal-btn-review')?.addEventListener('click', (e) => {
     const btn = e.currentTarget;

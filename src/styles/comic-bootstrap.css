@@ -463,7 +463,9 @@ body.board-is-dragging * {
 .review-board-column-inner #eval-bar.eval-bar-wrapper {
   width: var(--eval-bar-width);
   min-width: var(--eval-bar-width);
-  min-height: 180px;
+  min-height: 0;
+  height: auto;
+  align-self: stretch;
 }
 
 .review-board-column-inner .arcade-step-btn-lg {
@@ -630,6 +632,14 @@ body.board-is-dragging * {
   animation: badgePop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+.comic-square-badge.badge-edge-top {
+  top: 3px !important;
+}
+
+.comic-square-badge.badge-edge-right {
+  right: 3px !important;
+}
+
 .board-square:has(.comic-square-badge) {
   z-index: auto;
 }
@@ -643,7 +653,7 @@ body.board-is-dragging * {
 .eval-bar-wrapper {
   position: relative;
   width: 32px;
-  min-height: 180px;
+  min-height: 0;
   height: 100%;
   border: 1.5px solid rgba(255, 255, 255, 0.2);
   border-radius: 0.75rem;
@@ -930,6 +940,20 @@ body.board-is-dragging * {
 }
 
 /* Bootstrap 5 Modal Styling */
+.modal-dialog {
+  margin: clamp(1rem, 3.5vh, 2.25rem) auto !important;
+  max-height: calc(100dvh - clamp(2rem, 7vh, 4.5rem)) !important;
+}
+
+.modal-dialog-centered {
+  min-height: calc(100% - clamp(2rem, 7vh, 4.5rem)) !important;
+}
+
+.modal-dialog .modal-content {
+  max-height: calc(100dvh - clamp(2.5rem, 7vh, 5rem)) !important;
+  overflow-y: auto;
+}
+
 .modal-content.comic-card {
   border: 1px solid var(--arcade-border);
   border-radius: 1.25rem;
@@ -1059,7 +1083,7 @@ body.board-is-dragging * {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: clamp(1rem, 3.5vh, 2.25rem) 0.75rem !important;
   overflow-x: hidden;
   animation: fadeIn 0.25s ease-out;
 }
@@ -1067,7 +1091,8 @@ body.board-is-dragging * {
 .game-over-dialog {
   max-width: 460px;
   width: 100%;
-  max-height: min(94vh, 760px);
+  max-height: calc(100dvh - clamp(2.5rem, 7vh, 5rem)) !important;
+  margin: auto;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -1086,17 +1111,29 @@ body.board-is-dragging * {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: clamp(1rem, 3.5vh, 2.25rem) 0.75rem !important;
   overflow-x: hidden;
   animation: fadeIn 0.25s ease-out;
 }
 
 .why-dialog {
   animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  max-height: min(93vh, 840px);
+  max-height: calc(100dvh - clamp(2.5rem, 7vh, 5rem)) !important;
+  margin: auto;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+}
+
+/* Touch swiping animations for mobile modal dismiss */
+.modal-swiping {
+  transition: transform 0.05s linear !important;
+  user-select: none;
+}
+.modal-swipe-closing {
+  transition: transform 0.22s ease-out, opacity 0.2s ease-out !important;
+  transform: translateX(100%) !important;
+  opacity: 0 !important;
 }
 
 @keyframes fadeIn {
@@ -2246,7 +2283,8 @@ input[type="range"].arcade-range {
 .full-report-dialog {
   max-width: 980px !important;
   width: 100% !important;
-  max-height: min(94vh, 920px) !important;
+  max-height: calc(100dvh - clamp(2.5rem, 7vh, 5rem)) !important;
+  margin: auto !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
 }

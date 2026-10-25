@@ -612,13 +612,36 @@ function classifyMove(
     return "best";
   }
 
-  if (winProbBefore >= 0.75 && winProbAfter <= 0.55) {
+  // Missed win: player had a decisive win/advantage and let it slip to drawn or losing
+  if (winProbBefore >= 0.80 && winProbAfter <= 0.58) {
     return "missed_win";
   }
-  if (winProbLoss > 0.20) return "blunder";
-  if (winProbLoss > 0.10) return "mistake";
-  if (winProbLoss > 0.05) return "inaccuracy";
-  if (winProbLoss <= 0.02) return "excellent";
+
+  const isDecisivelyWinning = winProbAfter >= 0.78;
+  const wasAlreadyHopeless = winProbBefore <= 0.12;
+
+  // Blunder: disastrous swing in game outcome (turns win/equal into loss, or huge material loss)
+  const isDecisiveSwing = (winProbBefore >= 0.45 && winProbAfter <= 0.25 && winProbLoss > 0.22);
+  if ((winProbLoss > 0.28 || isDecisiveSwing) && !isDecisivelyWinning && !wasAlreadyHopeless) {
+    return "blunder";
+  }
+
+  // Mistake: significant damage to position
+  if (winProbLoss > 0.16) {
+    if (isDecisivelyWinning) return "good";
+    if (wasAlreadyHopeless) return "inaccuracy";
+    return "mistake";
+  }
+
+  // Inaccuracy: slight slip or sub-optimal positional choice
+  if (winProbLoss > 0.08) {
+    if (isDecisivelyWinning || wasAlreadyHopeless) return "good";
+    return "inaccuracy";
+  }
+
+  // Excellent: very close to best engine move
+  if (winProbLoss <= 0.035) return "excellent";
+
   return "good";
 }
 

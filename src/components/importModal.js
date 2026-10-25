@@ -92,6 +92,13 @@ class ImportModal {
 
   show() {
     this.resetCardStates();
+    if (typeof setupModalSwipeAndHistory === 'function') {
+      this._modalCleanup = setupModalSwipeAndHistory(
+        this.modalEl,
+        this.modalEl.querySelector('.modal-content'),
+        () => this.hide()
+      );
+    }
     const modal = this.getBsModal();
     if (modal) {
       modal.show();
@@ -113,6 +120,11 @@ class ImportModal {
 
   hide() {
     this.resetCardStates();
+    if (this._modalCleanup) {
+      const cleanup = this._modalCleanup;
+      this._modalCleanup = null;
+      cleanup();
+    }
     const modal = this.getBsModal();
     if (modal) {
       try { modal.hide(); } catch {}
@@ -339,7 +351,10 @@ class ImportModal {
                         ` : ''}
                       </div>
 
-                      <div class="flex-shrink-0">
+                      <div class="d-flex align-items-center gap-1.5 flex-shrink-0">
+                        <button type="button" class="btn btn-outline-danger btn-sm p-1.5 btn-delete-import-game" data-delete-id="${g.id}" title="Remove game & moves from blunder bank" style="border-radius: 0.65rem; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;">
+                          <i class="bi bi-trash3" style="font-size: 13px;"></i>
+                        </button>
                         <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5 ${isReviewed ? 'bg-success border-success' : ''}" style="border-radius: 0.65rem; font-size: 13px !important;">
                           <span>${isReviewed ? 'View Review' : 'Analyze'}</span> <i class="bi ${isReviewed ? 'bi-lightning-charge-fill' : 'bi-chevron-right'}" style="font-size: 11px;"></i>
                         </button>
@@ -365,8 +380,46 @@ class ImportModal {
       this.renderTabContent();
     });
 
+    container.querySelectorAll('.btn-delete-import-game').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const gameId = btn.getAttribute('data-delete-id');
+        const game = this.fetchedGames.find((g) => g.id === gameId);
+        if (!game) return;
+
+        this.fetchedGames = this.fetchedGames.filter((g) => g.id !== gameId);
+        try {
+          localStorage.setItem('chess_iq_imported_games', JSON.stringify({
+            platform: 'chesscom',
+            username: this.username,
+            games: this.fetchedGames,
+            timestamp: Date.now()
+          }));
+        } catch {}
+
+        if (typeof removeCachedGame === 'function') {
+          removeCachedGame(game.id);
+          if (game.pgn) removeCachedGame(game.pgn);
+        }
+
+        if (typeof removeGameFromBlunderBank === 'function') {
+          removeGameFromBlunderBank({
+            gameId: game.id,
+            white: game.white,
+            black: game.black,
+            date: game.date
+          });
+        }
+
+        window.dispatchEvent(new CustomEvent('chess_iq_games_imported'));
+        this.renderTabContent();
+      });
+    });
+
     container.querySelectorAll('[data-game-id]').forEach((card) => {
       card.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-delete-import-game')) return;
         if (this.isAnalyzing) return;
         const gameId = e.currentTarget.getAttribute('data-game-id');
         const game = this.fetchedGames.find((g) => g.id === gameId);

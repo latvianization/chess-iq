@@ -97,8 +97,32 @@ class App {
       });
     }
 
-    // Default start view
-    this.switchMode('review');
+    // Default start view or load shared review link
+    const hasSharedGame = this.checkShareLinkUrl();
+    if (!hasSharedGame) {
+      this.switchMode('review');
+    }
+  }
+
+  checkShareLinkUrl() {
+    try {
+      let params = new URLSearchParams(window.location.search);
+      if (!params.has('pgn') && window.location.hash.includes('pgn=')) {
+        params = new URLSearchParams(window.location.hash.slice(1));
+      }
+      const pgn = params.get('pgn');
+      if (pgn && pgn.trim().length > 10) {
+        const userColor = params.get('color') === 'b' ? 'b' : 'w';
+        console.log('[App] Shareable game link detected. Auto-loading game review...');
+        setTimeout(() => {
+          this.runAnalysis(pgn.trim(), userColor);
+        }, 50);
+        return true;
+      }
+    } catch (err) {
+      console.warn('[App] Could not parse shareable link:', err);
+    }
+    return false;
   }
 
   setupTheme() {

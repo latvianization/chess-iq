@@ -88,10 +88,33 @@ async function openWhyModal(dashboard, targetEval = null) {
       </div>
 
       <div class="row g-3 align-items-stretch">
-        <div class="col-12 col-md-7 d-flex justify-content-center">
+        <div class="col-12 col-md-7 d-flex flex-column align-items-center">
           <div id="why-modal-board" style="width: 100%; max-width: min(370px, 42vh); aspect-ratio: 1/1;"></div>
+          <!-- Step navigation right under board -->
+          <div class="w-100 mt-2.5">
+            <div class="d-flex align-items-center justify-content-center gap-2 py-1">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-first" disabled title="Start (Home)">
+                <i class="bi bi-chevron-bar-left"></i>
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-prev" disabled title="Previous Move (←)">
+                <i class="bi bi-chevron-left"></i>
+              </button>
+              <button type="button" class="btn btn-sm btn-primary px-3 fw-bold" id="why-btn-play" disabled title="Play / Pause (Space)">
+                <i class="bi bi-play-fill" id="why-play-icon"></i>
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-next" disabled title="Next Move (→)">
+                <i class="bi bi-chevron-right"></i>
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-last" disabled title="End (End)">
+                <i class="bi bi-chevron-bar-right"></i>
+              </button>
+            </div>
+            <div class="text-center text-secondary small fw-semibold mt-1" style="font-size: 11px;">
+              <i class="bi bi-keyboard me-1"></i>Arrow keys: <kbd class="bg-body-secondary text-body px-1">←</kbd> <kbd class="bg-body-secondary text-body px-1">→</kbd> | Space: Play
+            </div>
+          </div>
         </div>
-        <div class="col-12 col-md-5 d-flex flex-column justify-content-between">
+        <div class="col-12 col-md-5 d-flex flex-column justify-content-start">
           <div>
             <div class="card border-0 mb-2 p-2.5" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border) !important; border-radius: 0.75rem;">
               <div class="d-flex align-items-center justify-content-between mb-1.5">
@@ -135,29 +158,6 @@ async function openWhyModal(dashboard, targetEval = null) {
               </div>
             </div>
           </div>
-
-          <div>
-            <div class="d-flex align-items-center justify-content-center gap-2 py-1">
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-first" disabled title="Start">
-                <i class="bi bi-chevron-bar-left"></i>
-              </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-prev" disabled title="Previous Move">
-                <i class="bi bi-chevron-left"></i>
-              </button>
-              <button type="button" class="btn btn-sm btn-primary px-3 fw-bold" id="why-btn-play" disabled title="Play / Pause">
-                <i class="bi bi-play-fill" id="why-play-icon"></i>
-              </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-next" disabled title="Next Move">
-                <i class="bi bi-chevron-right"></i>
-              </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-last" disabled title="End">
-                <i class="bi bi-chevron-bar-right"></i>
-              </button>
-            </div>
-            <div class="text-center text-secondary small fw-semibold mt-1" style="font-size: 11px;">
-              <i class="bi bi-keyboard me-1"></i>Arrow keys: <kbd class="bg-body-secondary text-body px-1">←</kbd> <kbd class="bg-body-secondary text-body px-1">→</kbd> | Space: Play
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -173,9 +173,14 @@ async function openWhyModal(dashboard, targetEval = null) {
     interactive: false,
   });
 
-  modal.querySelector('#why-btn-close')?.addEventListener('click', () => closeWhyModal(dashboard));
+  const dialogEl = modal.querySelector('.why-dialog');
+  const safeClose = typeof setupModalSwipeAndHistory === 'function'
+    ? setupModalSwipeAndHistory(modal, dialogEl, () => closeWhyModal(dashboard))
+    : () => closeWhyModal(dashboard);
+
+  modal.querySelector('#why-btn-close')?.addEventListener('click', safeClose);
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeWhyModal(dashboard);
+    if (e.target === modal) safeClose();
   });
 
   dashboard.whyKeyHandler = (e) => {
@@ -279,9 +284,20 @@ async function openWhyModal(dashboard, targetEval = null) {
     const step = currentSteps[stepIdx];
     if (!step) return;
 
+    let arrowMove = null;
+    if (activeTab === 'best') {
+      if (stepIdx === 0 && bestSteps && bestSteps.length > 1 && bestSteps[1]?.from && bestSteps[1]?.to) {
+        arrowMove = { from: bestSteps[1].from, to: bestSteps[1].to };
+      } else if (step.from && step.to) {
+        arrowMove = { from: step.from, to: step.to };
+      }
+    }
+
     dashboard.whyBoard?.setProps({
       fen: step.fen,
       lastMove: step.from ? { from: step.from, to: step.to } : null,
+      bestMove: arrowMove,
+      showBestMove: Boolean(arrowMove),
     });
 
     const counterEl = modal.querySelector('#why-step-counter');
@@ -360,6 +376,7 @@ async function openWhyModal(dashboard, targetEval = null) {
 
     if (tab === 'punishment') {
       currentSteps = punishmentSteps;
+      stepIdx = 0;
       btnPunish?.classList.add('active');
       btnBest?.classList.remove('active');
 
@@ -387,6 +404,7 @@ async function openWhyModal(dashboard, targetEval = null) {
       }
     } else {
       currentSteps = bestSteps;
+      stepIdx = bestSteps && bestSteps.length > 1 ? 1 : 0;
       btnBest?.classList.add('active');
       btnPunish?.classList.remove('active');
 
@@ -412,6 +430,9 @@ async function openWhyModal(dashboard, targetEval = null) {
 
     updatePills();
     renderActiveStep();
+    if (tab === 'best' && stepIdx > 0 && typeof soundService !== 'undefined') {
+      soundService.playMove();
+    }
   };
 
   const stopAutoplay = () => {
