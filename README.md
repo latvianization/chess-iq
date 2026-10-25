@@ -67,25 +67,31 @@ You don't need to install, compile, or configure anything. Click the link below 
 - **Dynamic Eval Bar Alignment:** The vertical eval bar stays 100% synchronized with the physical height of the chessboard.
 - **Edge Badge Protection:** Comic sticker badges on rank 8 and boundary files stay safely within the board area without clipping.
 
-### 🎓 4. Coach's Study Plan & "Guess the Move"
+### 🎓 5. Coach's Study Plan & "Guess the Move"
 - **Priority Coaching Diagnostic:** Post-game breakdown highlighting your most critical area for improvement (e.g., *Pattern Alert: Hanging Pieces*, *Clock Discipline: 2+ Impulsive Blunders*, or *Endgame Precision Deficit*).
 - **Guess the Move Mode:** Step through any reviewed master or user game blind and test your calculation by trying to guess the best move on each ply.
 - **Phase Elo Ratings:** Independent performance Elo ratings estimated for your **Opening**, **Middlegame**, and **Endgame** play.
 
-### 🤖 5. 33-Bot Sparring Arena
+### 🏛️ 6. Opening Explorer & Positional Pillars
+- **Interactive Opening Book Explorer:** Click on any ECO badge to inspect opening theory, historical master moves, variation win/draw rates, and popular lines.
+- **Positional Pillars Breakdown:** Evaluation breakdown across critical dimensions: King Safety, Center Control, Piece Activity, and Pawn Structure.
+- **Board Vision & Loose Pieces Overlays:** Toggle tactical vision overlays on the board to spot undefended pieces, attacked squares, and controlling lines in real time.
+
+### 🤖 7. 33-Bot Sparring Arena
 - 33 unique bot personalities spread across 4 distinct Elo tiers (400 to 2000 Elo).
 - **Dynamic In-Game Banter:** Bots react with speech bubbles to game starts, blunders, checks, great moves, wins, and losses.
 - **Customized Playstyles:** Realistically calibrated search depths, evaluation jitter, and tactical blindness designed to mimic real human players at each rating level.
 - **One-Click Post-Game Review:** Finished a game against a bot? Click **"Analyze Game"** in the game-over dialog to jump straight into a comprehensive move-by-move breakdown!
 
-### 🔊 6. Algorithmic Web Audio Synthesizer
+### 🔊 8. Algorithmic Web Audio Synthesizer
 - **Zero Audio Assets Required:** All sound effects (moves, captures, checks, blunders, brilliant moves, and victory fanfare) are synthesized live using the **Web Audio API**.
 - Crisp, low-latency tactile audio feedback with an instant mute toggle.
 
-### ⚡ 7. Zero-Build Architecture
+### ⚡ 9. Zero-Build Architecture & Pure Web Runtime
 - **No Node.js, Webpack, Vite, or npm build step required.**
 - Runs natively in any browser via ES modules and standard `<script>` tags.
 - Fully compatible with local `file:///` execution on Windows, macOS, and Linux with zero CORS errors.
+- **Zero External CSS Compilers:** Powered by native Bootstrap 5.3 and custom Cyber-Toon styling without Tailwind or PostCSS dependencies.
 
 ---
 
@@ -208,7 +214,7 @@ chess-iq/
     │   ├── botGameOverModal.js  # End-of-game dialog with instant "Analyze" bridge
     │   ├── importModal.js       # Chess.com username & PGN/FEN import interface
     │   ├── pieceSvgs.js         # Scalable vector graphics piece set
-    │   ├── reviewAdvantageChart # Interactive evaluation advantage timeline graph
+    │   ├── reviewAdvantageChart.js # Interactive evaluation advantage timeline graph
     │   ├── reviewDashboard.js   # Main game review view, phase ratings & coach plan
     │   ├── reviewWhyModal.js    # Interactive blunder refutation & tactical lines
     │   └── reviewWinningPathModal.js # Engine "Show Win" forced continuation modal
@@ -219,8 +225,10 @@ chess-iq/
     │   ├── comicBadges.js       # Move classification badges and stylings
     │   ├── ecoDictionary.js     # Opening book dictionary and ECO code matcher
     │   ├── engine.js            # Win probability, accuracy & Elo evaluation logic
+    │   ├── engineEvaluationTables.js # PST positional evaluation & material scoring tables
     │   ├── engineRefutations.js # Tactical threats & continuation calculator
     │   ├── gameCacheService.js  # LocalStorage caching for analyzed games
+    │   ├── importApi.js         # Chess.com public API client & PGN sanitization
     │   ├── modalHelper.js       # Mobile swipe gestures & browser back navigation
     │   ├── sound.js             # Algorithmic Web Audio API sound synthesizer
     │   ├── stockfishWorker.js   # Stockfish Web Worker pool manager
@@ -235,7 +243,7 @@ chess-iq/
 
 - **[Stockfish.js](https://github.com/nmrugg/stockfish.js)** — Powerful chess engine compiled to WebAssembly / Web Workers.
 - **[Chess.js](https://github.com/jhlywa/chess.js)** — Chess rules, move validation, PGN parsing, and board state generation.
-- **[Bootstrap 5](https://getbootstrap.com/) & Native Cyber-Toon CSS** — Responsive layout, modal architecture, and zero-build utility styling without external CSS compilation.
+- **[Bootstrap 5.3](https://getbootstrap.com/) & Native Cyber-Toon CSS** — Responsive layout, modal architecture, and zero-build utility styling with light/dark themes and zero runtime CSS compilation overhead.
 - **Web Audio API** — Real-time synthesized acoustic feedback with zero asset load time.
 - **HTML5 Web Workers** — Multithreaded evaluation keeping the board and UI responsive at 60 FPS.
 
