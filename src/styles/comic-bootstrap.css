@@ -247,8 +247,8 @@ body:not(.modal-open) {
 /* Responsive navbar adjustments for mobile screens */
 @media (max-width: 575.98px) {
   .glass-nav {
-    padding-left: 0.5rem !important;
-    padding-right: 0.5rem !important;
+    padding-left: 0.45rem !important;
+    padding-right: 0.45rem !important;
   }
   .arcade-badge-logo {
     width: 28px;
@@ -260,9 +260,9 @@ body:not(.modal-open) {
     padding: 2px;
   }
   .arcade-mode-pills .arcade-pill {
-    padding: 0.35rem 0.55rem;
-    font-size: 0.85rem;
-    line-height: 1;
+    padding: 0.32rem 0.58rem;
+    font-size: 0.75rem;
+    line-height: 1.1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -271,13 +271,17 @@ body:not(.modal-open) {
     width: 32px;
     height: 32px;
     border-radius: 0.55rem;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
   }
   #nav-btn-import {
-    width: 32px;
     height: 32px;
-    padding: 0 !important;
+    padding: 0.25rem 0.6rem !important;
+    font-size: 0.75rem;
     border-radius: 0.55rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
   }
 }
 
@@ -2543,9 +2547,85 @@ input[type="range"].arcade-range {
 .overflow-y-auto { overflow-y: auto !important; }
 .overflow-x-hidden { overflow-x: hidden !important; }
 .cursor-help { cursor: help !important; }
+.max-w-sm { max-width: 22rem !important; }
 .max-w-md { max-width: 28rem !important; }
 .max-w-xl { max-width: 36rem !important; }
 .max-w-2xl { max-width: 42rem !important; }
+
+/* Extra-small & Ghost Button Utilities */
+.btn-xs {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  border-radius: 0.4rem;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn-ghost:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+/* Move Table Cells, Classification Dots & Active Selection */
+.move-cell {
+  border-radius: 0.4rem;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+}
+
+.move-cell:hover {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+}
+
+.move-cell.active-cell {
+  background-color: rgba(245, 158, 11, 0.24) !important;
+  box-shadow: inset 0 0 0 1.5px #f59e0b;
+  font-weight: 900 !important;
+}
+
+[data-bs-theme="light"] .move-cell.active-cell {
+  background-color: rgba(245, 158, 11, 0.28) !important;
+  color: #0f172a !important;
+}
+
+.table-row-selected {
+  background-color: rgba(245, 158, 11, 0.06);
+}
+
+.classification-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: 0.2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.move-cell-clock {
+  font-size: 9.5px;
+  color: var(--bs-secondary-color);
+  opacity: 0.85;
+}
+
+/* Modal Board Responsive Sizing (Desktop vs Mobile Portrait) */
+.modal-board-container {
+  width: 100%;
+  max-width: min(370px, 46vh);
+  aspect-ratio: 1 / 1;
+}
+
+@media (max-width: 767.98px) {
+  .modal-board-container {
+    max-width: min(350px, 82vw);
+  }
+}
 
 /* Shadows & Opacity */
 .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45) !important; }

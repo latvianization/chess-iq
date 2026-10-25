@@ -923,10 +923,11 @@ function openFullReportModal(dashboard) {
     if (e.target === modal) safeClose();
   });
   modal.querySelector('#btn-report-share')?.addEventListener('click', (e) => {
-    this.shareGameReviewLink(e.currentTarget);
+    dashboard.shareGameReviewLink(e.currentTarget);
   });
   modal.querySelector('#btn-report-open-eco')?.addEventListener('click', () => {
-    this.openOpeningModal();
+    safeClose();
+    dashboard.openOpeningModal();
   });
 
   // Copy Summary Helper
@@ -970,16 +971,16 @@ ${priorityDesc}`;
   modal.querySelector('#btn-report-copy-footer')?.addEventListener('click', (e) => copyReportSummary(e.currentTarget));
 
   modal.querySelector('#btn-coach-guess-move')?.addEventListener('click', () => {
-    closeFn();
-    this.startGuessTheMove();
+    safeClose();
+    dashboard.startGuessTheMove();
   });
   modal.querySelector('#btn-coach-blunder-bank')?.addEventListener('click', () => {
-    closeFn();
-    this.openBlunderBankModal('all');
+    safeClose();
+    dashboard.openBlunderBankModal('all');
   });
   modal.querySelector('#btn-report-retry-mistakes')?.addEventListener('click', () => {
-    closeFn();
-    this.startRetryMistakes();
+    safeClose();
+    dashboard.startRetryMistakes();
   });
 
   modal.querySelectorAll('[data-report-jump]').forEach((btn) => {

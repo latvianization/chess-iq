@@ -87,7 +87,7 @@ function openBlunderBankModal(dashboard, initialFilter = 'all') {
                     Move ${Math.ceil((curPuzzle.ply || 1) / 2)} · In the game you played <span class="text-danger font-monospace fw-black">${insEscape(curPuzzle.playedSan)}</span> (${insEscape(curPuzzle.classification)})
                   </div>
                 </div>
-                <div class="alert ${solved ? 'alert-success' : (isErr ? 'alert-danger' : 'alert-warning')} py-2 px-2.5 small fw-bold mb-2">
+                <div class="alert ${solved ? 'alert-success' : (isErr ? 'alert-danger' : 'alert-warning')} py-2 px-2.5 small fw-bold mb-2" id="bb-feedback-alert">
                   ${insEscape(feedback || `Playing as ${curPuzzle.userColor === 'w' ? 'White' : 'Black'}: Find the best move on the board!`)}
                 </div>
               </div>
@@ -116,7 +116,7 @@ function openBlunderBankModal(dashboard, initialFilter = 'all') {
       </div>
     `;
 
-    modal.querySelector('#bb-btn-close')?.addEventListener('click', () => modal.remove());
+    modal.querySelector('#bb-btn-close')?.addEventListener('click', () => safeClose());
     modal.querySelectorAll('[data-bb-filter]').forEach((btn) => {
       btn.addEventListener('click', () => {
         currentFilter = btn.getAttribute('data-bb-filter') || 'all';
@@ -137,7 +137,7 @@ function openBlunderBankModal(dashboard, initialFilter = 'all') {
       modalBoard = new Chessboard(mount, {
         fen: curPuzzle.fenBefore,
         orientation: curPuzzle.userColor || 'w',
-        theme: this.theme,
+        theme: dashboard?.theme || 'green',
         interactive: !solved,
         bestMove: bestMoveArrow,
         showPlayerBars: false,
@@ -192,6 +192,11 @@ function openBlunderBankModal(dashboard, initialFilter = 'all') {
           modalBoard.render();
           feedback = `💡 Hint: Move the piece on ${fromSq.toUpperCase()}!`;
           isErr = false;
+          const alertEl = modal.querySelector('#bb-feedback-alert');
+          if (alertEl) {
+            alertEl.className = 'alert alert-warning py-2 px-2.5 small fw-bold mb-2';
+            alertEl.textContent = feedback;
+          }
         }
       });
 
@@ -225,17 +230,17 @@ function openBlunderBankModal(dashboard, initialFilter = 'all') {
     document.body.classList.remove('modal-open');
   };
 
-  const dialogEl = modal.querySelector('.why-dialog');
-  const safeClose = typeof setupModalSwipeAndHistory === 'function'
-    ? setupModalSwipeAndHistory(modal, dialogEl, closeBlunderBank)
-    : closeBlunderBank;
-
-  modal.querySelector('#bb-btn-close')?.addEventListener('click', safeClose);
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) safeClose();
-  });
-
+  let safeClose = closeBlunderBank;
   document.body.classList.add('modal-open');
   document.body.appendChild(modal);
   renderModalContent();
+
+  const dialogEl = modal.querySelector('.why-dialog');
+  if (typeof setupModalSwipeAndHistory === 'function') {
+    safeClose = setupModalSwipeAndHistory(modal, dialogEl, closeBlunderBank);
+  }
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) safeClose();
+  });
 }

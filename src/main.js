@@ -62,10 +62,16 @@ class App {
     if (reviewMount) {
       this.reviewDashboard = new ReviewDashboard(reviewMount, {
         onOpenImport: () => this.importModal?.show(),
-        onSwitchToBots: () => this.switchMode('bot'),
+        onSwitchToBots: (fen, userColor, targetElo) => {
+          this.switchMode('bot');
+          if (fen && typeof fen === 'string') {
+            this.botArena?.startFromPosition(fen, userColor || 'w', targetElo || 1200);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        },
         onPlayFromFen: (fen, userColor, targetElo) => {
           this.switchMode('bot');
-          this.botArena?.startFromPosition(fen, userColor, targetElo);
+          this.botArena?.startFromPosition(fen, userColor || 'w', targetElo || 1200);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         },
         onSelectGame: (pgn, userColor, cachedGame) => {
@@ -295,6 +301,12 @@ class App {
     document.getElementById('nav-mode-bot')?.addEventListener('click', () => this.switchMode('bot'));
     document.getElementById('nav-btn-import')?.addEventListener('click', () => {
       this.importModal?.show();
+    });
+    document.getElementById('nav-btn-help')?.addEventListener('click', () => {
+      if (typeof openIqGuideModal === 'function') openIqGuideModal();
+    });
+    document.getElementById('menu-btn-guide')?.addEventListener('click', () => {
+      if (typeof openIqGuideModal === 'function') openIqGuideModal();
     });
     document.getElementById('nav-btn-theme')?.addEventListener('click', () => this.toggleTheme());
     document.getElementById('menu-btn-theme')?.addEventListener('click', () => this.toggleTheme());

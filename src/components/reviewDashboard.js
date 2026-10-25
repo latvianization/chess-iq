@@ -550,7 +550,7 @@ class ReviewDashboard {
       secondBestMove = top.second;
     }
 
-    const threatMove = !isBlindActive && !isSandboxMode && cur?.threat?.uci && cur.threat.uci.length >= 4
+    const threatMove = !isBlindActive && !isSandboxMode && this.isThreatActive && cur?.threat?.uci && cur.threat.uci.length >= 4
       ? { from: cur.threat.uci.slice(0, 2), to: cur.threat.uci.slice(2, 4) }
       : null;
 
@@ -565,7 +565,7 @@ class ReviewDashboard {
       threatMove,
       badge,
       visionOverlay: this.visionOverlay,
-      showBestMove: true,
+      showBestMove: !isBlindActive && this.showBestMove,
       showLoosePieces: !isBlindActive && this.showLoosePieces,
       whiteName: this.game?.white || 'White',
       blackName: this.game?.black || 'Black',
@@ -615,59 +615,61 @@ class ReviewDashboard {
               : []);
 
         stripEl.innerHTML = `
-          <div class="d-flex align-items-center flex-wrap gap-1.5">
-            <span class="badge border border-dark rounded-pill px-2.5 py-1 cursor-help" data-iq-tip="badge_${cur.classification}" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 12px;">
-              ${comic.symbol} ${comic.term}
-            </span>
-            <span class="font-monospace fw-black fs-5">${cur.san}</span>
-            <span class="badge eval-chip-badge font-monospace fw-bold cursor-help" data-iq-tip="metric_eval_bar"><i class="bi bi-speedometer2 me-1"></i>${evalStr}</span>
-
-            ${isSuboptimal && bestSan && bestSan !== cur.san ? `
-              <span class="badge best-move-chip font-monospace fw-bold px-2 py-1 cursor-help" data-iq-tip="badge_best" title="Top Engine Move (Thick Arrow)">
-                ★ Best: ${bestSan}
+          <div class="d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
+            <div class="d-flex align-items-center flex-wrap gap-1.5">
+              <span class="badge border border-dark rounded-pill px-2.5 py-1 cursor-help" data-iq-tip="badge_${cur.classification}" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 12px;">
+                ${comic.symbol} ${comic.term}
               </span>
-            ` : ''}
+              <span class="font-monospace fw-black fs-5">${cur.san}</span>
+              <span class="badge eval-chip-badge font-monospace fw-bold cursor-help" data-iq-tip="metric_eval_bar"><i class="bi bi-speedometer2 me-1"></i>${evalStr}</span>
 
-            ${isSuboptimal && secondSan && secondSan !== cur.san && secondSan !== bestSan ? `
-              <span class="badge second-move-chip font-monospace fw-bold px-2 py-1 cursor-help" data-iq-tip="badge_great" title="2nd Best Option (Thin Arrow)">
-                2nd: ${secondSan}
-              </span>
-            ` : ''}
+              ${isSuboptimal && bestSan && bestSan !== cur.san ? `
+                <span class="badge best-move-chip font-monospace fw-bold px-2 py-1 cursor-help" data-iq-tip="badge_best" title="Top Engine Move (Thick Arrow)">
+                  ★ Best: ${bestSan}
+                </span>
+              ` : ''}
 
-            ${motifs.map((m) => `
-              <span class="motif-pill cursor-help" style="border-color: ${m.color}; color: ${m.color}; background: ${m.color}18;" data-iq-title="Tactical Motif: ${insEscape(m.label)}" data-iq-what="${insEscape(m.coachTip || m.label)}" data-iq-why="Tactical themes recur across games. Identifying motifs helps you execute combinations automatically." title="${insEscape(m.coachTip || m.label)}">
-                ${m.icon} ${insEscape(m.label)}
-              </span>
-            `).join('')}
+              ${isSuboptimal && secondSan && secondSan !== cur.san && secondSan !== bestSan ? `
+                <span class="badge second-move-chip font-monospace fw-bold px-2 py-1 cursor-help" data-iq-tip="badge_great" title="2nd Best Option (Thin Arrow)">
+                  2nd: ${secondSan}
+                </span>
+              ` : ''}
 
-            ${clockStr ? `
-              <span class="badge clock-discipline-badge font-monospace" title="Clock Remaining${spentStr ? ` (Spent ${spentStr})` : ''}">
-                <i class="bi bi-stopwatch me-1"></i>${clockStr}${spentStr ? ` <span class="opacity-75">(-${spentStr})</span>` : ''}
-              </span>
-            ` : ''}
+              ${motifs.map((m) => `
+                <span class="motif-pill cursor-help" style="border-color: ${m.color}; color: ${m.color}; background: ${m.color}18;" data-iq-title="Tactical Motif: ${insEscape(m.label)}" data-iq-what="${insEscape(m.coachTip || m.label)}" data-iq-why="Tactical themes recur across games. Identifying motifs helps you execute combinations automatically." title="${insEscape(m.coachTip || m.label)}">
+                  ${m.icon} ${insEscape(m.label)}
+                </span>
+              `).join('')}
 
-            ${cur.isImpulsive ? `
-              <span class="badge impulsive-move-badge cursor-help" data-iq-tip="clock_discipline" title="Played in ${spentStr || '<2s'} with plenty of time on the clock">
-                ⚡ Rushed (${spentStr || '<2s'})
-              </span>
-            ` : ''}
+              ${clockStr ? `
+                <span class="badge clock-discipline-badge font-monospace" title="Clock Remaining${spentStr ? ` (Spent ${spentStr})` : ''}">
+                  <i class="bi bi-stopwatch me-1"></i>${clockStr}${spentStr ? ` <span class="opacity-75">(-${spentStr})</span>` : ''}
+                </span>
+              ` : ''}
 
-            ${cur.isTimeTrouble ? `
-              <span class="badge time-trouble-badge cursor-help" data-iq-tip="clock_discipline" title="Played under severe time pressure (<20s left)">
-                🔥 Time Trouble
-              </span>
-            ` : ''}
-          </div>
-          <div class="d-flex align-items-center gap-2">
-            ${['inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(cur.classification) ? `
-              <button type="button" class="btn btn-sm btn-outline-danger fw-bold comic-btn" id="btn-show-why" title="Explore what happens in the next 5 moves">
-                <i class="bi bi-question-circle me-1"></i>Why?
-              </button>
-            ` : (cur.classification === 'brilliant' ? `
-              <button type="button" class="btn btn-sm fw-bold comic-btn" id="btn-show-why" style="color: #06b6d4; border: 1px solid #06b6d4; background: rgba(6,182,212,0.08);" title="Explore why this brilliant sacrifice works">
-                <i class="bi bi-gem me-1"></i>Why?
-              </button>
-            ` : '')}
+              ${cur.isImpulsive ? `
+                <span class="badge impulsive-move-badge cursor-help" data-iq-tip="clock_discipline" title="Played in ${spentStr || '<2s'} with plenty of time on the clock">
+                  ⚡ Rushed (${spentStr || '<2s'})
+                </span>
+              ` : ''}
+
+              ${cur.isTimeTrouble ? `
+                <span class="badge time-trouble-badge cursor-help" data-iq-tip="clock_discipline" title="Played under severe time pressure (<20s left)">
+                  🔥 Time Trouble
+                </span>
+              ` : ''}
+            </div>
+            <div class="d-flex align-items-center gap-2 ms-auto">
+              ${['inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(cur.classification) ? `
+                <button type="button" class="btn btn-sm btn-outline-danger fw-bold comic-btn" id="btn-show-why" title="Explore what happens in the next 5 moves">
+                  <i class="bi bi-question-circle me-1"></i>Why?
+                </button>
+              ` : (cur.classification === 'brilliant' ? `
+                <button type="button" class="btn btn-sm fw-bold comic-btn" id="btn-show-why" style="color: #06b6d4; border: 1px solid #06b6d4; background: rgba(6,182,212,0.08);" title="Explore why this brilliant sacrifice works">
+                  <i class="bi bi-gem me-1"></i>Why?
+                </button>
+              ` : '')}
+            </div>
           </div>
         `;
         stripEl.querySelector('#btn-show-why')?.addEventListener('click', () => this.openWhyModal());
@@ -720,25 +722,32 @@ class ReviewDashboard {
     if (btnNext) btnNext.disabled = isAtEnd;
     if (btnLast) btnLast.disabled = isAtEnd;
 
-    // Update Active Row in Move Table (scroll smoothly inside container if visible)
+    // Update Active Cell & Row in Move Table (scroll smoothly inside container if visible)
     const scrollContainer = this.container.querySelector('.move-history-container');
-    this.container.querySelectorAll('.move-list-row').forEach((row) => {
-      const plyNum = parseInt(row.dataset.ply, 10);
+    this.container.querySelectorAll('.move-table-row').forEach((row) => {
+      row.classList.remove('table-row-selected');
+    });
+    this.container.querySelectorAll('.move-cell[data-row-ply]').forEach((cell) => {
+      const plyNum = parseInt(cell.dataset.rowPly, 10);
       if (plyNum === this.currentPly) {
-        row.classList.add('bg-warning-subtle', 'fw-black', 'border', 'border-warning');
-        if (scrollContainer && scrollContainer.clientHeight > 0) {
-          const rowTop = row.offsetTop;
-          const rowHeight = row.offsetHeight;
-          const containerTop = scrollContainer.scrollTop;
-          const containerHeight = scrollContainer.clientHeight;
-          if (rowTop < containerTop) {
-            scrollContainer.scrollTop = rowTop;
-          } else if (rowTop + rowHeight > containerTop + containerHeight) {
-            scrollContainer.scrollTop = rowTop + rowHeight - containerHeight;
+        cell.classList.add('active-cell');
+        const parentRow = cell.closest('.move-table-row');
+        if (parentRow) {
+          parentRow.classList.add('table-row-selected');
+          if (scrollContainer && scrollContainer.clientHeight > 0) {
+            const rowTop = parentRow.offsetTop;
+            const rowHeight = parentRow.offsetHeight;
+            const containerTop = scrollContainer.scrollTop;
+            const containerHeight = scrollContainer.clientHeight;
+            if (rowTop < containerTop) {
+              scrollContainer.scrollTop = rowTop;
+            } else if (rowTop + rowHeight > containerTop + containerHeight) {
+              scrollContainer.scrollTop = rowTop + rowHeight - containerHeight;
+            }
           }
         }
       } else {
-        row.classList.remove('bg-warning-subtle', 'fw-black', 'border', 'border-warning');
+        cell.classList.remove('active-cell');
       }
     });
 
@@ -1411,6 +1420,11 @@ class ReviewDashboard {
         `}
       </div>
 
+      <!-- 3.5. Turning Point & Opening Departure Callouts -->
+      <div class="mb-2">
+        ${this.buildCoachingCallouts()}
+      </div>
+
       <!-- 4. Coach's Prescription & Actionable Drills -->
       <div class="comic-card p-2.5">
         <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
@@ -1432,8 +1446,11 @@ class ReviewDashboard {
               <i class="bi bi-bullseye me-1"></i>Retry Mistakes (${totalErrors})
             </button>
           ` : ''}
+          <button type="button" class="btn btn-sm btn-outline-warning comic-btn flex-grow-1 fw-bold py-1.5 px-2.5" id="btn-coach-guess-move" style="font-size: 11.5px;">
+            <i class="bi bi-patch-question-fill me-1"></i>Guess Move
+          </button>
           <button type="button" class="btn btn-sm btn-warning comic-btn flex-grow-1 fw-bold text-dark py-1.5 px-2.5" id="btn-coach-goto-bank" style="font-size: 11.5px;">
-            <i class="bi bi-bank2 me-1"></i>Daily 5 Blunder Bank
+            <i class="bi bi-bank2 me-1"></i>Daily 5 Bank
           </button>
         </div>
       </div>
@@ -1519,7 +1536,7 @@ class ReviewDashboard {
                 <span class="badge bg-warning text-dark border border-dark rounded-pill px-2.5 py-1 fw-bold text-nowrap" style="font-size: 12px;">
                   <i class="bi bi-clock-history me-1"></i>Saved Games (${totalCount})
                 </span>
-                <div class="btn-group btn-group-sm rounded-pill p-0.5 bg-body-tertiary border flex-nowrap" role="group" aria-label="Game Filter">
+                <div class="d-flex align-items-center gap-1 flex-wrap p-1 rounded-pill bg-body-tertiary border" role="group" aria-label="Game Filter">
                   <button type="button" class="btn btn-sm rounded-pill px-2.5 py-0.5 fw-bold text-nowrap ${currentFilter === 'all' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-saved-filter="all" style="font-size: 11px;">
                     All (${totalCount})
                   </button>
@@ -1900,7 +1917,8 @@ class ReviewDashboard {
         <!-- Column 1: Board & Tactical Controls (Dominant Large Desktop Workspace) -->
         <div class="col-12 col-lg-7 col-xl-6 col-xxl-6 mobile-sticky-top d-flex flex-column align-items-center gap-2 px-1 px-sm-2">
           <div class="w-100 review-board-column-inner">
-            <!-- PV Banner (Tactical line playback) -->
+            <!-- Active Mode / Sandbox / Retry Mistakes Banner -->
+            <div id="sandbox-banner" class="d-none w-100"></div>
             <div id="pv-banner-area" class="d-none"></div>
 
             <div class="d-flex align-items-stretch justify-content-center gap-2 gap-sm-2.5 mb-1 w-100">
@@ -2150,7 +2168,7 @@ class ReviewDashboard {
             <div class="comic-card-sm p-2 mb-2" id="advantage-chart-area"></div>
 
             <!-- Move History Card -->
-            <div class="comic-card p-2" id="review-moves-card">
+            <div class="comic-card p-2 mb-2" id="review-moves-card">
               <div class="d-flex align-items-center justify-content-between mb-1.5 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
                 <div class="d-flex align-items-center gap-1.5">
                   <i class="bi bi-list-ol text-warning"></i>
@@ -2163,7 +2181,7 @@ class ReviewDashboard {
                   <button type="button" class="btn btn-xs move-filter-pill ${this.moveFilter === 'errors' ? 'active' : ''}" data-move-filter="errors" title="Inaccuracies, Mistakes, Blunders, Missed Wins">Errors</button>
                 </div>
               </div>
-              <div class="move-history-container" style="max-height: 290px; overflow-y: auto;">
+              <div class="move-history-container" style="max-height: 255px; overflow-y: auto;">
                 <table class="table table-sm table-hover align-middle mb-0" style="font-size: 12px;">
                   <tbody id="move-history-tbody">
                     ${this.buildMoveTableRows()}
@@ -2171,6 +2189,9 @@ class ReviewDashboard {
                 </table>
               </div>
             </div>
+
+            <!-- 4-Pillar Positional Evaluation X-Ray -->
+            <div class="comic-card-sm p-2.5" id="positional-pillars-area"></div>
           </div>
 
           <!-- TAB PANE 2: Coach & Diagnostics -->
@@ -2262,6 +2283,7 @@ class ReviewDashboard {
     // Bind Coach Tab Specific Actions
     this.container.querySelector('#btn-coach-full-report')?.addEventListener('click', () => this.openDetailedPerformanceModal());
     this.container.querySelector('#btn-coach-retry-errors')?.addEventListener('click', () => this.startRetryMistakes());
+    this.container.querySelector('#btn-coach-guess-move')?.addEventListener('click', () => this.startGuessTheMove());
     this.container.querySelector('#btn-coach-goto-bank')?.addEventListener('click', () => this.openBlunderBankModal('daily'));
 
     // Legacy compatibility triggers

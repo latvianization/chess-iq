@@ -232,22 +232,34 @@ function exitSpecialMode(dashboard) {
 
 function toggleVisionOverlay(dashboard, mode) {
   if (!dashboard) return;
-  dashboard.visionMode = dashboard.visionMode === mode ? 'none' : mode;
+  if (mode === 'loose') {
+    dashboard.showLoosePieces = !dashboard.showLoosePieces;
+  } else {
+    dashboard.visionOverlay = dashboard.visionOverlay === mode ? 'none' : mode;
+  }
   dashboard.updateBoardAndControls();
 }
 
 function playFromCurrentPosition(dashboard, overridePly = null) {
   if (!dashboard || !dashboard.game) return;
   const targetPly = typeof overridePly === 'number' ? overridePly : (dashboard.currentPly || 0);
-  const fen = targetPly === 0 ? (dashboard.game.initialFen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') : (dashboard.game.plies[targetPly - 1]?.fen || dashboard.getActiveBoardFen());
-  if (typeof dashboard.onSwitchToBots === 'function') {
-    dashboard.onSwitchToBots(fen, dashboard.game.userColor || 'w');
+  const fen = typeof overridePly === 'number'
+    ? (targetPly === 0
+        ? (dashboard.game.initialFen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
+        : (dashboard.game.plies[targetPly - 1]?.fen || dashboard.getActiveBoardFen()))
+    : dashboard.getActiveBoardFen();
+  const userColor = dashboard.game.userColor || 'w';
+  const targetElo = dashboard.game.userGameElo || (userColor === 'w' ? dashboard.game.whiteElo : dashboard.game.blackElo) || 1200;
+  if (typeof dashboard.onPlayFromFen === 'function') {
+    dashboard.onPlayFromFen(fen, userColor, targetElo);
+  } else if (typeof dashboard.onSwitchToBots === 'function') {
+    dashboard.onSwitchToBots(fen, userColor, targetElo);
   }
 }
 
 function updateModeBanner(dashboard, cur) {
   if (!dashboard || !dashboard.container) return;
-  const bannerEl = dashboard.container.querySelector('#sandbox-banner');
+  const bannerEl = dashboard.container.querySelector('#sandbox-banner') || dashboard.container.querySelector('#pv-banner-area');
   if (!bannerEl) return;
 
   if (dashboard.retryPuzzleState?.active) {

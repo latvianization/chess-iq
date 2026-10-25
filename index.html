@@ -2,7 +2,7 @@
 <html lang="en" data-bs-theme="light">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chess Game Analyzer (Chess.com)</title>
     <meta name="description" content="Web-first chess game analysis app with Stockfish engine evaluation, phase Elo ratings, blunder diagnostics, interactive review dashboard, and 33-bot arena." />
     <meta property="og:title" content="Chess Game Analyzer (Chess.com)" />
@@ -24,31 +24,36 @@
   <body>
     <!-- Top Navigation Bar -->
     <header class="navbar border-bottom sticky-top px-2 px-sm-4 py-1.5 py-sm-2 glass-nav">
-      <div class="container-fluid px-0 d-flex align-items-center justify-content-between flex-nowrap gap-1 gap-sm-3">
+      <div class="container-fluid px-0 d-flex align-items-center justify-content-between flex-nowrap gap-1.5 gap-sm-3">
         <!-- Brand & Mode Switcher -->
         <div class="d-flex align-items-center gap-1.5 gap-sm-3 flex-shrink-0">
-          <a class="navbar-brand d-flex align-items-center gap-1.5 fw-black mb-0 text-decoration-none logo-hover me-0" href="#" id="brand-logo" style="cursor: pointer;" aria-label="Chess IQ Home">
+          <a class="navbar-brand d-flex align-items-center gap-1.5 fw-black mb-0 text-decoration-none logo-hover me-0" href="#" id="brand-logo" data-iq-tip="nav_brand" style="cursor: pointer;" aria-label="Chess IQ Home">
             <span class="arcade-badge-logo">⚡</span>
             <span class="fw-black fs-6 fs-sm-5 tracking-tight font-sans">CHESS<span class="fg-warning">IQ</span></span>
           </a>
 
           <!-- Mode Switcher Pill Group -->
-          <div class="arcade-mode-pills" role="group">
-            <button type="button" class="arcade-pill active" id="nav-mode-review" title="Review Game" aria-label="Review Game">
-              <i class="bi bi-search me-0 me-sm-1"></i><span class="d-none d-sm-inline">Review</span>
+          <div class="arcade-mode-pills" role="group" aria-label="Application Mode">
+            <button type="button" class="arcade-pill active" id="nav-mode-review" data-iq-tip="nav_review" aria-label="Review Game">
+              <i class="bi bi-search me-1"></i><span>Review</span>
             </button>
-            <button type="button" class="arcade-pill" id="nav-mode-bot" title="Play vs Bots" aria-label="Play vs Bots">
-              <i class="bi bi-robot me-0 me-sm-1"></i><span class="d-none d-md-inline">33 </span><span class="d-none d-sm-inline">Bots</span>
+            <button type="button" class="arcade-pill" id="nav-mode-bot" data-iq-tip="nav_bots" aria-label="Play vs Bots">
+              <i class="bi bi-robot me-1"></i><span class="d-none d-md-inline">33 </span><span>Bots</span>
             </button>
           </div>
         </div>
 
-        <!-- Right: Primary Import & Unified Settings Dropdown -->
+        <!-- Right: Primary Import, Guide & Unified Settings Dropdown -->
         <div class="d-flex align-items-center gap-1.5 gap-sm-2 flex-shrink-0">
           <!-- Primary Action: Import Game (Modal Trigger) -->
-          <button type="button" class="arcade-btn-primary px-2.5 px-sm-3.5 py-1.5 d-flex align-items-center justify-content-center gap-1.5" id="nav-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal" title="Import Game" aria-label="Import Game">
+          <button type="button" class="arcade-btn-primary px-2.5 px-sm-3.5 py-1.5 d-flex align-items-center justify-content-center gap-1.5" id="nav-btn-import" data-iq-tip="nav_import" aria-label="Import Game">
             <i class="bi bi-cloud-arrow-up-fill"></i>
-            <span class="d-none d-sm-inline">Import</span>
+            <span>Import</span>
+          </button>
+
+          <!-- Quick Feature Guide Button -->
+          <button class="arcade-btn-icon d-none d-sm-inline-flex" type="button" id="nav-btn-help" data-iq-tip="nav_help" aria-label="Chess IQ Guide and Glossary">
+            <i class="bi bi-question-circle-fill"></i>
           </button>
 
           <!-- Unified Settings & Options Dropdown -->
@@ -56,8 +61,8 @@
             <button class="arcade-btn-icon" type="button" id="nav-options-dropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Settings & Options" aria-label="Settings and Options">
               <i class="bi bi-gear-fill"></i>
             </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-lg py-2" aria-labelledby="nav-options-dropdown" style="min-width: 230px;">
-              <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Display & Theme</li>
+            <ul class="dropdown-menu dropdown-menu-end shadow-lg py-2" aria-labelledby="nav-options-dropdown" style="min-width: 235px;">
+              <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Display & Audio</li>
               <li>
                 <button class="dropdown-item d-flex align-items-center justify-content-between py-1.5 px-3" id="menu-btn-theme" type="button">
                   <span><i class="bi bi-sun-fill me-2 text-warning" id="menu-theme-icon"></i>Theme Mode</span>
@@ -71,6 +76,13 @@
                 </button>
               </li>
               <li><hr class="dropdown-divider my-1.5"></li>
+              <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Help & Storage</li>
+              <li>
+                <button class="dropdown-item d-flex align-items-center justify-content-between py-1.5 px-3" id="menu-btn-guide" type="button">
+                  <span><i class="bi bi-book-half me-2 text-info"></i>Feature & Concept Guide</span>
+                  <span class="badge bg-info text-dark font-monospace">IQ</span>
+                </button>
+              </li>
               <li>
                 <button class="dropdown-item d-flex align-items-center py-1.5 px-3 text-danger" id="menu-btn-clear-cache" type="button">
                   <i class="bi bi-trash3-fill me-2"></i>Clear Saved Data

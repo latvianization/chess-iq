@@ -594,12 +594,12 @@ class BotArena {
         <div class="d-flex flex-column gap-3 w-100 py-1 position-relative">
           <!-- Bot Filter Bar & Search (De-cluttering 33 bots) -->
           <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1 p-2 comic-card">
-            <div class="btn-group btn-group-sm rounded-pill p-0.5 bg-body-tertiary border flex-wrap" role="group" aria-label="Bot Tier Filter">
-              <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-bold ${currentTierFilter === 'all' ? 'btn-warning text-dark' : 'btn-ghost text-secondary'}" data-bot-tier-filter="all">All Tiers (33)</button>
-              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'rookie' ? 'btn-warning text-dark' : 'btn-ghost text-secondary'}" data-bot-tier-filter="rookie">🌱 Rookies</button>
-              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'challenger' ? 'btn-warning text-dark' : 'btn-ghost text-secondary'}" data-bot-tier-filter="challenger">⚡ Challengers</button>
-              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'hero' ? 'btn-warning text-dark' : 'btn-ghost text-secondary'}" data-bot-tier-filter="hero">🦸 Heroes</button>
-              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'titan' ? 'btn-warning text-dark' : 'btn-ghost text-secondary'}" data-bot-tier-filter="titan">👑 Titans</button>
+            <div class="d-flex align-items-center gap-1 flex-wrap p-1 rounded-4 bg-body-tertiary border" role="group" aria-label="Bot Tier Filter">
+              <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-bold ${currentTierFilter === 'all' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-bot-tier-filter="all">All Tiers (33)</button>
+              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'rookie' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-bot-tier-filter="rookie">🌱 Rookies</button>
+              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'challenger' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-bot-tier-filter="challenger">⚡ Challengers</button>
+              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'hero' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-bot-tier-filter="hero">🦸 Heroes</button>
+              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'titan' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-bot-tier-filter="titan">👑 Titans</button>
             </div>
             <div class="d-flex align-items-center gap-1.5 flex-grow-1 max-w-sm ms-auto">
               <div class="input-group input-group-sm">
@@ -736,7 +736,7 @@ class BotArena {
       <div class="d-flex flex-column gap-2 w-100 mx-auto" style="max-width: min(840px, 98vw);">
         <!-- Live Match Banner & Personality Speech Bubble -->
         <div class="arcade-match-strip d-flex align-items-center justify-content-between p-2.5 px-3 rounded-3 flex-wrap gap-2">
-          <div class="d-flex align-items-center gap-2.5 flex-nowrap min-w-0">
+          <div class="d-flex align-items-center gap-2.5 flex-wrap min-w-0">
             <span class="fs-3 lh-1 flex-shrink-0">${this.selectedBot.avatar}</span>
             <div class="flex-shrink-0">
               <div class="d-flex align-items-center gap-1.5 flex-wrap">
@@ -746,7 +746,7 @@ class BotArena {
                 <span class="badge bg-body-secondary text-body fw-bold" style="font-size: 11px;">${this.userColor === 'w' ? '⚪ You play White' : '⚫ You play Black'}</span>
               </div>
             </div>
-            <div class="comic-bubble ms-1 d-none d-md-flex">
+            <div class="comic-bubble ms-sm-1 d-flex">
               <span class="bot-speech-bubble-text">${this.speechText}</span>
             </div>
           </div>

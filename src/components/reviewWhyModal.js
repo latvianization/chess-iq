@@ -89,7 +89,7 @@ async function openWhyModal(dashboard, targetEval = null) {
 
       <div class="row g-3 align-items-stretch">
         <div class="col-12 col-md-7 d-flex flex-column align-items-center">
-          <div id="why-modal-board" style="width: 100%; max-width: min(370px, 42vh); aspect-ratio: 1/1;"></div>
+          <div id="why-modal-board" class="modal-board-container"></div>
           <!-- Step navigation right under board -->
           <div class="w-100 mt-2.5">
             <div class="d-flex align-items-center justify-content-center gap-2 py-1">
