@@ -559,15 +559,26 @@ class ReviewDashboard {
   shareGameReviewLink(btnEl) {
     if (!this.game) return;
     try {
-      const pgn = this.game.pgn || '';
+      let pgn = this.game.pgn || '';
+      if (!pgn && Array.isArray(this.game.plies) && this.game.plies.length > 0) {
+        const moves = this.game.plies.map(p => p.san).filter(Boolean);
+        const white = this.game.white || 'White';
+        const black = this.game.black || 'Black';
+        const res = this.game.result || '*';
+        const date = this.game.date || new Date().toISOString().split('T')[0];
+        pgn = `[Event "Shared Review"]\n[White "${white}"]\n[Black "${black}"]\n[Date "${date}"]\n[Result "${res}"]\n\n` + moves.join(' ');
+      }
+
+      // Compact & sanitize PGN to strip clocks, evaluations and unnecessary headers
+      const cleanPgn = this.sanitizePgnForShare(pgn) || pgn;
       const userColor = this.game.userColor || 'w';
-      const origin = (window.location.origin && window.location.origin !== 'null' && window.location.protocol !== 'file:')
-        ? window.location.origin
-        : '';
-      const path = window.location.pathname || '';
-      const pgnParam = encodeURIComponent(pgn);
+
+      // Always use URL Hash fragment (#pgn=...&color=...) so data is never sent in HTTP request
+      // line headers to the web server, completely avoiding HTTP 414 'URI Too Long' errors!
+      const baseUrl = window.location.href.split('#')[0].split('?')[0];
+      const pgnParam = encodeURIComponent(cleanPgn);
       const colorParam = encodeURIComponent(userColor);
-      const shareUrl = `${origin}${path}?pgn=${pgnParam}&color=${colorParam}`;
+      const shareUrl = `${baseUrl}#pgn=${pgnParam}&color=${colorParam}`;
 
       const onSuccess = () => {
         if (btnEl) {
@@ -593,6 +604,36 @@ class ReviewDashboard {
     } catch (err) {
       console.error('Failed to share game link:', err);
     }
+  }
+
+  sanitizePgnForShare(pgn) {
+    if (!pgn || typeof pgn !== 'string') return '';
+    // Strip inline and clock comments {...}
+    let text = pgn.replace(/\{[^}]*\}/g, ' ');
+    // Strip semicolon comments
+    text = text.replace(/;[^\r\n]*/g, ' ');
+
+    const lines = text.split('\n');
+    const allowedHeaders = /^\s*\[(Event|Site|Date|Round|White|Black|Result|WhiteElo|BlackElo|ECO|TimeControl|FEN|SetUp|BotId|BotName|BotAvatar|GameType)\b/i;
+    const headers = [];
+    const moveLines = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('[')) {
+        if (allowedHeaders.test(trimmed)) {
+          headers.push(trimmed);
+        }
+      } else if (trimmed) {
+        moveLines.push(trimmed);
+      }
+    }
+
+    const movesText = moveLines.join(' ').replace(/\s+/g, ' ').trim();
+    if (headers.length > 0) {
+      return headers.join('\n') + '\n\n' + movesText;
+    }
+    return movesText;
   }
 
   closeWhyModal() {
@@ -2046,6 +2087,172 @@ class ReviewDashboard {
     `;
   }
 
+  openOpeningModal() {
+    if (!this.game) return;
+    const existing = document.getElementById('opening-explorer-modal');
+    if (existing) existing.remove();
+
+    const ecoCode = this.game.ecoCode || 'PGN';
+    const ecoName = this.game.ecoName || 'Chess Opening';
+    const ecoMeta = (typeof getEcoMetadata === 'function')
+      ? getEcoMetadata(ecoCode, ecoName)
+      : {
+          code: ecoCode,
+          name: ecoName,
+          volume: 'Encyclopaedia of Chess Openings',
+          category: 'Standard Chess Opening',
+          theme: 'Standard opening classification in the ECO encyclopedia.',
+          strategicSummary: 'Classical opening principles: contest central squares, develop knights and bishops actively, and secure king safety through castling.',
+          canonicalMoves: [],
+          canonicalMovesStr: '',
+          links: {
+            chess365: `https://www.365chess.com/eco/${encodeURIComponent(ecoCode)}`,
+            lichess: `https://lichess.org/analysis`,
+            chessCom: `https://www.chess.com/openings`
+          }
+        };
+
+    const od = this.game.openingDeviation;
+    const middlegameMove = Math.ceil((this.game.middlegameStartPly || 20) / 2);
+
+    const modal = document.createElement('div');
+    modal.id = 'opening-explorer-modal';
+    modal.className = 'why-modal-backdrop';
+    modal.innerHTML = `
+      <div class="why-dialog opening-explorer-dialog comic-card p-3 p-sm-4 shadow-2xl">
+        <!-- Header -->
+        <div class="d-flex align-items-center justify-content-between pb-2 mb-3 border-bottom" style="border-color: var(--arcade-border) !important;">
+          <div class="d-flex align-items-center gap-2 flex-wrap min-w-0">
+            <span class="badge bg-warning text-dark font-monospace fw-black px-2.5 py-1.5 fs-6">${insEscape(ecoMeta.code)}</span>
+            <div class="min-w-0">
+              <h5 class="fw-black mb-0 text-truncate" style="font-size: 16px;">${insEscape(ecoMeta.name)}</h5>
+              <span class="text-secondary small font-monospace">${insEscape(ecoMeta.volume)} · ${insEscape(ecoMeta.category)}</span>
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm btn-dark comic-btn py-1 px-2.5 fw-bold" id="btn-close-opening-modal" title="Close">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <!-- Body -->
+        <div class="d-flex flex-column gap-2.5">
+          <!-- Strategic Theme Card -->
+          <div class="p-2.5 rounded" style="background: var(--arcade-card); border: 1px solid var(--arcade-border);">
+            <div class="d-flex align-items-center gap-1.5 mb-1.5">
+              <i class="bi bi-compass-fill text-warning fs-6"></i>
+              <strong class="small fw-black text-uppercase" style="letter-spacing: 0.5px;">Opening Strategic Theme</strong>
+            </div>
+            <p class="mb-1.5 small text-body" style="line-height: 1.5;">${insEscape(ecoMeta.theme)}</p>
+            <p class="mb-0 small text-secondary fst-italic" style="font-size: 11.5px; line-height: 1.4;">${insEscape(ecoMeta.strategicSummary)}</p>
+          </div>
+
+          <!-- Theoretical Move Sequence -->
+          ${ecoMeta.canonicalMovesStr ? `
+            <div class="p-2.5 rounded" style="background: var(--arcade-card); border: 1px solid var(--arcade-border);">
+              <div class="d-flex align-items-center justify-content-between mb-1.5">
+                <span class="small fw-black text-uppercase text-secondary" style="font-size: 10.5px; letter-spacing: 0.5px;">
+                  <i class="bi bi-book-half text-primary me-1"></i>Canonical Starting Moves
+                </span>
+                <span class="badge bg-secondary font-monospace" style="font-size: 10px;">${ecoMeta.canonicalMoves.length} plies</span>
+              </div>
+              <div class="font-monospace fw-bold p-2 rounded text-primary" style="background: var(--arcade-surface, rgba(0,0,0,0.06)); font-size: 13px; word-break: break-word;">
+                ${insEscape(ecoMeta.canonicalMovesStr)}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Game Theory Connection -->
+          <div class="p-2.5 rounded" style="background: var(--arcade-card); border: 1px solid var(--arcade-border);">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span class="small fw-black text-uppercase text-secondary" style="font-size: 10.5px; letter-spacing: 0.5px;">
+                <i class="bi bi-shield-check text-success me-1"></i>Match Opening Trajectory
+              </span>
+              <span class="badge bg-secondary font-monospace" style="font-size: 10px;">Phase: Moves 1-${middlegameMove}</span>
+            </div>
+            ${od ? `
+              <div class="small mb-2">
+                The game followed standard theoretical opening lines until <strong>Move ${Math.ceil(od.ply / 2)}${od.ply % 2 === 1 ? '.' : '...'} ${insEscape(od.san)}</strong> (Ply ${od.ply}), where play branched from established theory.
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold py-1 px-2.5 w-100" id="btn-jump-opening-dev" data-dev-ply="${od.ply}">
+                <i class="bi bi-crosshair me-1"></i>Jump to Book Departure on Board (Move ${Math.ceil(od.ply / 2)})
+              </button>
+            ` : `
+              <div class="small text-secondary">
+                Both players transitioned smoothly from the opening into the middlegame phase at Move ${middlegameMove}.
+              </div>
+            `}
+          </div>
+
+          <!-- Why ECO Codes Exist Explanation -->
+          <div class="p-2.5 rounded" style="background: rgba(251, 191, 36, 0.08); border: 1px dashed rgba(245, 158, 11, 0.4);">
+            <div class="d-flex align-items-center gap-1.5 mb-1">
+              <i class="bi bi-lightbulb-fill text-warning"></i>
+              <strong class="small fw-black text-warning text-uppercase" style="font-size: 11px;">What is an ECO Code?</strong>
+            </div>
+            <p class="small mb-0 text-body" style="font-size: 11.5px; line-height: 1.45;">
+              ECO stands for <strong>Encyclopaedia of Chess Openings</strong>. It is an international 5-volume classification system (A00–E99) used by FIDE, Chess.com, and Lichess. Because openings have varied names across languages, ECO codes provide a universal, unambiguous catalog number to study master win rates, opening traps, and pawn structures.
+            </p>
+          </div>
+
+          <!-- External Research Links -->
+          <div class="pt-1">
+            <span class="text-secondary small fw-bold text-uppercase d-block mb-1.5" style="font-size: 10px;">
+              <i class="bi bi-box-arrow-up-right me-1"></i>Study Master Games in External Databases:
+            </span>
+            <div class="d-flex align-items-center gap-1.5 flex-wrap">
+              <a href="${ecoMeta.links.chess365}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary comic-btn fw-bold flex-grow-1 py-1" style="font-size: 11px;">
+                <i class="bi bi-database me-1"></i>365Chess (${insEscape(ecoMeta.code)})
+              </a>
+              <a href="${ecoMeta.links.lichess}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary comic-btn fw-bold flex-grow-1 py-1" style="font-size: 11px;">
+                <i class="bi bi-globe me-1"></i>Lichess Explorer
+              </a>
+              <a href="${ecoMeta.links.chessCom}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary comic-btn fw-bold flex-grow-1 py-1" style="font-size: 11px;">
+                <i class="bi bi-book me-1"></i>Chess.com Openings
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-3 pt-2 border-top d-flex justify-content-end" style="border-color: var(--arcade-border) !important;">
+          <button type="button" class="btn btn-sm btn-secondary comic-btn fw-bold px-3 py-1" id="btn-close-opening-modal-footer">
+            Close
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    document.body.classList.add('modal-open');
+
+    const safeClose = () => {
+      modal.remove();
+      document.body.classList.remove('modal-open');
+    };
+
+    modal.querySelector('#btn-close-opening-modal')?.addEventListener('click', safeClose);
+    modal.querySelector('#btn-close-opening-modal-footer')?.addEventListener('click', safeClose);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) safeClose();
+    });
+
+    modal.querySelector('#btn-jump-opening-dev')?.addEventListener('click', (e) => {
+      const ply = parseInt(e.currentTarget.getAttribute('data-dev-ply'), 10);
+      safeClose();
+      if (!isNaN(ply)) {
+        this.goToPly(ply);
+      }
+    });
+
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        safeClose();
+        window.removeEventListener('keydown', escHandler);
+      }
+    };
+    window.addEventListener('keydown', escHandler);
+  }
+
   openDetailedPerformanceModal() {
     this.openFullReportModal();
   }
@@ -2253,8 +2460,11 @@ class ReviewDashboard {
             <span class="badge bg-warning text-dark font-monospace fw-black px-2.5 py-1.5 fs-6">
               <i class="bi bi-file-earmark-bar-graph-fill me-1.5"></i>Full Game Report
             </span>
-            <span class="badge bg-secondary font-monospace">${this.game.ecoCode || 'PGN'}</span>
-            <span class="fw-black text-truncate" style="max-width: 280px; font-size: 14px;">${insEscape(this.game.ecoName || 'Chess Match')}</span>
+            <button type="button" class="eco-interactive-btn cursor-pointer" id="btn-report-open-eco" data-iq-tip="eco_opening" title="Click to view Opening theory & ECO details">
+              <span class="badge bg-secondary font-monospace eco-code-badge">${this.game.ecoCode || 'PGN'}</span>
+              <span class="fw-black text-truncate eco-name-label" style="max-width: 280px; font-size: 14px;">${insEscape(this.game.ecoName || 'Chess Match')}</span>
+              <i class="bi bi-info-circle text-secondary" style="font-size: 11px;"></i>
+            </button>
           </div>
           <div class="d-flex align-items-center gap-1.5 no-print flex-shrink-0">
             <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-2.5 py-1" id="btn-report-share" title="Share Game Review Link">
@@ -2262,9 +2472,6 @@ class ReviewDashboard {
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary comic-btn fw-bold px-2.5 py-1" id="btn-report-copy" title="Copy Full Report Summary to Clipboard">
               <i class="bi bi-clipboard-check me-1"></i>Copy Summary
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary comic-btn fw-bold px-2.5 py-1" id="btn-report-print" title="Print Game Report">
-              <i class="bi bi-printer me-1"></i>Print
             </button>
             <button type="button" class="btn btn-sm btn-dark comic-btn py-1 px-2.5 fw-bold" id="btn-close-perf-modal" title="Close Report">
               <i class="bi bi-x-lg"></i>
@@ -2795,9 +3002,6 @@ class ReviewDashboard {
               <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-3 py-1" id="btn-report-copy-footer">
                 <i class="bi bi-clipboard-check me-1"></i>Copy Report Summary
               </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary comic-btn fw-bold px-3 py-1" id="btn-report-print-footer">
-                <i class="bi bi-printer me-1"></i>Print / Save
-              </button>
             </div>
             <button type="button" class="btn btn-sm btn-dark comic-btn px-4 py-1 fw-bold" id="btn-report-close-footer">
               Close Report
@@ -2827,6 +3031,9 @@ class ReviewDashboard {
     });
     modal.querySelector('#btn-report-share')?.addEventListener('click', (e) => {
       this.shareGameReviewLink(e.currentTarget);
+    });
+    modal.querySelector('#btn-report-open-eco')?.addEventListener('click', () => {
+      this.openOpeningModal();
     });
 
     // Copy Summary Helper
@@ -2868,8 +3075,6 @@ ${priorityDesc}`;
 
     modal.querySelector('#btn-report-copy')?.addEventListener('click', (e) => copyReportSummary(e.currentTarget));
     modal.querySelector('#btn-report-copy-footer')?.addEventListener('click', (e) => copyReportSummary(e.currentTarget));
-    modal.querySelector('#btn-report-print')?.addEventListener('click', () => window.print());
-    modal.querySelector('#btn-report-print-footer')?.addEventListener('click', () => window.print());
 
     modal.querySelector('#btn-coach-guess-move')?.addEventListener('click', () => {
       closeFn();
@@ -2971,22 +3176,22 @@ ${priorityDesc}`;
           <div class="w-100 my-4 px-1" style="max-width: 1300px; margin-left: auto; margin-right: auto;">
             <div class="d-flex align-items-center justify-content-between mb-3 px-1 gap-2 flex-wrap">
               <div class="d-flex align-items-center gap-2 flex-wrap">
-                <span class="badge bg-warning text-dark border border-dark rounded-pill px-2.5 py-1 fw-bold" style="font-size: 12px;">
+                <span class="badge bg-warning text-dark border border-dark rounded-pill px-2.5 py-1 fw-bold text-nowrap" style="font-size: 12px;">
                   <i class="bi bi-clock-history me-1"></i>Saved Games (${totalCount})
                 </span>
-                <div class="btn-group btn-group-sm rounded-pill p-0.5 bg-body-tertiary border" role="group" aria-label="Game Filter">
-                  <button type="button" class="btn btn-sm rounded-pill px-2.5 py-0.5 fw-bold ${currentFilter === 'all' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-saved-filter="all" style="font-size: 11px;">
+                <div class="btn-group btn-group-sm rounded-pill p-0.5 bg-body-tertiary border flex-nowrap" role="group" aria-label="Game Filter">
+                  <button type="button" class="btn btn-sm rounded-pill px-2.5 py-0.5 fw-bold text-nowrap ${currentFilter === 'all' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-saved-filter="all" style="font-size: 11px;">
                     All (${totalCount})
                   </button>
-                  <button type="button" class="btn btn-sm rounded-pill px-2.5 py-0.5 fw-bold ${currentFilter === 'players' ? 'btn-info text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-saved-filter="players" style="font-size: 11px;">
+                  <button type="button" class="btn btn-sm rounded-pill px-2.5 py-0.5 fw-bold text-nowrap ${currentFilter === 'players' ? 'btn-info text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-saved-filter="players" style="font-size: 11px;">
                     <i class="bi bi-people-fill me-1"></i>vs Players (${playerCount})
                   </button>
-                  <button type="button" class="btn btn-sm rounded-pill px-2.5 py-0.5 fw-bold ${currentFilter === 'bots' ? 'shadow-sm text-white' : 'btn-ghost text-secondary'}" data-saved-filter="bots" style="font-size: 11px; ${currentFilter === 'bots' ? 'background: #8b5cf6; border-color: #8b5cf6;' : ''}">
+                  <button type="button" class="btn btn-sm rounded-pill px-2.5 py-0.5 fw-bold text-nowrap ${currentFilter === 'bots' ? 'shadow-sm text-white' : 'btn-ghost text-secondary'}" data-saved-filter="bots" style="font-size: 11px; ${currentFilter === 'bots' ? 'background: #8b5cf6; border-color: #8b5cf6;' : ''}">
                     <i class="bi bi-robot me-1"></i>vs Bots (${botCount})
                   </button>
                 </div>
               </div>
-              <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2.5 comic-btn fw-bold" id="zero-btn-clear-history" style="font-size: 11px;">
+              <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2.5 comic-btn fw-bold text-nowrap" id="zero-btn-clear-history" style="font-size: 11px;">
                 <i class="bi bi-trash3 me-1"></i>Clear All
               </button>
             </div>
@@ -3011,7 +3216,7 @@ ${priorityDesc}`;
                 `}
               </div>
             ` : `
-              <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+              <div class="row row-cols-1 row-cols-md-2 g-3">
                 ${filteredGames.map((item, idx) => {
                   const isUserWhite = item.userColor === 'w';
                   let resultBadge = '';
@@ -3139,32 +3344,32 @@ ${priorityDesc}`;
                           </div>
                         </div>
 
-                        <div class="d-flex align-items-center gap-2 flex-shrink-0 justify-content-between pt-2 border-top border-opacity-10 mt-auto">
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0 justify-content-between pt-2 border-top border-opacity-10 mt-auto flex-wrap">
                           ${item.type === 'analyzed' ? `
                             <div class="d-flex align-items-center gap-1.5 flex-wrap">
-                              <span class="match-stat-badge match-acc-badge font-monospace"><i class="bi bi-bullseye me-0.5"></i><span class="stat-num">${item.accuracy}%</span> <span class="stat-lbl">Acc</span></span>
-                              <span class="match-stat-badge match-perf-badge font-monospace"><i class="bi bi-star-fill me-0.5"></i><span class="stat-num">${item.elo}</span> <span class="stat-lbl">Perf</span></span>
+                              <span class="match-stat-badge match-acc-badge font-monospace text-nowrap"><i class="bi bi-bullseye me-0.5"></i><span class="stat-num">${item.accuracy}%</span> <span class="stat-lbl">Acc</span></span>
+                              <span class="match-stat-badge match-perf-badge font-monospace text-nowrap"><i class="bi bi-star-fill me-0.5"></i><span class="stat-num">${item.elo}</span> <span class="stat-lbl">Perf</span></span>
                             </div>
                           ` : `
-                            <span class="text-secondary small font-monospace" style="font-size: 11px;">Unanalyzed</span>
+                            <span class="text-secondary small font-monospace text-nowrap" style="font-size: 11px;">Unanalyzed</span>
                           `}
 
-                          <div class="d-flex align-items-center gap-1.5 ms-auto">
+                          <div class="d-flex align-items-center gap-1.5 ms-auto flex-nowrap flex-shrink-0">
                             ${item.isImported ? `
-                              <span class="badge bg-body-secondary text-secondary font-monospace border border-secondary-subtle px-1.5 py-1" style="font-size: 10px;" title="Imported from Chess.com">
-                                <i class="bi bi-cloud-arrow-down-fill me-0.5"></i>Imported
+                              <span class="badge bg-body-secondary text-secondary font-monospace border border-secondary-subtle px-1.5 py-1 text-nowrap d-inline-flex align-items-center" style="font-size: 10px;" title="Imported from Chess.com">
+                                <i class="bi bi-cloud-arrow-down-fill"></i><span class="d-none d-sm-inline ms-1">Imported</span>
                               </span>
                             ` : ''}
-                            <button type="button" class="btn btn-outline-danger btn-sm comic-btn fw-bold px-2 py-1 btn-delete-saved-game" data-game-key="${insEscape(item.key || item.id)}" title="Remove this game and moves from blunder bank" style="font-size: 11px;">
-                              <i class="bi bi-trash3 me-1"></i>Remove
+                            <button type="button" class="btn btn-outline-danger btn-sm comic-btn fw-bold px-2 py-1 btn-delete-saved-game text-nowrap d-inline-flex align-items-center justify-content-center" data-game-key="${insEscape(item.key || item.id)}" title="Remove this game and moves from blunder bank" aria-label="Remove game" style="font-size: 11px;">
+                              <i class="bi bi-trash3"></i><span class="d-none d-sm-inline ms-1">Remove</span>
                             </button>
                             ${item.type === 'analyzed' ? `
-                              <button type="button" class="btn btn-warning btn-sm comic-btn fw-bold px-2.5 py-1" data-action-review="${idx}">
-                                <i class="bi bi-search me-1"></i>Review
+                              <button type="button" class="btn btn-warning btn-sm comic-btn fw-bold px-2.5 py-1 text-nowrap d-inline-flex align-items-center justify-content-center" data-action-review="${idx}" title="Review Game" aria-label="Review Game" style="font-size: 11px;">
+                                <i class="bi bi-search"></i><span class="d-none d-sm-inline ms-1">Review</span>
                               </button>
                             ` : `
-                              <button type="button" class="btn btn-outline-warning btn-sm comic-btn fw-bold px-2.5 py-1" data-action-analyze="${idx}">
-                                <i class="bi bi-lightning-charge-fill me-1"></i>Analyze
+                              <button type="button" class="btn btn-outline-warning btn-sm comic-btn fw-bold px-2.5 py-1 text-nowrap d-inline-flex align-items-center justify-content-center" data-action-analyze="${idx}" title="Analyze Game" aria-label="Analyze Game" style="font-size: 11px;">
+                                <i class="bi bi-lightning-charge-fill"></i><span class="d-none d-sm-inline ms-1">Analyze</span>
                               </button>
                             `}
                           </div>
@@ -3246,19 +3451,19 @@ ${priorityDesc}`;
           } else {
             this.container.querySelectorAll('.btn-delete-saved-game[data-confirming="true"]').forEach((ob) => {
               ob.dataset.confirming = 'false';
-              ob.innerHTML = '<i class="bi bi-trash3 me-1"></i>Remove';
+              ob.innerHTML = '<i class="bi bi-trash3"></i><span class="d-none d-sm-inline ms-1">Remove</span>';
               ob.classList.remove('btn-danger');
               ob.classList.add('btn-outline-danger');
             });
 
             btn.dataset.confirming = 'true';
-            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Confirm?';
+            btn.innerHTML = '<i class="bi bi-check-lg"></i><span class="d-none d-sm-inline ms-1">Confirm?</span>';
             btn.classList.remove('btn-outline-danger');
             btn.classList.add('btn-danger');
             setTimeout(() => {
               if (btn && btn.isConnected && btn.dataset.confirming === 'true') {
                 btn.dataset.confirming = 'false';
-                btn.innerHTML = '<i class="bi bi-trash3 me-1"></i>Remove';
+                btn.innerHTML = '<i class="bi bi-trash3"></i><span class="d-none d-sm-inline ms-1">Remove</span>';
                 btn.classList.remove('btn-danger');
                 btn.classList.add('btn-outline-danger');
               }
@@ -3396,22 +3601,22 @@ ${priorityDesc}`;
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom" style="border-color: var(--arcade-border) !important;">
               <div class="d-flex align-items-center gap-1.5 flex-wrap min-w-0">
                 <span class="match-overview-pill"><i class="bi bi-diagram-3-fill me-1"></i>Overview</span>
-                <span class="badge bg-warning text-dark font-monospace fw-black px-2 py-1">${this.game.ecoCode || 'PGN'}</span>
-                <span class="fw-black text-truncate" style="max-width: 170px; font-size: 13px;">${this.game.ecoName || 'Chess Match'}</span>
+                <button type="button" class="eco-interactive-btn cursor-pointer" id="btn-open-eco-modal" data-iq-tip="eco_opening" title="Click to view Opening theory, moves & ECO classification">
+                  <span class="badge bg-warning text-dark font-monospace fw-black px-2 py-1 eco-code-badge">${this.game.ecoCode || 'PGN'}</span>
+                  <span class="fw-black text-truncate eco-name-label" style="max-width: 170px; font-size: 13px;">${this.game.ecoName || 'Chess Match'}</span>
+                  <i class="bi bi-info-circle text-secondary" style="font-size: 11px;"></i>
+                </button>
                 ${this.game.date ? `<span class="text-secondary small font-monospace d-none sm:inline">· ${this.game.date}</span>` : ''}
               </div>
-              <div class="d-flex align-items-center gap-1 flex-shrink-0">
+              <div class="d-flex align-items-center gap-1.5 flex-shrink-0">
+                <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black px-3 py-1 report-hero-btn" id="btn-open-full-report-modal" title="View Full Performance & Comprehensive Game Report">
+                  <i class="bi bi-file-earmark-bar-graph-fill me-1.5"></i>Game Report
+                </button>
                 <button type="button" class="btn btn-sm btn-outline-warning comic-btn fw-bold px-2 py-0.5" id="btn-share-game-link" title="Share link to this analyzed game review">
                   <i class="bi bi-share-fill me-1"></i>Share Link
                 </button>
-                <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black px-2.5 py-1" id="btn-open-full-report-modal" title="View Full Performance & Comprehensive Game Report">
-                  <i class="bi bi-file-earmark-bar-graph-fill me-1"></i>Report
-                </button>
                 <button type="button" class="btn btn-sm btn-outline-secondary comic-btn fw-bold px-2 py-0.5" id="btn-reanalyze-review" title="Run fresh deep Stockfish analysis">
                   <i class="bi bi-arrow-repeat me-1"></i>Re-analyze
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary comic-btn fw-bold px-2 py-0.5" id="btn-share-review" title="Copy Review Summary to Clipboard">
-                  <i class="bi bi-share"></i>
                 </button>
               </div>
             </div>
@@ -3504,11 +3709,27 @@ ${priorityDesc}`;
               </div>
             </div>
 
-            <!-- Glanceable Phase Snapshot Row -->
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-1.5 mt-2 pt-1.5 border-top border-opacity-10" style="border-color: var(--arcade-border) !important;">
-              <span class="glance-phase-pill"><i class="bi bi-compass me-1 text-primary"></i>Opening: <span class="font-monospace fw-bold">${userOpeningAcc}</span></span>
-              <span class="glance-phase-pill"><i class="bi bi-shield-shaded me-1 text-warning"></i>Middle: <span class="font-monospace fw-bold">${userMiddleAcc}</span></span>
-              <span class="glance-phase-pill"><i class="bi bi-flag-fill me-1 text-success"></i>Endgame: <span class="font-monospace fw-bold">${userEndAcc}</span></span>
+            <!-- Glanceable Phase Snapshot Row (Attributed to YOU) -->
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2 pt-2 border-top border-opacity-10" style="border-color: var(--arcade-border) !important;">
+              <div class="d-flex align-items-center gap-1.5 min-w-0">
+                <span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.5 rounded-pill" style="font-size: 9.5px;">YOU</span>
+                <span class="text-secondary fw-bold text-uppercase" style="font-size: 10px; letter-spacing: 0.5px;">Your Phase Accuracy:</span>
+                ${typeof renderInfoIcon === 'function' ? renderInfoIcon('card_phase_accuracy') : ''}
+              </div>
+              <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                <span class="glance-phase-pill cursor-help" data-iq-tip="phase_opening" title="Your opening move accuracy (Moves 1-${Math.ceil((this.game.middlegameStartPly || 20) / 2)})">
+                  <i class="bi bi-compass me-1 text-primary"></i>Opening: <strong class="font-monospace text-primary">${userOpeningAcc}</strong>
+                  <span class="text-secondary small font-monospace">(${userOpeningElo})</span>
+                </span>
+                <span class="glance-phase-pill cursor-help" data-iq-tip="phase_middle" title="Your middlegame move accuracy">
+                  <i class="bi bi-shield-shaded me-1 text-warning"></i>Middle: <strong class="font-monospace text-warning">${userMiddleAcc}</strong>
+                  <span class="text-secondary small font-monospace">(${userMiddlegameElo})</span>
+                </span>
+                <span class="glance-phase-pill cursor-help" data-iq-tip="phase_endgame" title="Your endgame move accuracy">
+                  <i class="bi bi-flag-fill me-1 text-success"></i>Endgame: <strong class="font-monospace text-success">${userEndAcc}</strong>
+                  <span class="text-secondary small font-monospace">(${userEndgameElo})</span>
+                </span>
+              </div>
             </div>
           </div>
 
@@ -3686,22 +3907,8 @@ ${priorityDesc}`;
       }
     });
 
-    this.container.querySelector('#btn-share-review')?.addEventListener('click', (e) => {
-      const btn = e.currentTarget;
-      const text = `⚡ Chess IQ Game Review
-${this.game.white} (${userAcc}%) vs ${this.game.black} (${oppAcc}%)
-Opening: ${this.game.ecoName || this.game.ecoCode || 'Standard'}
-Total Moves: ${Math.ceil((this.game.plies?.length || 0) / 2)} moves
-Result: ${this.game.result || '*'}`;
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(() => {
-          if (btn) {
-            const orig = btn.innerHTML;
-            btn.innerHTML = `<i class="bi bi-check2 me-1"></i>Copied!`;
-            setTimeout(() => { btn.innerHTML = orig; }, 2000);
-          }
-        });
-      }
+    this.container.querySelector('#btn-open-eco-modal')?.addEventListener('click', () => {
+      this.openOpeningModal();
     });
 
     this.container.querySelector('#btn-open-full-report-modal')?.addEventListener('click', () => {

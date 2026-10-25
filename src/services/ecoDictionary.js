@@ -133,3 +133,117 @@ function getBookContinuations(moveSans, plyIndex) {
   }
   return continuations.slice(0, 3);
 }
+
+const ECO_VOLUMES = {
+  A: {
+    volume: 'Volume A',
+    category: 'Flank Openings & Irregular',
+    theme: 'Flank openings (1.c4 English, 1.Nf3 Réti, Bird), Dutch Defense (1...f5), Benoni, and irregular sidelines.',
+    strategicSummary: 'Hypermodern wing control, asymmetric pawn structures, and active piece play without immediate central pawn clashes.'
+  },
+  B: {
+    volume: 'Volume B',
+    category: 'Semi-Open Games (Non-e5/e6)',
+    theme: 'Sharp asymmetric counters to 1.e4: Sicilian Defense (1...c5), Caro-Kann (1...c6), Pirc (1...d6), and Scandinavian (1...d5).',
+    strategicSummary: 'Imbalanced pawn structures, dynamic queenside counter-play against White\'s central space, and sharp tactical races.'
+  },
+  C: {
+    volume: 'Volume C',
+    category: 'Open Games & French Defense',
+    theme: 'Double King\'s Pawn classical openings (1.e4 e5: Italian Game, Ruy Lopez, Scotch, King\'s Gambit) and French Defense (1.e4 e6).',
+    strategicSummary: 'Rapid piece development, early king castling, direct central tension over d4/e5, and pawn breaks on f4/c5.'
+  },
+  D: {
+    volume: 'Volume D',
+    category: 'Closed & Semi-Closed Games',
+    theme: 'Queen\'s Pawn games (1.d4 d5: Queen\'s Gambit, Slav Defense, Semi-Slav) and Grünfeld Defense (1.d4 Nf6 2.c4 g6 3.Nc3 d5).',
+    strategicSummary: 'Solid positional maneuvering, queen\'s wing minority attacks, central pawn tension, and structural endgame advantages.'
+  },
+  E: {
+    volume: 'Volume E',
+    category: 'Indian Defenses',
+    theme: 'Indian Defenses following 1.d4 Nf6 2.c4: King\'s Indian Defense, Nimzo-Indian, Queen\'s Indian, and Catalan.',
+    strategicSummary: 'Hypermodern central restraint, fierce kingside attacking chances, pawn wedges, and dynamic piece activity.'
+  }
+};
+
+function formatMovesList(moves) {
+  if (!Array.isArray(moves) || moves.length === 0) return '';
+  const tokens = [];
+  for (let i = 0; i < moves.length; i++) {
+    if (i % 2 === 0) {
+      tokens.push(`${Math.floor(i / 2) + 1}.`);
+    }
+    tokens.push(moves[i]);
+  }
+  return tokens.join(' ');
+}
+
+function getEcoMetadata(ecoCode, ecoName) {
+  const code = (ecoCode || 'A00').trim().toUpperCase();
+  const letter = code.charAt(0);
+  const volInfo = ECO_VOLUMES[letter] || {
+    volume: `Volume ${letter}`,
+    category: 'Chess Opening Classification',
+    theme: 'Standard opening classification in the Encyclopaedia of Chess Openings.',
+    strategicSummary: 'Standard opening principles: develop pieces toward the center, castle for king safety, and contest the key central squares.'
+  };
+
+  // Find matching canonical entry in ECO_DATABASE
+  let entry = null;
+  if (ecoName) {
+    const cleanName = ecoName.trim().toLowerCase();
+    entry = ECO_DATABASE.find((e) => e.name && e.name.toLowerCase() === cleanName);
+  }
+  if (!entry && code) {
+    entry = ECO_DATABASE.find((e) => e.eco === code);
+  }
+
+  const moves = entry && entry.moves ? entry.moves : [];
+  const movesStr = formatMovesList(moves);
+
+  const safeCode = encodeURIComponent(code);
+  const safeName = encodeURIComponent((ecoName || entry?.name || code).replace(/,/g, ''));
+
+  return {
+    code,
+    name: ecoName || entry?.name || 'Chess Opening',
+    volume: volInfo.volume,
+    category: volInfo.category,
+    theme: volInfo.theme,
+    strategicSummary: volInfo.strategicSummary,
+    canonicalMoves: moves,
+    canonicalMovesStr: movesStr,
+    links: {
+      chess365: `https://www.365chess.com/eco/${safeCode}`,
+      lichess: `https://lichess.org/opening/${safeName.replace(/%20/g, '_')}`,
+      chessCom: `https://www.chess.com/openings/${safeName.replace(/%20/g, '-')}`
+    }
+  };
+}
+
+if (typeof window !== 'undefined') {
+  window.ECO_DATABASE = ECO_DATABASE;
+  window.findMatchingEco = findMatchingEco;
+  window.isBookMove = isBookMove;
+  window.getBookContinuations = getBookContinuations;
+  window.getEcoMetadata = getEcoMetadata;
+}
+
+if (typeof globalThis !== 'undefined') {
+  globalThis.ECO_DATABASE = ECO_DATABASE;
+  globalThis.findMatchingEco = findMatchingEco;
+  globalThis.isBookMove = isBookMove;
+  globalThis.getBookContinuations = getBookContinuations;
+  globalThis.getEcoMetadata = getEcoMetadata;
+}
+
+if (typeof module !== 'undefined') {
+  module.exports = {
+    ECO_DATABASE,
+    findMatchingEco,
+    isBookMove,
+    getBookContinuations,
+    getEcoMetadata
+  };
+}

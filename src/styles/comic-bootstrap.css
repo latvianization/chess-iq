@@ -1395,6 +1395,20 @@ body::-webkit-scrollbar-button {
   border-color: rgba(139, 92, 246, 0.6) !important;
 }
 
+.saved-game-card .comic-btn,
+.saved-game-card .btn,
+.saved-game-card .badge {
+  white-space: nowrap;
+}
+
+@media (max-width: 575.98px) {
+  .saved-game-card .btn {
+    min-width: 32px;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+}
+
 /* ==========================================================================
    Collectible Bot Cards & Arena Controls
    ========================================================================== */
@@ -2373,6 +2387,79 @@ input[type="range"].arcade-range {
     display: none !important;
   }
 }
+
+/* ==========================================================
+   Hero Full Game Report Button & Opening Explorer Modal
+   ========================================================== */
+
+.report-hero-btn {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+  color: #0f172a !important;
+  border: 2px solid #b45309 !important;
+  font-weight: 900 !important;
+  font-size: 13px !important;
+  letter-spacing: 0.3px;
+  box-shadow: 0 3px 10px rgba(245, 158, 11, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+  transition: all 0.15s ease-in-out !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.report-hero-btn:hover {
+  background: linear-gradient(135deg, #fcd34d 0%, #fbbf24 100%) !important;
+  color: #000000 !important;
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+}
+
+.report-hero-btn:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4) !important;
+}
+
+.report-cta-banner {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.12) 0%, rgba(245, 158, 11, 0.06) 100%);
+  border: 2px dashed rgba(245, 158, 11, 0.45);
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.report-cta-banner:hover {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(245, 158, 11, 0.12) 100%);
+  border-color: #f59e0b;
+  transform: translateY(-1px);
+}
+
+.eco-interactive-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+.eco-interactive-btn:hover .eco-code-badge {
+  filter: brightness(1.1);
+  transform: scale(1.05);
+}
+
+.eco-interactive-btn:hover .eco-name-label {
+  color: var(--arcade-text-highlight, #f59e0b) !important;
+  text-decoration: underline;
+}
+
+.eco-code-badge {
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.opening-explorer-dialog {
+  max-width: 620px !important;
+  width: 100% !important;
+}
+
 
 
 

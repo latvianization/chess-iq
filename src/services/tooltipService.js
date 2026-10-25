@@ -261,6 +261,12 @@ const IQ_TOOLTIPS = {
     what: 'The exact ply where the game departed from established master opening theory in the ECO encyclopedia.',
     why: 'Click to jump to this move. Studying the recommended theoretical book continuations helps you improve your opening repertoire.',
   },
+  eco_opening: {
+    title: 'ECO (Encyclopaedia of Chess Openings) Code',
+    category: 'OPENING THEORY',
+    what: 'The universal international code (A00–E99) categorizing your game\'s opening into one of 5 canonical volumes.',
+    why: 'Click to explore the starting moves, strategic goals, and grandmaster database for this opening on Lichess, 365Chess, and Chess.com.',
+  },
   card_positional_pillars: {
     title: '4-Pillar Positional X-Ray',
     category: 'CARD INFO',
@@ -331,6 +337,12 @@ const IQ_TOOLTIPS = {
     category: 'CARD INFO',
     what: 'Comparative statistical breakdown comparing your play against your opponent across Opening, Middlegame, and Endgame, plus move quality tallies.',
     why: 'Reveals which phase of the game is your strongest or weakest, and shows how many blunders vs brilliant moves both players made.',
+  },
+  card_phase_accuracy: {
+    title: 'Your Phase-by-Phase Move Accuracy',
+    category: 'CARD INFO',
+    what: 'Displays the percentage of engine-accurate moves played specifically by YOU during the Opening, Middlegame, and Endgame.',
+    why: 'Pinpoints exactly which stage of the game you excel at and where you need study (e.g. sharp tactical middlegames vs endgame conversions).',
   },
   phase_opening: {
     title: 'Opening Phase (Moves 1-10+)',
@@ -943,6 +955,12 @@ if (typeof window !== 'undefined') {
   window.renderInfoIcon = renderInfoIcon;
   window.initGlobalTooltips = initGlobalTooltips;
   window.openIqGuideModal = openIqGuideModal;
+}
+if (typeof globalThis !== 'undefined') {
+  globalThis.IQ_TOOLTIPS = IQ_TOOLTIPS;
+  globalThis.renderInfoIcon = renderInfoIcon;
+  globalThis.initGlobalTooltips = initGlobalTooltips;
+  globalThis.openIqGuideModal = openIqGuideModal;
 }
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { IQ_TOOLTIPS, renderInfoIcon, initGlobalTooltips, openIqGuideModal };

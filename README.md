@@ -43,7 +43,7 @@ You don't need to install, compile, or configure anything. Click the link below 
   - ❌ **Blunder (`??`)** — Severe game-altering mistake (>28% win-probability swing; dampened when already winning or hopelessly lost)
   - 🎯 **Missed Win** — Letting an outright winning position slip through your fingers
 - **🏆 "Show Win" Engine Continuation Generator:** Wondering how to finish off a winning position? Click **"Show Win"** at any moment to generate moves until checkmate, forced mate, or an unstoppable advantage (+900cp) with interactive board step-through.
-- **🔗 Shareable Game Review Links:** Click **"Share Link"** to copy a direct review URL with embedded PGN data (`?pgn=...&color=...`). Anyone opening the link gets an instant automated game review with zero manual import required!
+- **🔗 Shareable Game Review Links:** Click **"Share Link"** to copy a direct review URL with embedded sanitized PGN data (`#pgn=...&color=...`). Using URL hash fragments ensures zero server-side URI length errors (bypassing HTTP 414), while stripping clock annotations and unneeded metadata. Anyone opening the link gets an instant automated game review with zero manual import required!
 - **Smooth Animated Eval Bar & Advantage Timeline:** Real-time centipawn and win-percentage visualizer dynamically sized to match the exact height of the chessboard on desktop and mobile. Click anywhere on the interactive timeline chart to jump immediately to that move.
 - **ECO Opening Identification:** Automatic recognition of hundreds of openings and variations (e.g., *Ruy Lopez Closed*, *Sicilian Najdorf*, *Fried Liver Attack*, *King's Indian Defense*).
 

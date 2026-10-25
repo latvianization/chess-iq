@@ -41,6 +41,7 @@ class App {
     this.appMode = 'review'; // 'review' | 'bot'
     this.isDarkMode = false;
     this.isDeepReview = true;
+    this._lastLoadedShareKey = null;
 
     this.reviewDashboard = null;
     this.botArena = null;
@@ -102,22 +103,51 @@ class App {
     if (!hasSharedGame) {
       this.switchMode('review');
     }
+
+    // Reactive handler: listen for hash changes (e.g. user pastes shared game link)
+    window.addEventListener('hashchange', () => {
+      this.checkShareLinkUrl();
+    });
   }
 
   checkShareLinkUrl() {
     try {
-      let params = new URLSearchParams(window.location.search);
-      if (!params.has('pgn') && window.location.hash.includes('pgn=')) {
-        params = new URLSearchParams(window.location.hash.slice(1));
+      let params = null;
+      // 1. Check window.location.hash first (preferred: bypasses web server URI length limits entirely)
+      let hashStr = window.location.hash || '';
+      if (hashStr.startsWith('#')) hashStr = hashStr.slice(1);
+      if (hashStr.includes('pgn=')) {
+        const queryPart = hashStr.includes('?') ? hashStr.slice(hashStr.indexOf('?') + 1) : hashStr;
+        const candidate = new URLSearchParams(queryPart);
+        if (candidate.has('pgn')) params = candidate;
       }
-      const pgn = params.get('pgn');
-      if (pgn && pgn.trim().length > 10) {
-        const userColor = params.get('color') === 'b' ? 'b' : 'w';
-        console.log('[App] Shareable game link detected. Auto-loading game review...');
-        setTimeout(() => {
-          this.runAnalysis(pgn.trim(), userColor);
-        }, 50);
-        return true;
+
+      // 2. Fall back to window.location.search (?pgn=...) for legacy links
+      if (!params) {
+        let searchStr = window.location.search || '';
+        if (searchStr.startsWith('?')) searchStr = searchStr.slice(1);
+        if (searchStr.includes('pgn=')) {
+          const candidate = new URLSearchParams(searchStr);
+          if (candidate.has('pgn')) params = candidate;
+        }
+      }
+
+      if (params) {
+        const pgn = params.get('pgn');
+        if (pgn && pgn.trim().length > 10) {
+          const trimmed = pgn.trim();
+          const userColor = params.get('color') === 'b' ? 'b' : 'w';
+          const shareKey = `${trimmed}_${userColor}`;
+          if (this._lastLoadedShareKey === shareKey) {
+            return true;
+          }
+          this._lastLoadedShareKey = shareKey;
+          console.log('[App] Shareable game link detected. Auto-loading game review...');
+          setTimeout(() => {
+            this.runAnalysis(trimmed, userColor);
+          }, 50);
+          return true;
+        }
       }
     } catch (err) {
       console.warn('[App] Could not parse shareable link:', err);
