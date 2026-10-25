@@ -32,7 +32,7 @@ You don't need to install, compile, or configure anything. Click the link below 
 
 ### 🔍 1. Grandmaster-Level Game Review
 - **Stockfish Engine Evaluation:** Runs entirely in client-side Web Workers for real-time centipawn evaluations and multi-Pv tactical depth without server lag.
-- **Move-by-Move Classifications:** Every move is categorized with distinct badges:
+- **Calibrated Move Classifications (Chess.com Aligned):** Every move is categorized with distinct badges:
   - 💎 **Brilliant (`!!`)** — Sound, decisive material sacrifice leading to an advantage
   - ⚡ **Great (`!`)** — The sole winning continuation in a complex position
   - ⭐ **Best (`★`)** — Exact engine top choice
@@ -40,21 +40,32 @@ You don't need to install, compile, or configure anything. Click the link below 
   - 📖 **Book** — Opening book theory matched via the built-in ECO catalog
   - ⚠️ **Inaccuracy (`?!`)** — Minor slip softening your position
   - ❓ **Mistake (`?`)** — Significant drop in evaluation
-  - ❌ **Blunder (`??`)** — Severe game-altering mistake (>20% win-probability loss)
+  - ❌ **Blunder (`??`)** — Severe game-altering mistake (>28% win-probability swing; dampened when already winning or hopelessly lost)
   - 🎯 **Missed Win** — Letting an outright winning position slip through your fingers
-- **Smooth Animated Eval Bar & Advantage Timeline:** Real-time centipawn and win-percentage visualizer. Click anywhere on the interactive timeline chart to jump immediately to that move.
+- **🏆 "Show Win" Engine Continuation Generator:** Wondering how to finish off a winning position? Click **"Show Win"** at any moment to generate moves until checkmate, forced mate, or an unstoppable advantage (+900cp) with interactive board step-through.
+- **🔗 Shareable Game Review Links:** Click **"Share Link"** to copy a direct review URL with embedded PGN data (`?pgn=...&color=...`). Anyone opening the link gets an instant automated game review with zero manual import required!
+- **Smooth Animated Eval Bar & Advantage Timeline:** Real-time centipawn and win-percentage visualizer dynamically sized to match the exact height of the chessboard on desktop and mobile. Click anywhere on the interactive timeline chart to jump immediately to that move.
 - **ECO Opening Identification:** Automatic recognition of hundreds of openings and variations (e.g., *Ruy Lopez Closed*, *Sicilian Najdorf*, *Fried Liver Attack*, *King's Indian Defense*).
 
 ### ❓ 2. Tactical "Why?" Blunder Diagnostics
 - **Immediate Tactical Refutations:** Wondering why a move was marked as a blunder? Click the **"Why?"** button on any mistake.
+- **Step Controls Right Under the Board:** Step navigation buttons (`|◀`, `◀`, `▶/❚❚`, `▶`, `▶|`) are positioned directly beneath the board for seamless stepping on desktop and mobile.
+- **Interactive "Best Alternative" Line:** Switch to the **Best Alternative** tab to instantly watch the recommended engine move played out on the board with highlighted squares and directional arrows.
 - **5-Move Continuation Lines:** Stockfish calculates and showcases the exact tactical punishment line.
 - **Identified Tactical Motifs:** Instant detection of tactical themes including forks, pins, skewers, discovered attacks, hanging pieces, and mate threats.
-- **Interactive Mini-Board Replay:** Step through the refutation line right inside the modal to visualize the opponent's winning counter-play.
 
 ### 🧠 3. Automated Blunder Bank (Spaced-Repetition Trainer)
 - **Turn Mistakes Into Mastery:** Every inaccuracy, mistake, and blunder made across your analyzed games is automatically saved to your browser's persistent local bank.
+- **Game & Move Management:** Easily remove imported games and purge their associated moves from your Blunder Bank or delete individual puzzle flashcards directly.
 - **Active Drill Flashcards:** Practice finding the exact engine-approved move from your own past positions.
 - **Stats Tracking:** Track how many mistakes you've successfully solved and conquered over time.
+
+### 📱 4. Mobile Gestures & Responsive Polish
+- **Swipe-to-Close Modals:** Swipe horizontally on any modal to dismiss it naturally on touchscreens.
+- **OS Back-Gesture Interception:** Edge-swiping back on mobile devices closes the active modal instead of leaving the application.
+- **Comfortable Margins:** All modals retain generous top and bottom margins, preventing dialogs from sticking to screen borders.
+- **Dynamic Eval Bar Alignment:** The vertical eval bar stays 100% synchronized with the physical height of the chessboard.
+- **Edge Badge Protection:** Comic sticker badges on rank 8 and boundary files stay safely within the board area without clipping.
 
 ### 🎓 4. Coach's Study Plan & "Guess the Move"
 - **Priority Coaching Diagnostic:** Post-game breakdown highlighting your most critical area for improvement (e.g., *Pattern Alert: Hanging Pieces*, *Clock Discipline: 2+ Impulsive Blunders*, or *Endgame Precision Deficit*).
@@ -199,7 +210,8 @@ chess-iq/
     │   ├── pieceSvgs.js         # Scalable vector graphics piece set
     │   ├── reviewAdvantageChart # Interactive evaluation advantage timeline graph
     │   ├── reviewDashboard.js   # Main game review view, phase ratings & coach plan
-    │   └── reviewWhyModal.js    # Interactive blunder refutation & tactical lines
+    │   ├── reviewWhyModal.js    # Interactive blunder refutation & tactical lines
+    │   └── reviewWinningPathModal.js # Engine "Show Win" forced continuation modal
     ├── data/
     │   └── botsData.js          # 33 bot profiles, Elo ratings, depths & banter
     ├── services/
@@ -209,6 +221,7 @@ chess-iq/
     │   ├── engine.js            # Win probability, accuracy & Elo evaluation logic
     │   ├── engineRefutations.js # Tactical threats & continuation calculator
     │   ├── gameCacheService.js  # LocalStorage caching for analyzed games
+    │   ├── modalHelper.js       # Mobile swipe gestures & browser back navigation
     │   ├── sound.js             # Algorithmic Web Audio API sound synthesizer
     │   ├── stockfishWorker.js   # Stockfish Web Worker pool manager
     │   └── tooltipService.js    # Contextual UI explanations & metric glossary
