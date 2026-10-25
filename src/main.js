@@ -358,11 +358,14 @@ class App {
       if (meta?.isBotGame || meta?.bot) {
         analyzedGame.isBotGame = true;
         analyzedGame.isImported = false;
+        analyzedGame.timeControl = '';
         if (meta.bot) {
           analyzedGame.botId = meta.bot.id;
           analyzedGame.botName = meta.bot.name;
           analyzedGame.botAvatar = meta.bot.avatar;
         }
+      } else if (analyzedGame.isBotGame) {
+        analyzedGame.timeControl = '';
       }
 
       console.log('[App] Analysis completed, caching and loading review...');

@@ -9,39 +9,6 @@
     <meta property="og:description" content="Web-first chess game analysis app with Stockfish engine evaluation, phase Elo ratings, blunder diagnostics, interactive review dashboard, and 33-bot arena." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <!-- Tailwind CSS Engine CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        corePlugins: {
-          visibility: false,
-        },
-        darkMode: ['selector', '[data-bs-theme="dark"]'],
-        theme: {
-          extend: {
-            colors: {
-              arcade: {
-                dark: '#0b0e14',
-                surface: '#131722',
-                card: '#1a202c',
-                cardHover: '#232a3b',
-                border: '#2d3748',
-                gold: '#fbbf24',
-                goldHover: '#f59e0b',
-                emerald: '#10b981',
-                rose: '#f43f5e',
-                purple: '#8b5cf6',
-                cyan: '#06b6d4',
-              }
-            },
-            fontFamily: {
-              sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
-              mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
-            }
-          }
-        }
-      }
-    </script>
 
     <!-- CDNs: Bootstrap 5.3.3 & Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
@@ -51,12 +18,12 @@
   <body>
     <!-- Top Navigation Bar -->
     <header class="navbar border-bottom sticky-top px-2 px-sm-4 py-1.5 py-sm-2 glass-nav">
-      <div class="container-fluid px-0 d-flex align-items-center justify-content-between flex-nowrap gap-1 sm:gap-3">
+      <div class="container-fluid px-0 d-flex align-items-center justify-content-between flex-nowrap gap-1 gap-sm-3">
         <!-- Brand & Mode Switcher -->
-        <div class="d-flex align-items-center gap-1.5 sm:gap-3 flex-shrink-0">
+        <div class="d-flex align-items-center gap-1.5 gap-sm-3 flex-shrink-0">
           <a class="navbar-brand d-flex align-items-center gap-1.5 fw-black mb-0 text-decoration-none logo-hover me-0" href="#" id="brand-logo" style="cursor: pointer;" aria-label="Chess IQ Home">
             <span class="arcade-badge-logo">⚡</span>
-            <span class="fw-black fs-6 sm:fs-5 tracking-tight font-sans">CHESS<span class="fg-warning">IQ</span></span>
+            <span class="fw-black fs-6 fs-sm-5 tracking-tight font-sans">CHESS<span class="fg-warning">IQ</span></span>
           </a>
 
           <!-- Mode Switcher Pill Group -->
@@ -71,7 +38,7 @@
         </div>
 
         <!-- Right: Actions & Theme Toggle -->
-        <div class="d-flex align-items-center gap-1 sm:gap-2 flex-shrink-0">
+        <div class="d-flex align-items-center gap-1 gap-sm-2 flex-shrink-0">
           <!-- Sound Toggle (Mute / Unmute) -->
           <button type="button" class="arcade-btn-icon" id="nav-btn-sound" aria-label="Toggle Sound" title="Toggle Sound">
             <i class="bi bi-volume-up-fill" id="sound-toggle-icon"></i>
@@ -88,7 +55,7 @@
           </button>
 
           <!-- Import Game Button (Bootstrap 5 Modal Trigger) -->
-          <button type="button" class="arcade-btn-primary px-2.5 sm:px-3.5 py-1.5 d-flex align-items-center justify-content-center gap-1.5" id="nav-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal" title="Import Game" aria-label="Import Game">
+          <button type="button" class="arcade-btn-primary px-2.5 px-sm-3.5 py-1.5 d-flex align-items-center justify-content-center gap-1.5" id="nav-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal" title="Import Game" aria-label="Import Game">
             <i class="bi bi-cloud-arrow-up-fill"></i>
             <span class="d-none d-sm-inline">Import</span>
           </button>
@@ -97,7 +64,7 @@
     </header>
 
     <!-- Main Application Container -->
-    <main class="container-fluid px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 w-100 app-main-container">
+    <main class="container-fluid px-2 px-sm-3 px-lg-4 py-2 py-sm-2.5 w-100 app-main-container">
       <!-- Mode 1: Review Mode View -->
       <section id="review-view" class="w-100"></section>
 

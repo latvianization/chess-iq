@@ -22,6 +22,26 @@ class ImportModal {
     try {
       const saved = JSON.parse(localStorage.getItem('chess_iq_imported_games') || 'null');
       if (saved && Array.isArray(saved.games) && saved.games.length > 0) {
+        let mod = false;
+        saved.games.forEach((g) => {
+          const isBot = Boolean(
+            g.isBotGame ||
+            (typeof detectBotInGame === 'function' && detectBotInGame(g.white, g.black)) ||
+            (g.white && (g.white.toLowerCase().includes('bot') || g.white.toLowerCase().includes('computer'))) ||
+            (g.black && (g.black.toLowerCase().includes('bot') || g.black.toLowerCase().includes('computer'))) ||
+            (g.pgn && (g.pgn.includes('[GameType "bot"]') || g.pgn.toLowerCase().includes('vs computer')))
+          );
+          if (isBot) {
+            g.isBotGame = true;
+            if (g.timeControl) {
+              g.timeControl = '';
+              mod = true;
+            }
+          }
+        });
+        if (mod) {
+          try { localStorage.setItem('chess_iq_imported_games', JSON.stringify(saved)); } catch {}
+        }
         this.username = saved.username || '';
         this.activeTab = 'chesscom';
         this.fetchedGames = saved.games;
@@ -297,8 +317,22 @@ class ImportModal {
                   resultBadge = `<span class="badge bg-body-secondary text-dark fw-bold px-2 py-1 flex-shrink-0">${g.result}</span>`;
                 }
 
+                const botMatch = typeof detectBotInGame === 'function' ? detectBotInGame(g.white, g.black) : null;
+                const isBotGame = Boolean(
+                  g.isBotGame ||
+                  botMatch ||
+                  g.botId ||
+                  (g.white && (g.white.toLowerCase().includes('bot') || g.white.toLowerCase().includes('computer'))) ||
+                  (g.black && (g.black.toLowerCase().includes('bot') || g.black.toLowerCase().includes('computer'))) ||
+                  (g.pgn && (g.pgn.includes('[GameType "bot"]') || g.pgn.toLowerCase().includes('vs computer')))
+                );
+                if (isBotGame && g.timeControl) {
+                  g.timeControl = '';
+                }
+
+                const hasTimeControl = !isBotGame && g.timeControl && g.timeControl !== '-' && g.timeControl !== 'none' && g.timeControl !== '0';
                 let tcIcon = 'bi-stopwatch';
-                if (g.timeControl && (g.timeControl.includes('+') || !isNaN(Number(g.timeControl)))) {
+                if (hasTimeControl && (g.timeControl.includes('+') || !isNaN(Number(g.timeControl)))) {
                   tcIcon = 'bi-lightning-charge-fill';
                 }
 
@@ -308,12 +342,20 @@ class ImportModal {
                   <div class="imported-game-card ${cardStatusClass} p-3 cursor-pointer w-100 mb-1" data-game-id="${g.id}">
                     <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-light-subtle gap-2 flex-nowrap">
                       <div class="d-flex align-items-center gap-2 overflow-hidden me-auto" style="min-width: 0;">
-                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold flex-shrink-0" style="font-size: 11px;">
-                          <i class="bi ${tcIcon} me-1"></i>${g.timeControl}
-                        </span>
-                        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle fw-bold flex-shrink-0" style="font-size: 10px;">
-                          <i class="bi bi-people-fill me-0.5"></i>vs Player
-                        </span>
+                        ${hasTimeControl ? `
+                          <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold flex-shrink-0" style="font-size: 11px;">
+                            <i class="bi ${tcIcon} me-1"></i>${g.timeControl}
+                          </span>
+                        ` : ''}
+                        ${isBotGame ? `
+                          <span class="badge fw-bold flex-shrink-0" style="font-size: 10px; background: rgba(139, 92, 246, 0.15); color: #8b5cf6; border: 1px solid rgba(139, 92, 246, 0.3);">
+                            <i class="bi bi-robot me-0.5"></i>vs Bot
+                          </span>
+                        ` : `
+                          <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle fw-bold flex-shrink-0" style="font-size: 10px;">
+                            <i class="bi bi-people-fill me-0.5"></i>vs Player
+                          </span>
+                        `}
                         ${this.formatOpeningBadge(g.eco)}
                       </div>
                       <div class="d-flex align-items-center gap-2 flex-shrink-0">
@@ -428,8 +470,27 @@ class ImportModal {
           const userColor = isWhite ? 'w' : 'b';
           const cacheInfo = getGameCacheInfo(game.pgn || game.id, userColor) || getGameCacheInfo(game.id, userColor);
 
+          const botMatch = typeof detectBotInGame === 'function' ? detectBotInGame(game.white, game.black) : null;
+          const isBotGame = Boolean(
+            game.isBotGame ||
+            botMatch ||
+            game.botId ||
+            (game.white && (game.white.toLowerCase().includes('bot') || game.white.toLowerCase().includes('computer'))) ||
+            (game.black && (game.black.toLowerCase().includes('bot') || game.black.toLowerCase().includes('computer'))) ||
+            (game.pgn && (game.pgn.includes('[GameType "bot"]') || game.pgn.toLowerCase().includes('vs computer')))
+          );
+          const meta = isBotGame ? {
+            isBotGame: true,
+            bot: botMatch || {
+              id: game.botId || 'bot',
+              name: game.botName || (isWhite ? game.black : game.white),
+              avatar: game.botAvatar || '🤖',
+              elo: isWhite ? game.blackElo : game.whiteElo
+            }
+          } : null;
+
           if (cacheInfo) {
-            this.onSelectPgn(game.pgn, userColor);
+            this.onSelectPgn(game.pgn || game.id, userColor, meta);
             return;
           }
 
@@ -446,7 +507,7 @@ class ImportModal {
           card.style.opacity = '1';
           card.classList.add('border-warning');
           setTimeout(() => {
-            this.onSelectPgn(game.pgn, userColor);
+            this.onSelectPgn(game.pgn || game.id, userColor, meta);
           }, 40);
         }
       });

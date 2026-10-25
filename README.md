@@ -235,7 +235,7 @@ chess-iq/
 
 - **[Stockfish.js](https://github.com/nmrugg/stockfish.js)** — Powerful chess engine compiled to WebAssembly / Web Workers.
 - **[Chess.js](https://github.com/jhlywa/chess.js)** — Chess rules, move validation, PGN parsing, and board state generation.
-- **[Tailwind CSS](https://tailwindcss.com/) & [Bootstrap 5](https://getbootstrap.com/)** — Responsive layout, modal architecture, and modern utility styling.
+- **[Bootstrap 5](https://getbootstrap.com/) & Native Cyber-Toon CSS** — Responsive layout, modal architecture, and zero-build utility styling without external CSS compilation.
 - **Web Audio API** — Real-time synthesized acoustic feedback with zero asset load time.
 - **HTML5 Web Workers** — Multithreaded evaluation keeping the board and UI responsive at 60 FPS.
 

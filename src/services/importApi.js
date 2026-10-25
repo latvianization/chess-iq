@@ -91,11 +91,28 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
   const resultRaw = header["Result"] || "*";
   const result = ["1-0", "0-1", "1/2-1/2"].includes(resultRaw) ? resultRaw : "*";
   const date = header["Date"] || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-  const timeControl = header["TimeControl"] || "300+0";
+  const rawTc = header["TimeControl"] || "";
   const gameType = header["GameType"] || (header["Event"] && header["Event"].toLowerCase().includes("bot") ? "bot" : null);
   const botId = header["BotId"] || null;
   const botName = header["BotName"] || null;
   const botAvatar = header["BotAvatar"] || null;
+  const botMatch = typeof detectBotInGame === 'function' ? detectBotInGame(white, black) : null;
+  const isBotGame = Boolean(
+    gameType === "bot" ||
+    botId ||
+    botMatch ||
+    (header["Event"] && (header["Event"].toLowerCase().includes("bot") || header["Event"].toLowerCase().includes("vs computer"))) ||
+    (white && (white.toLowerCase().includes("bot") || white.toLowerCase().includes("computer") || white === "You")) ||
+    (black && (black.toLowerCase().includes("bot") || black.toLowerCase().includes("computer") || black === "You"))
+  );
+  let timeControl = "";
+  if (!isBotGame) {
+    if (rawTc && rawTc !== "-" && rawTc.toLowerCase() !== "none" && rawTc !== "0") {
+      timeControl = rawTc;
+    } else if (!rawTc) {
+      timeControl = "300+0";
+    }
+  }
   const { moves: parsedMoves, clocks } = extractMovesAndClocks(pgn);
   let moveHistory = chess.history({ verbose: true });
   if (moveHistory.length === 0 && parsedMoves.length > 0) {
@@ -627,7 +644,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
     userColor,
     result,
     date,
-    timeControl,
+    timeControl: isBotGame ? "" : timeControl,
     ecoCode,
     ecoName,
     initialFen,
@@ -658,10 +675,10 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
     opponentCounts,
     impulsiveBlunders,
     timeTroubleBlunders,
-    isBotGame: Boolean(gameType === "bot" || botId || (typeof detectBotInGame === 'function' && detectBotInGame(white, black))),
-    botId: botId || null,
-    botName: botName || null,
-    botAvatar: botAvatar || null
+    isBotGame,
+    botId: botId || (botMatch ? botMatch.id : null),
+    botName: botName || (botMatch ? botMatch.name : (isBotGame ? (white.toLowerCase().includes('bot') ? white : black) : null)),
+    botAvatar: botAvatar || (botMatch ? botMatch.avatar : (isBotGame ? '🤖' : null))
   };
 
   if (typeof syncGameToBlunderBank === "function") {
@@ -681,6 +698,25 @@ function mapChessComGame(g, idx) {
   if (g.white?.result === "win") res = "1-0";
   else if (g.black?.result === "win") res = "0-1";
   else if (CHESSCOM_DRAW_RESULTS.includes(g.white?.result)) res = "1/2-1/2";
+
+  const botMatch = typeof detectBotInGame === 'function' ? detectBotInGame(whiteName, blackName) : null;
+  const isBotGame = Boolean(
+    botMatch ||
+    (whiteName && (whiteName.toLowerCase().includes("bot") || whiteName.toLowerCase().includes("computer"))) ||
+    (blackName && (blackName.toLowerCase().includes("bot") || blackName.toLowerCase().includes("computer"))) ||
+    (g.pgn && (g.pgn.includes('[GameType "bot"]') || g.pgn.toLowerCase().includes("vs computer"))) ||
+    (g.url && g.url.includes("/computer/"))
+  );
+
+  let tc = "";
+  if (!isBotGame) {
+    if (g.time_control && g.time_control !== "-" && g.time_control !== "none" && g.time_control !== "0") {
+      tc = g.time_control;
+    } else if (g.time_class && g.time_class !== "unrated") {
+      tc = g.time_class.charAt(0).toUpperCase() + g.time_class.slice(1);
+    }
+  }
+
   return {
     id: `chesscom_${g.url ? g.url.split("/").pop() : idx}`,
     platform: "chesscom",
@@ -691,9 +727,13 @@ function mapChessComGame(g, idx) {
     result: res,
     date: g.end_time ? new Date(g.end_time * 1e3).toISOString().split("T")[0] : "Recent",
     endTime: g.end_time ? g.end_time * 1e3 : 0,
-    timeControl: g.time_control || "Rapid",
+    timeControl: tc,
     eco: g.eco || "C50",
-    pgn: g.pgn || ""
+    pgn: g.pgn || "",
+    isBotGame,
+    botId: botMatch ? botMatch.id : null,
+    botName: botMatch ? botMatch.name : (isBotGame ? (whiteName.toLowerCase().includes('bot') ? whiteName : blackName) : null),
+    botAvatar: botMatch ? botMatch.avatar : (isBotGame ? '🤖' : null)
   };
 }
 

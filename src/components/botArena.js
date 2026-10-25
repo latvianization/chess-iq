@@ -329,6 +329,7 @@ class BotArena {
       this.chess.header('BlackElo', isUserWhite ? String(this.selectedBot.elo) : '1500');
       this.chess.header('Result', result);
       this.chess.header('GameType', 'bot');
+      this.chess.header('TimeControl', '-');
       this.chess.header('BotId', this.selectedBot.id);
       this.chess.header('BotName', this.selectedBot.name);
       this.chess.header('BotAvatar', this.selectedBot.avatar);
@@ -351,7 +352,7 @@ class BotArena {
         moveStr += `${moveNum}. ${moves[i]} ${moves[i + 1] || ''} `;
       }
       const fenHeaders = this.customStartFen ? `[SetUp "1"]\n[FEN "${this.customStartFen}"]\n` : '';
-      const botHeaders = `[Event "Vs Bot: ${this.selectedBot.name}"]\n[Site "Chess IQ Bot Arena"]\n[GameType "bot"]\n[BotId "${this.selectedBot.id}"]\n[BotName "${this.selectedBot.name}"]\n[BotAvatar "${this.selectedBot.avatar}"]\n`;
+      const botHeaders = `[Event "Vs Bot: ${this.selectedBot.name}"]\n[Site "Chess IQ Bot Arena"]\n[GameType "bot"]\n[TimeControl "-"]\n[BotId "${this.selectedBot.id}"]\n[BotName "${this.selectedBot.name}"]\n[BotAvatar "${this.selectedBot.avatar}"]\n`;
       pgn = `${botHeaders}[White "${isUserWhite ? userName : botName}"]\n[Black "${isUserWhite ? botName : userName}"]\n[WhiteElo "${isUserWhite ? '1500' : this.selectedBot.elo}"]\n[BlackElo "${isUserWhite ? this.selectedBot.elo : '1500'}"]\n[Result "${result}"]\n${fenHeaders}\n${moveStr.trim()} ${result}`;
     }
     return pgn;

@@ -53,7 +53,30 @@ function getGameCacheKey(gameIdOrPgn, userColor = 'w') {
 
 function getCacheIndex() {
   try {
-    return JSON.parse(localStorage.getItem(INDEX_KEY) || '[]');
+    const list = JSON.parse(localStorage.getItem(INDEX_KEY) || '[]');
+    let modified = false;
+    list.forEach((item) => {
+      const isBot = Boolean(
+        item.isBotGame ||
+        item.botId ||
+        (typeof detectBotInGame === 'function' && detectBotInGame(item.white, item.black)) ||
+        item.white === 'You' || item.black === 'You'
+      );
+      if (isBot) {
+        if (!item.isBotGame) {
+          item.isBotGame = true;
+          modified = true;
+        }
+        if (item.timeControl) {
+          item.timeControl = '';
+          modified = true;
+        }
+      }
+    });
+    if (modified) {
+      try { localStorage.setItem(INDEX_KEY, JSON.stringify(list)); } catch {}
+    }
+    return list;
   } catch {
     return [];
   }
@@ -135,15 +158,20 @@ function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
     const pgnToSave = analyzedGame.pgn || (typeof gameIdOrPgn === 'string' && (gameIdOrPgn.includes(' ') || gameIdOrPgn.includes('\n') || gameIdOrPgn.includes('.')) ? gameIdOrPgn : '');
     analyzedGame.pgn = pgnToSave;
 
-    const serialized = JSON.stringify(analyzedGame);
-    localStorage.setItem(`${GAME_PREFIX}${key}`, serialized);
-
     const botMatch = detectBotInGame(analyzedGame.white, analyzedGame.black);
     const isBot = Boolean(
       analyzedGame.isBotGame ||
       botMatch ||
       (analyzedGame.white === 'You' || analyzedGame.black === 'You')
     );
+    if (isBot) {
+      analyzedGame.isBotGame = true;
+      analyzedGame.timeControl = '';
+    }
+
+    const serialized = JSON.stringify(analyzedGame);
+    localStorage.setItem(`${GAME_PREFIX}${key}`, serialized);
+
     const isImported = Boolean(
       analyzedGame.isImported ||
       (analyzedGame.id && String(analyzedGame.id).startsWith('chesscom_')) ||
@@ -166,7 +194,7 @@ function saveCachedGame(gameIdOrPgn, userColor, analyzedGame) {
       elo: analyzedGame.overallGameElo || 1500,
       eco: analyzedGame.eco || '',
       ecoName: analyzedGame.ecoName || '',
-      timeControl: analyzedGame.timeControl || '',
+      timeControl: isBot ? '' : (analyzedGame.timeControl || ''),
       savedAt: Date.now(),
       isBotGame: isBot,
       botId: analyzedGame.botId || (botMatch ? botMatch.id : null),

@@ -1363,7 +1363,7 @@ class ReviewDashboard {
                 </div>
 
                 <!-- Pro Tip -->
-                <div class="small text-body-secondary d-flex align-items-center gap-1.5 pt-1 font-italic" style="font-size: 11px;">
+                <div class="small text-body-secondary d-flex align-items-center gap-1.5 pt-1 fst-italic" style="font-size: 11px;">
                   <i class="bi bi-lightbulb-fill text-warning flex-shrink-0"></i>
                   <span><strong>Coach Tip:</strong> ${insEscape(pil.tip)}</span>
                 </div>
@@ -1877,10 +1877,11 @@ class ReviewDashboard {
         (item.pgn && importedPgns.has(String(item.pgn).trim()))
       );
 
-      const botMatch = !isImported && typeof detectBotInGame === 'function' ? detectBotInGame(item.white, item.black) : null;
-      const isBotGame = !isImported && Boolean(
+      const botMatch = typeof detectBotInGame === 'function' ? detectBotInGame(item.white, item.black) : null;
+      const isBotGame = Boolean(
         item.isBotGame ||
         botMatch ||
+        item.botId ||
         (item.white === 'You' || item.black === 'You')
       );
 
@@ -1911,7 +1912,7 @@ class ReviewDashboard {
         elo: item.elo || 1500,
         eco: item.eco || '',
         ecoName: item.ecoName || '',
-        timeControl: item.timeControl || '',
+        timeControl: isBotGame ? '' : (item.timeControl || ''),
         savedAt: item.savedAt || 0,
         isImported,
         isBotGame,
@@ -1928,6 +1929,27 @@ class ReviewDashboard {
             const isUserWhite = g.white && g.white.toLowerCase() === username;
             const isUserBlack = g.black && g.black.toLowerCase() === username;
             const userColor = isUserWhite ? 'w' : (isUserBlack ? 'b' : 'w');
+
+            const botMatch = typeof detectBotInGame === 'function' ? detectBotInGame(g.white, g.black) : null;
+            const isBotGame = Boolean(
+              g.isBotGame ||
+              botMatch ||
+              g.botId ||
+              (g.white && (g.white.toLowerCase().includes('bot') || g.white.toLowerCase().includes('computer'))) ||
+              (g.black && (g.black.toLowerCase().includes('bot') || g.black.toLowerCase().includes('computer'))) ||
+              (g.pgn && (g.pgn.includes('[GameType "bot"]') || g.pgn.toLowerCase().includes('vs computer')))
+            );
+
+            let botInfo = botMatch;
+            if (!botInfo && isBotGame) {
+              const botRawName = isUserWhite ? g.black : g.white;
+              botInfo = {
+                name: g.botName || botRawName || 'Bot',
+                avatar: g.botAvatar || '🤖',
+                elo: isUserWhite ? g.blackElo : g.whiteElo
+              };
+            }
+
             list.push({
               type: 'imported',
               id: g.id,
@@ -1942,11 +1964,11 @@ class ReviewDashboard {
               userColor,
               eco: g.eco || '',
               ecoName: '',
-              timeControl: g.timeControl || '',
+              timeControl: isBotGame ? '' : (g.timeControl || ''),
               savedAt: g.endTime || 0,
               isImported: true,
-              isBotGame: false,
-              botInfo: null
+              isBotGame,
+              botInfo
             });
           }
         });
@@ -2484,7 +2506,11 @@ class ReviewDashboard {
           <div class="d-flex align-items-center gap-2 flex-wrap">
             <span><i class="bi bi-calendar3 me-1 text-secondary"></i><strong class="font-monospace">${this.game.date || 'Recent Match'}</strong></span>
             <span class="text-secondary opacity-50">·</span>
-            <span><i class="bi bi-stopwatch me-1 text-secondary"></i><strong class="font-monospace">${this.game.timeControl || 'Standard'}</strong></span>
+            ${this.game.isBotGame ? `
+              <span><i class="bi bi-robot me-1 text-secondary"></i><strong class="font-monospace">Untimed</strong></span>
+            ` : `
+              <span><i class="bi bi-stopwatch me-1 text-secondary"></i><strong class="font-monospace">${this.game.timeControl || 'Standard'}</strong></span>
+            `}
             <span class="text-secondary opacity-50">·</span>
             <span><i class="bi bi-trophy-fill me-1 text-warning"></i><strong class="font-monospace">${resTitle}</strong></span>
           </div>
@@ -2810,7 +2836,7 @@ class ReviewDashboard {
                                   ${comic.symbol}
                                 </span>
                                 <span class="font-monospace fw-black small">${moveNum}${dots}${insEscape(m.san)}</span>
-                                ${bestSan ? `<span class="text-secondary small font-monospace d-none sm:inline">→ <strong class="text-success">${insEscape(bestSan)}</strong></span>` : ''}
+                                ${bestSan ? `<span class="text-secondary small font-monospace d-none d-sm-inline">→ <strong class="text-success">${insEscape(bestSan)}</strong></span>` : ''}
                               </div>
                               <button type="button" class="btn btn-xs btn-outline-secondary comic-btn py-0.5 px-2 fw-bold flex-shrink-0" data-report-jump="${m.ply}">
                                 View <i class="bi bi-arrow-right ms-0.5"></i>
@@ -3042,7 +3068,7 @@ class ReviewDashboard {
 Match: ${this.game.white || 'White'} (${whiteElo}) vs ${this.game.black || 'Black'} (${blackElo})
 Result: ${resTitle}
 ECO: ${this.game.ecoCode || 'PGN'} · ${this.game.ecoName || 'Chess Match'}
-Date: ${this.game.date || 'Recent Match'} | Time Control: ${this.game.timeControl || 'Standard'}
+Date: ${this.game.date || 'Recent Match'} | Time Control: ${this.game.isBotGame ? 'Untimed (No limit)' : (this.game.timeControl || 'Standard')}
 Moves: ${totalMoves} moves (${totalPlies} plies)
 
 📊 PERFORMANCE & ACCURACY:
@@ -3118,7 +3144,7 @@ ${priorityDesc}`;
         : 'Starting Stockfish analysis...';
       const stepText = total > 0 ? `${current} / ${total} plies` : 'Initializing...';
       this.container.innerHTML = `
-        <div class="d-flex flex-column align-items-center justify-content-center p-4 sm:p-5 text-center comic-card max-w-xl mx-auto my-5 shadow-lg" id="review-analysis-card">
+        <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-xl mx-auto my-5 shadow-lg" id="review-analysis-card">
           <div class="spinner-border text-warning mb-3" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
           <h4 class="fw-black mb-1">Analyzing Game with Stockfish...</h4>
           <p class="fg-secondary small mb-3 fw-bold" id="review-analysis-subtitle">${subtitle}</p>
@@ -3150,7 +3176,7 @@ ${priorityDesc}`;
 
       const bankStats = typeof getBlunderBankStats === 'function' ? getBlunderBankStats() : { total: 0, due: 0 };
       this.container.innerHTML = `
-        <div class="d-flex flex-column align-items-center justify-content-center p-4 sm:p-5 text-center comic-card max-w-2xl mx-auto my-4">
+        <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-2xl mx-auto my-4">
           <div class="badge bg-warning text-dark border border-dark rounded-4 p-3 fs-1 mb-3 shadow-sm d-inline-flex align-items-center justify-content-center" style="width: 72px; height: 72px;">
             <span class="lh-1" style="font-size: 2.25rem;">♟</span>
           </div>
@@ -3328,7 +3354,7 @@ ${priorityDesc}`;
                               ${typeBadge}
                             </div>
                             <div class="d-flex align-items-center gap-1 flex-shrink-0">
-                              ${item.timeControl ? `<span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;"><i class="bi bi-clock me-0.5"></i>${insEscape(item.timeControl)}</span>` : ''}
+                              ${!item.isBotGame && item.timeControl && item.timeControl !== '-' && item.timeControl !== 'none' && item.timeControl !== '0' ? `<span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;"><i class="bi bi-clock me-0.5"></i>${insEscape(item.timeControl)}</span>` : ''}
                               <span class="text-secondary small font-monospace text-nowrap" style="font-size: 11px;">${insEscape(item.date)}</span>
                             </div>
                           </div>
@@ -3576,13 +3602,13 @@ ${priorityDesc}`;
                 <i class="bi bi-chevron-bar-left fs-6"></i>
               </button>
               <button type="button" class="btn btn-light arcade-step-btn-lg flex-grow-1" id="btn-prev" title="Previous Move (← / ↑ Arrow)">
-                <i class="bi bi-chevron-left fs-5 fw-black me-1"></i><span class="small fw-black d-none sm:inline">Prev</span>
+                <i class="bi bi-chevron-left fs-5 fw-black me-1"></i><span class="small fw-black d-none d-sm-inline">Prev</span>
               </button>
 
-              <span class="badge bg-secondary font-monospace px-2.5 sm:px-3 py-1.5 fs-6 fw-bold flex-shrink-0" id="ply-counter">0 / 0</span>
+              <span class="badge bg-secondary font-monospace px-2.5 px-sm-3 py-1.5 fs-6 fw-bold flex-shrink-0" id="ply-counter">0 / 0</span>
 
               <button type="button" class="btn btn-light arcade-step-btn-lg flex-grow-1" id="btn-next" title="Next Move (→ / ↓ Arrow)">
-                <span class="small fw-black d-none sm:inline me-1">Next</span><i class="bi bi-chevron-right fs-5 fw-black"></i>
+                <span class="small fw-black d-none d-sm-inline me-1">Next</span><i class="bi bi-chevron-right fs-5 fw-black"></i>
               </button>
               <button type="button" class="btn btn-light arcade-step-btn-sm" id="btn-last" title="Last Move (End / Ctrl+→)">
                 <i class="bi bi-chevron-bar-right fs-6"></i>
@@ -3606,7 +3632,7 @@ ${priorityDesc}`;
                   <span class="fw-black text-truncate eco-name-label" style="max-width: 170px; font-size: 13px;">${this.game.ecoName || 'Chess Match'}</span>
                   <i class="bi bi-info-circle text-secondary" style="font-size: 11px;"></i>
                 </button>
-                ${this.game.date ? `<span class="text-secondary small font-monospace d-none sm:inline">· ${this.game.date}</span>` : ''}
+                ${this.game.date ? `<span class="text-secondary small font-monospace d-none d-sm-inline">· ${this.game.date}</span>` : ''}
               </div>
               <div class="d-flex align-items-center gap-1.5 flex-shrink-0">
                 <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black px-3 py-1 report-hero-btn" id="btn-open-full-report-modal" title="View Full Performance & Comprehensive Game Report">
