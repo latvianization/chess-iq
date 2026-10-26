@@ -9,6 +9,7 @@ class ReviewDashboard {
   constructor(containerEl, options = {}) {
     this.container = containerEl;
     this.onOpenImport = options.onOpenImport || null;
+    this.onBackToImportedGames = options.onBackToImportedGames || options.onOpenImport || null;
     this.onSwitchToBots = options.onSwitchToBots || null;
     this.onPlayFromFen = options.onPlayFromFen || null;
     this.onSelectGame = options.onSelectGame || null;
@@ -46,7 +47,46 @@ class ReviewDashboard {
     });
 
     this.initKeyboardNavigation();
+    this.initTouchNavigation();
     this.render();
+  }
+
+  initTouchNavigation() {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchDeltaX = 0;
+    let touchDeltaY = 0;
+    let isBoardDrag = false;
+
+    this.container.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchDeltaX = 0;
+      touchDeltaY = 0;
+      isBoardDrag = Boolean(e.target.closest('#review-board-mount') && this.board?.interactive);
+    }, { passive: true });
+
+    this.container.addEventListener('touchmove', (e) => {
+      if (e.touches.length !== 1) return;
+      touchDeltaX = e.touches[0].clientX - touchStartX;
+      touchDeltaY = e.touches[0].clientY - touchStartY;
+    }, { passive: true });
+
+    this.container.addEventListener('touchend', () => {
+      if (!this.game) return;
+      if (document.querySelector('.modal.show') || document.querySelector('.why-modal-backdrop') || document.body.classList.contains('modal-open')) return;
+
+      const isEdgeSwipe = touchStartX < 50;
+      if ((isEdgeSwipe || !isBoardDrag) && touchDeltaX > 70 && Math.abs(touchDeltaX) > Math.abs(touchDeltaY) * 1.3) {
+        if (typeof this.onBackToImportedGames === 'function') {
+          this.onBackToImportedGames();
+        }
+      }
+      touchDeltaX = 0;
+      touchDeltaY = 0;
+      isBoardDrag = false;
+    }, { passive: true });
   }
 
   initKeyboardNavigation() {
@@ -1389,16 +1429,16 @@ class ReviewDashboard {
         </div>
       </div>
 
-      <!-- 3. Move Pace & Time-Trouble Diagnostic -->
-      <div class="comic-card p-2.5 mb-2">
-        <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
-          <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
-            <i class="bi bi-stopwatch-fill text-info me-1"></i>Move Pace & Clock Diagnostic
-          </span>
-          <span class="badge bg-secondary font-monospace" style="font-size: 9.5px;">${timedMoves > 0 ? 'Clock Tracked' : 'No Clocks'}</span>
-        </div>
-        ${timedMoves > 0 ? `
-          <div class="row g-2 mb-2">
+      ${timedMoves > 0 ? `
+        <!-- 3. Move Pace & Time-Trouble Diagnostic -->
+        <div class="comic-card p-2.5 mb-2">
+          <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
+            <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
+              <i class="bi bi-stopwatch-fill text-info me-1"></i>Move Pace & Clock Diagnostic
+            </span>
+            <span class="badge bg-secondary font-monospace" style="font-size: 9.5px;">Clock Tracked</span>
+          </div>
+          <div class="row g-2">
             <div class="col-4 text-center p-1.5 rounded" style="background: rgba(0,0,0,0.03);">
               <div class="text-secondary small font-monospace" style="font-size: 10px;">Avg Time</div>
               <div class="fw-black font-monospace fs-6 text-info">${avgTime}s</div>
@@ -1412,41 +1452,21 @@ class ReviewDashboard {
               <div class="fw-black font-monospace fs-6 ${timeTroubleCount > 0 ? 'text-danger' : 'text-success'}">${timeTroubleCount}</div>
             </div>
           </div>
-          <p class="small text-secondary mb-0 leading-relaxed font-medium" style="font-size: 11.5px;">
-            ${impulsiveCount > 0
-              ? `⚡ <strong>Pace Alert:</strong> ${impulsiveCount} error(s) occurred when playing under 2 seconds. In complex positions, pause and verify opponent threats before committing!`
-              : timeTroubleCount > 0
-                ? `⏳ <strong>Time Trouble:</strong> Mistakes occurred under clock pressure. Focus on faster opening recall to preserve clock stamina for the endgame!`
-                : `✅ <strong>Solid Clock Discipline:</strong> No rushed blunders detected. Pace was steady and well-proportioned across phases.`}
-          </p>
-        ` : `
-          <p class="small text-secondary mb-0 leading-relaxed font-medium" style="font-size: 11.5px;">
-            <i class="bi bi-info-circle me-1 text-info"></i>
-            This match was reviewed without clock timestamps. When importing games from Chess.com with live clocks, Chess IQ tracks your time discipline and impulsive moves automatically.
-          </p>
-        `}
-      </div>
+        </div>
+      ` : ''}
 
       <!-- 3.5. Turning Point & Opening Departure Callouts -->
       <div class="mb-2">
         ${this.buildCoachingCallouts()}
       </div>
 
-      <!-- 4. Coach's Prescription & Actionable Drills -->
+      <!-- 4. Practice & Actionable Drills -->
       <div class="comic-card p-2.5">
         <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
           <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
-            <i class="bi bi-mortarboard-fill text-warning me-1"></i>Coach's Prescription
+            <i class="bi bi-mortarboard-fill text-warning me-1"></i>Practice & Drills
           </span>
-          <button type="button" class="btn btn-xs btn-outline-warning comic-btn py-0 px-2 fw-bold" id="btn-coach-full-report" style="font-size: 10px;">
-            Report <i class="bi bi-arrow-right ms-0.5"></i>
-          </button>
         </div>
-        <p class="small text-secondary mb-2.5 font-medium leading-relaxed" style="font-size: 11.5px;">
-          ${totalErrors > 0
-            ? `You have <strong>${totalErrors} key tactical moments</strong> to reinforce from this match. Active practice transforms temporary blunders into permanent tactical instincts.`
-            : `Outstanding tactical awareness in this game! To maintain your edge, review opening sidelines or spar against higher Elo bots.`}
-        </p>
         <div class="d-flex align-items-center gap-1.5 flex-wrap">
           ${totalErrors > 0 ? `
             <button type="button" class="btn btn-sm btn-danger comic-btn flex-grow-1 fw-black py-1.5 px-2.5" id="btn-coach-retry-errors" style="font-size: 11.5px;">
@@ -2057,19 +2077,12 @@ class ReviewDashboard {
                     <i class="bi bi-three-dots-vertical"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end shadow-lg py-2" aria-labelledby="btn-dropdown-more-tools" style="min-width: 220px;">
-                    <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Game Report & Share</li>
-                    <li>
-                      <button class="dropdown-item py-1.5 px-3" id="action-open-full-report" type="button">
-                        <i class="bi bi-file-earmark-bar-graph-fill me-2 text-warning"></i>Full Game Report
-                      </button>
-                    </li>
+                    <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Share & Export</li>
                     <li>
                       <button class="dropdown-item py-1.5 px-3" id="action-share-link" type="button">
                         <i class="bi bi-share-fill me-2 text-info"></i>Share Review Link
                       </button>
                     </li>
-                    <li><hr class="dropdown-divider my-1"></li>
-                    <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Export & Notation</li>
                     <li>
                       <button class="dropdown-item py-1.5 px-3" id="action-export-annotated-pgn" type="button">
                         <i class="bi bi-file-earmark-arrow-down-fill me-2 text-success"></i>Export Annotated PGN
@@ -2099,7 +2112,6 @@ class ReviewDashboard {
           <div class="comic-card p-2.5">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom" style="border-color: var(--arcade-border) !important;">
               <div class="d-flex align-items-center gap-1.5 flex-wrap min-w-0">
-                <span class="match-overview-pill"><i class="bi bi-diagram-3-fill me-1"></i>Review</span>
                 <button type="button" class="eco-interactive-btn cursor-pointer" id="btn-open-eco-modal" data-iq-tip="eco_opening" title="Click to view Opening theory, moves & ECO classification">
                   <span class="badge bg-warning text-dark font-monospace fw-black px-2 py-1 eco-code-badge">${this.game.ecoCode || 'PGN'}</span>
                   <span class="fw-black text-truncate eco-name-label" style="max-width: 170px; font-size: 13px;">${this.game.ecoName || 'Chess Match'}</span>
@@ -2107,8 +2119,8 @@ class ReviewDashboard {
                 </button>
                 ${this.game.date ? `<span class="text-secondary small font-monospace d-none d-sm-inline">· ${this.game.date}</span>` : ''}
               </div>
-              <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black px-2.5 py-1" id="btn-open-full-report-modal" title="View Full Performance & Comprehensive Game Report" style="font-size: 11.5px;">
-                <i class="bi bi-file-earmark-bar-graph-fill me-1"></i>Report
+              <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black px-3 py-1 d-inline-flex align-items-center gap-1.5" id="btn-open-full-report-modal" title="View Full Performance & Comprehensive Game Report" style="font-size: 12px;">
+                <i class="bi bi-file-earmark-bar-graph-fill"></i><span>Game Report</span>
               </button>
             </div>
 
@@ -2277,7 +2289,6 @@ class ReviewDashboard {
     });
 
     // Bind More Tools Dropdown Actions
-    this.container.querySelector('#action-open-full-report')?.addEventListener('click', () => this.openDetailedPerformanceModal());
     this.container.querySelector('#action-share-link')?.addEventListener('click', (e) => this.shareGameReviewLink(e.currentTarget));
     this.container.querySelector('#action-export-annotated-pgn')?.addEventListener('click', () => this.downloadAnnotatedPgn());
     this.container.querySelector('#action-copy-fen')?.addEventListener('click', () => this.copyCurrentFen());
@@ -2288,7 +2299,6 @@ class ReviewDashboard {
     });
 
     // Bind Coach Tab Specific Actions
-    this.container.querySelector('#btn-coach-full-report')?.addEventListener('click', () => this.openDetailedPerformanceModal());
     this.container.querySelector('#btn-coach-retry-errors')?.addEventListener('click', () => this.startRetryMistakes());
     this.container.querySelector('#btn-coach-guess-move')?.addEventListener('click', () => this.startGuessTheMove());
     this.container.querySelector('#btn-coach-goto-bank')?.addEventListener('click', () => this.openBlunderBankModal('daily'));

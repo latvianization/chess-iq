@@ -62,6 +62,7 @@ class App {
     if (reviewMount) {
       this.reviewDashboard = new ReviewDashboard(reviewMount, {
         onOpenImport: () => this.importModal?.show(),
+        onBackToImportedGames: () => this.showImportedGames(),
         onSwitchToBots: (fen, userColor, targetElo) => {
           this.switchMode('bot');
           if (fen && typeof fen === 'string') {
@@ -76,6 +77,7 @@ class App {
         },
         onSelectGame: (pgn, userColor, cachedGame) => {
           if (cachedGame) {
+            this.pushReviewHistoryState();
             this.reviewDashboard?.setGame(cachedGame);
             soundService.playSuccess();
           } else {
@@ -114,6 +116,27 @@ class App {
     window.addEventListener('hashchange', () => {
       this.checkShareLinkUrl();
     });
+
+    window.addEventListener('popstate', (e) => {
+      if (e.state && e.state.chessIqModal) return;
+      if (document.querySelector('.modal.show') || document.querySelector('.why-modal-backdrop') || document.body.classList.contains('modal-open')) return;
+
+      if (this.appMode === 'review' && this.reviewDashboard?.game) {
+        this.showImportedGames();
+      }
+    });
+  }
+
+  showImportedGames() {
+    this.importModal?.show();
+  }
+
+  pushReviewHistoryState() {
+    try {
+      if (!history.state || !history.state.chessIqReview) {
+        history.pushState({ chessIqReview: true }, '');
+      }
+    } catch {}
   }
 
   checkShareLinkUrl() {
@@ -420,6 +443,7 @@ class App {
 
       console.log('[App] Analysis completed, caching and loading review...');
       saveCachedGame(actualPgn, userColor, analyzedGame);
+      this.pushReviewHistoryState();
       this.reviewDashboard?.setGame(analyzedGame);
       soundService.playSuccess();
     } catch (err) {
