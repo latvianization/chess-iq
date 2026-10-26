@@ -251,7 +251,6 @@ class App {
     document.getElementById('winning-path-modal')?.remove();
     document.getElementById('blunder-bank-modal')?.remove();
     document.getElementById('positional-pillars-modal')?.remove();
-    document.getElementById('iq-guide-modal-root')?.remove();
     if (typeof closeGameOverModal === 'function') {
       closeGameOverModal();
     }
@@ -324,12 +323,6 @@ class App {
     document.getElementById('nav-mode-bot')?.addEventListener('click', () => this.switchMode('bot'));
     document.getElementById('nav-btn-import')?.addEventListener('click', () => {
       this.importModal?.show();
-    });
-    document.getElementById('nav-btn-help')?.addEventListener('click', () => {
-      if (typeof openIqGuideModal === 'function') openIqGuideModal();
-    });
-    document.getElementById('menu-btn-guide')?.addEventListener('click', () => {
-      if (typeof openIqGuideModal === 'function') openIqGuideModal();
     });
     document.getElementById('nav-btn-theme')?.addEventListener('click', () => this.toggleTheme());
     document.getElementById('menu-btn-theme')?.addEventListener('click', () => this.toggleTheme());

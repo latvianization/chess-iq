@@ -283,34 +283,6 @@ function openFullReportModal(dashboard) {
   const whiteAvgTime = whiteTimeMoves > 0 ? (whiteTimeTotal / whiteTimeMoves).toFixed(1) + 's' : null;
   const blackAvgTime = blackTimeMoves > 0 ? (blackTimeTotal / blackTimeMoves).toFixed(1) + 's' : null;
 
-  // Tactical Motifs
-  const motifMap = {};
-  (dashboard.game.plies || []).forEach((p) => {
-    if (!p || !Array.isArray(p.motifs)) return;
-    p.motifs.forEach((m) => {
-      const key = m.label || m.name || m;
-      if (!motifMap[key]) {
-        motifMap[key] = { label: key, count: 0, icon: m.icon || '⚡', coachTip: m.coachTip || '' };
-      }
-      motifMap[key].count++;
-    });
-  });
-  const detectedMotifs = Object.values(motifMap).sort((a, b) => b.count - a.count);
-
-  // Dynamic executive narrative
-  let executiveNarrative = `A dynamic match fought in the <strong>${insEscape(dashboard.game.ecoName || dashboard.game.ecoCode || 'standard lines')}</strong>. `;
-  if (dashboard.game.result === '1-0') {
-    executiveNarrative += isWhiteUser
-      ? `You seized the initiative with ${whiteAcc}% accuracy, converting your advantage to claim victory in ${totalMoves} moves.`
-      : `White played with strong precision (${whiteAcc}%), leveraging critical tactical turns to seal victory in ${totalMoves} moves.`;
-  } else if (dashboard.game.result === '0-1') {
-    executiveNarrative += !isWhiteUser
-      ? `You navigated key complications with ${blackAcc}% accuracy, outplaying White to secure victory in ${totalMoves} moves.`
-      : `Black demonstrated clinical accuracy (${blackAcc}%), capitalizing on open lines to achieve victory in ${totalMoves} moves.`;
-  } else {
-    executiveNarrative += `Both sides battled to a hard-fought draw with well-matched accuracy (${whiteAcc}% White vs ${blackAcc}% Black) over ${totalMoves} moves.`;
-  }
-
   // Coach Study Plan stats
   const summary = dashboard.game.gameCoachSummary || {};
   const bankStats = typeof getBlunderBankStats === 'function' ? getBlunderBankStats() : { total: 0, due: 0 };
@@ -466,16 +438,7 @@ function openFullReportModal(dashboard) {
           </div>
         </div>
 
-        <!-- Executive Match Narrative -->
-        <div class="p-2.5 rounded" style="background: rgba(251, 191, 36, 0.08); border-left: 4px solid var(--arcade-gold); font-size: 12.5px;">
-          <div class="d-flex align-items-center gap-1.5 mb-1">
-            <i class="bi bi-journal-text text-warning"></i>
-            <strong class="text-warning text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">Executive Match Verdict</strong>
-          </div>
-          <div class="text-body">${executiveNarrative}</div>
-        </div>
-
-        <!-- 3. Phase-by-Phase Breakdown (Opening, Middlegame, Endgame) -->
+        <!-- Phase-by-Phase Breakdown (Opening, Middlegame, Endgame) -->
         <div>
           <div class="d-flex align-items-center justify-content-between mb-2">
             <h6 class="fw-black mb-0 d-flex align-items-center gap-1.5">
@@ -731,35 +694,7 @@ function openFullReportModal(dashboard) {
           </div>
         </div>
 
-        <!-- 6. Tactical Motifs Diagnosed -->
-        ${detectedMotifs.length > 0 ? `
-          <div>
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <h6 class="fw-black mb-0 d-flex align-items-center gap-1.5">
-                <i class="bi bi-puzzle-fill text-warning"></i>Tactical Motifs Diagnosed in this Game
-              </h6>
-              <span class="badge bg-secondary font-monospace" style="font-size: 10px;">${detectedMotifs.length} motifs detected</span>
-            </div>
-            <div class="row g-2">
-              ${detectedMotifs.slice(0, 6).map((m) => `
-                <div class="col-12 col-sm-6 col-md-4">
-                  <div class="report-metric-card p-2 h-100">
-                    <div class="d-flex align-items-center justify-content-between mb-1">
-                      <span class="fw-black small d-flex align-items-center gap-1">
-                        <span>${m.icon}</span>
-                        <span>${insEscape(m.label)}</span>
-                      </span>
-                      <span class="badge bg-warning-subtle text-warning border border-warning-subtle font-monospace fw-black" style="font-size: 9.5px;">${m.count}×</span>
-                    </div>
-                    ${m.coachTip ? `<div class="text-secondary small" style="font-size: 11px;">${insEscape(m.coachTip)}</div>` : ''}
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- 7. Time Management & Clock Discipline -->
+        <!-- Time Management & Clock Discipline -->
         ${whiteAvgTime || blackAvgTime ? `
           <div>
             <h6 class="fw-black mb-2 d-flex align-items-center gap-1.5">

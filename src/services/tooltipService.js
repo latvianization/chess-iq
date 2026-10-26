@@ -1,7 +1,6 @@
 /**
  * Chess IQ - Tooltip & Feature Explanation Service
- * Provides rich "What & Why" hover popups, info icons for data cards,
- * and an interactive searchable Chess IQ Guide modal.
+ * Provides rich "What & Why" hover popups and info icons for data cards.
  */
 
 function escapeIqHtml(str) {
@@ -57,12 +56,6 @@ const IQ_TOOLTIPS = {
     category: 'ACTION',
     what: 'Fetch matches directly from your Chess.com public profile archive or paste any PGN notation.',
     why: 'Bring any online or tournament game into Chess IQ for instant engine review with zero server latency.',
-  },
-  nav_help: {
-    title: 'Chess IQ Guide & Glossary',
-    category: 'HELP',
-    what: 'Comprehensive interactive guide explaining every feature, metric, evaluation, and tactical overlay.',
-    why: 'Click anytime you want an in-depth explanation of how Chess IQ analyzes your chess games.',
   },
 
   // ==========================================
@@ -734,240 +727,16 @@ function initGlobalTooltips() {
   return iqTooltipInstance;
 }
 
-/**
- * Interactive Searchable Chess IQ Guide & Feature Explanations Modal
- */
-function openIqGuideModal(initialSearch = '') {
-  const existing = document.getElementById('iq-guide-modal-root');
-  if (existing) existing.remove();
-
-  const modal = document.createElement('div');
-  modal.id = 'iq-guide-modal-root';
-  modal.className = 'why-modal-backdrop';
-
-  let currentCategory = 'ALL';
-  let searchTerm = initialSearch;
-
-  const categories = [
-    { id: 'ALL', label: 'All Topics' },
-    { id: 'TACTICS', label: 'Tactics & Loose Pieces' },
-    { id: 'TRAINING', label: 'Retry Mistakes & Puzzles' },
-    { id: 'METRIC', label: 'Accuracy & Elo Ratings' },
-    { id: 'POSITIONAL', label: '4-Pillars & Position' },
-    { id: 'NAVIGATION', label: 'Controls & Toggles' },
-  ];
-
-  const renderContent = () => {
-    const entries = Object.entries(IQ_TOOLTIPS).filter(([key, item]) => {
-      if (currentCategory === 'TACTICS') {
-        if (!['TACTICAL VISION', 'LPDO WARNING', 'CRITICAL THREAT', 'BOARD INFLUENCE', 'DEFENSIVE RADAR'].includes(item.category)) return false;
-      } else if (currentCategory === 'TRAINING') {
-        if (!['ACTIVE TRAINING', 'GM CALCULATION', 'SPACED REPETITION', 'EXPLORATION', 'BOT SPARRING'].includes(item.category)) return false;
-      } else if (currentCategory === 'METRIC') {
-        if (!['METRIC', 'EVALUATION', 'MOVE QUALITY', 'PHASE STATS'].includes(item.category)) return false;
-      } else if (currentCategory === 'POSITIONAL') {
-        if (!['POSITIONAL PILLAR', 'CARD INFO'].includes(item.category)) return false;
-      } else if (currentCategory === 'NAVIGATION') {
-        if (!['NAVIGATION', 'MODE', 'TOGGLE', 'CUSTOMIZATION', 'FILTER', 'ACTION'].includes(item.category)) return false;
-      }
-
-      if (searchTerm && searchTerm.trim()) {
-        const q = searchTerm.toLowerCase();
-        const text = `${item.title} ${item.what} ${item.why} ${item.how || ''} ${item.category}`.toLowerCase();
-        return text.includes(q);
-      }
-      return true;
-    });
-
-    modal.innerHTML = `
-      <div class="why-dialog p-3 p-md-4 shadow-lg" style="max-width: 840px; width: 100%; border-radius: 1.25rem; background: var(--arcade-card); border: 1.5px solid var(--arcade-border);">
-        <div class="d-flex align-items-center justify-content-between pb-2.5 mb-3 border-bottom" style="border-color: var(--arcade-border) !important;">
-          <div class="d-flex align-items-center gap-2">
-            <span class="arcade-badge-logo">⚡</span>
-            <div>
-              <h5 class="fw-black mb-0">CHESS<span class="fg-warning">IQ</span> Feature & Concept Guide</h5>
-              <span class="small text-secondary fw-semibold">Learn what every card, toggle, metric, and blunder alert means</span>
-            </div>
-          </div>
-          <button type="button" class="btn-close" id="guide-modal-close" aria-label="Close"></button>
-        </div>
-
-        <!-- Search Bar -->
-        <div class="input-group mb-3">
-          <span class="input-group-text bg-body-tertiary border-end-0"><i class="bi bi-search text-warning"></i></span>
-          <input type="text" class="form-control border-start-0 ps-1" id="guide-search-input" placeholder="Search features (e.g. loose pieces, retry mistakes, performance Elo, pillars)..." value="${insEscape(searchTerm)}">
-          ${searchTerm ? `<button class="btn btn-outline-secondary" type="button" id="guide-search-clear"><i class="bi bi-x-lg"></i></button>` : ''}
-        </div>
-
-        <!-- Category Filter Pills -->
-        <div class="d-flex align-items-center flex-wrap gap-1.5 mb-3">
-          ${categories.map((c) => `
-            <button type="button" class="btn btn-xs move-filter-pill ${currentCategory === c.id ? 'active' : ''}" data-guide-cat="${c.id}">
-              ${c.label}
-            </button>
-          `).join('')}
-        </div>
-
-        <!-- Featured Highlights (Loose Pieces & Retry Mistakes Spotlight) -->
-        ${(!searchTerm && (currentCategory === 'ALL' || currentCategory === 'TACTICS')) ? `
-          <div class="p-3 rounded mb-3 border-2 border-warning" style="background: rgba(245, 158, 11, 0.08); border: 1.5px solid #f59e0b;">
-            <div class="d-flex align-items-center gap-2 mb-1.5">
-              <span class="badge bg-warning text-dark fw-black">🔥 ESSENTIAL CONCEPT #1</span>
-              <h6 class="fw-black mb-0 text-warning">What are "Loose Pieces"? (LPDO)</h6>
-            </div>
-            <p class="small mb-1 leading-relaxed text-body">
-              A <strong>Loose Piece</strong> is any piece on the board with <strong>ZERO friendly defenders</strong> protecting it.
-              Grandmaster John Nunn coined the famous axiom: <span class="fw-bold text-warning">"LPDO — Loose Pieces Drop Often"</span>.
-              Even if an undefended piece is not currently under attack, it creates tactical vulnerabilities for enemy <em>forks, double attacks, skewers, and discovered checks</em>.
-            </p>
-            <div class="d-flex align-items-center gap-2 mt-2 pt-2 border-top border-warning border-opacity-25 small font-monospace">
-              <span class="badge bg-warning text-dark">⚠️ LOOSE</span>
-              <span>Undefended (0 protectors), but not actively attacked this turn.</span>
-              <span class="badge bg-danger text-white ms-2">🎯 HANGING</span>
-              <span>Attacked right now with 0 defenders or outnumbered! Immediate loss.</span>
-            </div>
-          </div>
-        ` : ''}
-
-        ${(!searchTerm && (currentCategory === 'ALL' || currentCategory === 'TRAINING')) ? `
-          <div class="p-3 rounded mb-3 border-2 border-danger" style="background: rgba(239, 68, 68, 0.08); border: 1.5px solid #ef4444;">
-            <div class="d-flex align-items-center gap-2 mb-1.5">
-              <span class="badge bg-danger text-white fw-black">🎯 ESSENTIAL CONCEPT #2</span>
-              <h6 class="fw-black mb-0 text-danger">What does "Retry Mistakes" mean?</h6>
-            </div>
-            <p class="small mb-1 leading-relaxed text-body">
-              <strong>Retry Mistakes</strong> is an <strong>active puzzle workout built directly from your game</strong>!
-              Instead of just showing you a red blunder label, the board rewinds to the exact position right before your error was played.
-              Your blunder is hidden, and you get to calculate and play the best engine move directly on the board to build muscle memory.
-            </p>
-            <div class="small text-secondary mt-1">
-              Includes interactive <strong>Hints</strong> (highlights the piece to move) and <strong>Solutions</strong> if you get stuck.
-            </div>
-          </div>
-        ` : ''}
-
-        ${(!searchTerm && (currentCategory === 'ALL' || currentCategory === 'POSITIONAL')) ? `
-          <div class="p-3 rounded mb-3 border-2 border-info" style="background: rgba(56, 189, 248, 0.08); border: 1.5px solid #38bdf8;">
-            <div class="d-flex align-items-center gap-2 mb-1.5">
-              <span class="badge bg-info text-dark fw-black">⚖️ 4-PILLAR POSITIONAL X-RAY</span>
-              <h6 class="fw-black mb-0 text-info">How the Positional Balance Bars Work</h6>
-            </div>
-            <p class="small mb-1 leading-relaxed text-body">
-              The <strong>4-Pillar Positional X-Ray</strong> evaluates four vital dimensions of chess strategy: <strong>Material</strong>, <strong>Piece Activity</strong>, <strong>King Safety</strong>, and <strong>Pawn Structure</strong>.
-              Each bar acts as a <strong>tug-of-war balance</strong> between White (light left segment) and Black (dark right segment). <strong>50% represents exact equality</strong>; percentages over 50% indicate White has the advantage on that metric, while below 50% favors Black.
-            </p>
-            <div class="d-flex align-items-center gap-2 mt-2 pt-2 border-top border-info border-opacity-25 small font-monospace">
-              <span>⚪ Left: White Share</span>
-              <span class="mx-auto fw-bold text-body">50% = Equal</span>
-              <span>Right: Black Share ⚫</span>
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Results Grid -->
-        <div class="row g-2.5">
-          ${entries.length === 0 ? `
-            <div class="col-12 text-center py-4 text-secondary">
-              <i class="bi bi-search fs-2 mb-2 d-block opacity-50"></i>
-              <h6 class="fw-black text-body">No Topics Matched Your Search</h6>
-              <p class="small mb-0">Try searching for "loose", "retry", "accuracy", "pillars", or click "All Topics".</p>
-            </div>
-          ` : entries.map(([key, item]) => `
-            <div class="col-12 col-md-6">
-              <div class="p-3 rounded h-100 d-flex flex-column justify-content-between" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
-                <div>
-                  <div class="d-flex align-items-center justify-content-between gap-1 mb-1.5">
-                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle font-monospace" style="font-size: 9.5px;">${insEscape(item.category)}</span>
-                    ${item.shortcut ? `<span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 9px;">${insEscape(item.shortcut)}</span>` : ''}
-                  </div>
-                  <h6 class="fw-black text-body mb-1" style="font-size: 13px;">${insEscape(item.title)}</h6>
-                  <div class="small mb-1.5 text-secondary" style="font-size: 11.5px; line-height: 1.45;">
-                    <strong class="text-warning">What:</strong> ${insEscape(item.what)}
-                  </div>
-                </div>
-                ${item.why ? `
-                  <div class="small text-body-secondary pt-1.5 border-top border-secondary border-opacity-10" style="font-size: 11px; line-height: 1.4;">
-                    <strong class="text-info">Why:</strong> ${insEscape(item.why)}
-                  </div>
-                ` : ''}
-                ${item.how ? `
-                  <div class="small text-body-secondary pt-1.5 border-top border-secondary border-opacity-10" style="font-size: 11px; line-height: 1.4;">
-                    <strong class="text-success">How calculated:</strong> ${insEscape(item.how)}
-                  </div>
-                ` : ''}
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `;
-
-    // Event listeners
-    modal.querySelector('#guide-modal-close')?.addEventListener('click', () => modal.remove());
-    const searchInput = modal.querySelector('#guide-search-input');
-    searchInput?.addEventListener('input', (e) => {
-      searchTerm = e.target.value;
-      renderContent();
-      const updatedInput = modal.querySelector('#guide-search-input');
-      if (updatedInput) {
-        updatedInput.focus();
-        updatedInput.setSelectionRange(searchTerm.length, searchTerm.length);
-      }
-    });
-
-    modal.querySelector('#guide-search-clear')?.addEventListener('click', () => {
-      searchTerm = '';
-      renderContent();
-    });
-
-    modal.querySelectorAll('[data-guide-cat]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        currentCategory = btn.getAttribute('data-guide-cat') || 'ALL';
-        renderContent();
-      });
-    });
-    const closeGuide = () => {
-      modal.remove();
-      document.body.classList.remove('modal-open');
-    };
-
-    const dialogEl = modal.querySelector('.why-dialog');
-    const safeClose = typeof setupModalSwipeAndHistory === 'function'
-      ? setupModalSwipeAndHistory(modal, dialogEl, closeGuide)
-      : closeGuide;
-
-    modal.querySelector('#guide-modal-close')?.addEventListener('click', safeClose);
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) safeClose();
-    });
-  };
-
-  const handleEsc = (e) => {
-    if (e.key === 'Escape') {
-      modal.remove();
-      document.body.classList.remove('modal-open');
-      document.removeEventListener('keydown', handleEsc);
-    }
-  };
-  document.addEventListener('keydown', handleEsc);
-
-  document.body.classList.add('modal-open');
-  document.body.appendChild(modal);
-  renderContent();
-}
-
 if (typeof window !== 'undefined') {
   window.IQ_TOOLTIPS = IQ_TOOLTIPS;
   window.renderInfoIcon = renderInfoIcon;
   window.initGlobalTooltips = initGlobalTooltips;
-  window.openIqGuideModal = openIqGuideModal;
 }
 if (typeof globalThis !== 'undefined') {
   globalThis.IQ_TOOLTIPS = IQ_TOOLTIPS;
   globalThis.renderInfoIcon = renderInfoIcon;
   globalThis.initGlobalTooltips = initGlobalTooltips;
-  globalThis.openIqGuideModal = openIqGuideModal;
 }
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { IQ_TOOLTIPS, renderInfoIcon, initGlobalTooltips, openIqGuideModal };
+  module.exports = { IQ_TOOLTIPS, renderInfoIcon, initGlobalTooltips };
 }
