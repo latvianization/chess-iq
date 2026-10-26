@@ -603,11 +603,12 @@ function openFullReportModal(dashboard) {
               <span style="width: 80px;" class="text-end text-cyan">⚫ Black</span>
             </div>
             <div class="d-flex flex-column gap-1.5 pt-2">
-              ${['brilliant', 'great', 'best', 'excellent', 'good', 'book', 'inaccuracy', 'mistake', 'blunder', 'missed_win'].map((cls) => {
+              ${['brilliant', 'great', 'best', 'excellent', 'good', 'book', 'forced', 'inaccuracy', 'mistake', 'blunder', 'missed_win'].map((cls) => {
                 const dict = COMIC_DICTIONARY[cls];
                 if (!dict) return '';
                 const wCnt = whiteCounts[cls] || 0;
                 const bCnt = blackCounts[cls] || 0;
+                if (cls === 'forced' && wCnt === 0 && bCnt === 0) return '';
                 const wPct = whiteMovesCount > 0 ? Math.round((wCnt / whiteMovesCount) * 100) : 0;
                 const bPct = blackMovesCount > 0 ? Math.round((bCnt / blackMovesCount) * 100) : 0;
                 const sumCnt = wCnt + bCnt;
@@ -793,67 +794,7 @@ function openFullReportModal(dashboard) {
           </div>
         ` : ''}
 
-        <!-- 8. Positional Pillars Profile -->
-        <div>
-          <div class="d-flex align-items-center justify-content-between mb-2">
-            <h6 class="fw-black mb-0 d-flex align-items-center gap-1.5">
-              <i class="bi bi-sliders text-info"></i>4-Pillar Positional Assessment
-            </h6>
-            <span class="text-secondary font-monospace" style="font-size: 11px;">Material · Activity · King Safety · Structure</span>
-          </div>
-          <div class="row g-2">
-            <div class="col-6 col-md-3">
-              <div class="report-metric-card p-2">
-                <div class="d-flex align-items-center gap-1.5 mb-1">
-                  <span class="fs-5">⚖️</span>
-                  <div>
-                    <strong class="d-block small fw-black">Material</strong>
-                    <span class="text-secondary font-monospace" style="font-size: 9.5px;">Piece exchanges</span>
-                  </div>
-                </div>
-                <div class="text-secondary" style="font-size: 11px;">Evaluates pawn units, minor piece trades, and unbalanced piece trades.</div>
-              </div>
-            </div>
-            <div class="col-6 col-md-3">
-              <div class="report-metric-card p-2">
-                <div class="d-flex align-items-center gap-1.5 mb-1">
-                  <span class="fs-5">⚡</span>
-                  <div>
-                    <strong class="d-block small fw-black">Piece Activity</strong>
-                    <span class="text-secondary font-monospace" style="font-size: 9.5px;">Square control</span>
-                  </div>
-                </div>
-                <div class="text-secondary" style="font-size: 11px;">Measures center attacks, mobility, open lines, and pressure on enemy squares.</div>
-              </div>
-            </div>
-            <div class="col-6 col-md-3">
-              <div class="report-metric-card p-2">
-                <div class="d-flex align-items-center gap-1.5 mb-1">
-                  <span class="fs-5">🛡️</span>
-                  <div>
-                    <strong class="d-block small fw-black">King Safety</strong>
-                    <span class="text-secondary font-monospace" style="font-size: 9.5px;">Shield & shelter</span>
-                  </div>
-                </div>
-                <div class="text-secondary" style="font-size: 11px;">Evaluates pawn shelter intactness, castling security, and open files toward the king.</div>
-              </div>
-            </div>
-            <div class="col-6 col-md-3">
-              <div class="report-metric-card p-2">
-                <div class="d-flex align-items-center gap-1.5 mb-1">
-                  <span class="fs-5">♟️</span>
-                  <div>
-                    <strong class="d-block small fw-black">Pawn Structure</strong>
-                    <span class="text-secondary font-monospace" style="font-size: 9.5px;">Islands & chains</span>
-                  </div>
-                </div>
-                <div class="text-secondary" style="font-size: 11px;">Monitors doubled pawns, isolated pawns, backward weaknesses, and passed pawns.</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 9. Personalized Coach Study Plan & Drills -->
+        <!-- 8. Personalized Coach Study Plan & Drills -->
         <div class="border-top pt-3" style="border-color: var(--arcade-border) !important;">
           <div class="comic-card p-3 coach-plan-card">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom" style="border-color: var(--arcade-border) !important;">

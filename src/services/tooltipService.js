@@ -408,6 +408,12 @@ const IQ_TOOLTIPS = {
     what: 'A move adhering to established grandmaster opening theory from the ECO encyclopedia.',
     why: 'Follows proven theoretical development played by masters for decades.',
   },
+  badge_forced: {
+    title: 'Forced Move (🔒)',
+    category: 'MOVE QUALITY',
+    what: 'The only legal move available on the board in this position.',
+    why: 'Usually occurs when escaping check with only one legal reply or in locked endgames.',
+  },
   badge_inaccuracy: {
     title: 'Inaccuracy (?!)',
     category: 'MOVE QUALITY',

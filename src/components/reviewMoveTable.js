@@ -27,7 +27,10 @@ function matchesMoveFilter(dashboard, plyObj) {
 
 function renderMoveCellContent(dashboard, plyObj) {
   if (!plyObj) return '';
-  const cls = plyObj.classification || 'good';
+  if (plyObj.isForced === undefined && plyObj.fenBefore && typeof isForcedMove === 'function') {
+    plyObj.isForced = isForcedMove(plyObj.fenBefore);
+  }
+  const cls = (plyObj.isForced || plyObj.classification === 'forced') ? 'forced' : (plyObj.classification || 'good');
   const comic = typeof getComicBadge === 'function' ? getComicBadge(cls, plyObj.san) : null;
   const isSelected = Boolean(dashboard && dashboard.currentPly === plyObj.ply);
   const matchesFilter = !dashboard || dashboard.moveFilter === 'all' || matchesMoveFilter(dashboard, plyObj);
@@ -38,7 +41,7 @@ function renderMoveCellContent(dashboard, plyObj) {
     ? `<span class="move-cell-clock font-monospace text-secondary" title="Remaining Clock: ${rawClock}">${rawClock}</span>`
     : '';
 
-  const showPillBadge = ['brilliant', 'great', 'best', 'book', 'inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(cls);
+  const showPillBadge = ['brilliant', 'great', 'best', 'book', 'forced', 'inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(cls);
   const symbolStr = comic ? (comic.badgeLabel || comic.symbol || '') : '';
   const isMultiChar = String(symbolStr).length > 1;
 
@@ -124,7 +127,7 @@ function buildBadgesSummary(dashboard) {
   const userColor = dashboard.game.userColor || 'w';
   const userCounts = dashboard.game.userCounts || (dashboard.game.classificationCounts && dashboard.game.classificationCounts[userColor]) || {};
 
-  const order = ['brilliant', 'great', 'best', 'excellent', 'good', 'book', 'inaccuracy', 'mistake', 'missed_win', 'blunder'];
+  const order = ['brilliant', 'great', 'best', 'excellent', 'good', 'book', 'forced', 'inaccuracy', 'mistake', 'missed_win', 'blunder'];
 
   return `
     <div class="d-flex align-items-center flex-wrap gap-1.5 p-2 rounded" style="background: var(--arcade-surface, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">

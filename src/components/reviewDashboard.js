@@ -522,7 +522,11 @@ class ReviewDashboard {
         : null;
       secondBestMove = null;
     } else if (cur) {
-      const isOptimal = ['best', 'brilliant', 'great', 'book'].includes(cur.classification);
+      if (cur.isForced === undefined && cur.fenBefore && typeof isForcedMove === 'function') {
+        cur.isForced = isForcedMove(cur.fenBefore);
+      }
+      const isForced = Boolean(cur.isForced || cur.classification === 'forced');
+      const isOptimal = isForced || ['best', 'brilliant', 'great', 'book', 'forced'].includes(cur.classification);
       let bestUci = isValidUci(cur.bestMoveUci) ? cur.bestMoveUci : null;
       let secondUci = isValidUci(cur.secondBestMoveUci) ? cur.secondBestMoveUci : null;
 
@@ -554,7 +558,8 @@ class ReviewDashboard {
       ? { from: cur.threat.uci.slice(0, 2), to: cur.threat.uci.slice(2, 4) }
       : null;
 
-    const badge = !isBlindActive && !isSandboxMode && cur ? { square: cur.to, classification: cur.classification } : null;
+    const isCurForced = Boolean(cur && (cur.isForced || cur.classification === 'forced'));
+    const badge = !isBlindActive && !isSandboxMode && cur ? { square: cur.to, classification: isCurForced ? 'forced' : cur.classification } : null;
 
     this.board?.setProps({
       fen,
@@ -596,12 +601,14 @@ class ReviewDashboard {
     const stripEl = this.container.querySelector('#review-move-strip');
     if (stripEl) {
       if (cur && !isBlindActive) {
-        const comic = getComicBadge(cur.classification, cur.san);
+        const isForced = Boolean(cur.isForced || cur.classification === 'forced');
+        const effectiveCls = isForced ? 'forced' : cur.classification;
+        const comic = getComicBadge(effectiveCls, cur.san);
         const evalStr = cur.mate !== null
           ? `M${Math.abs(cur.mate)}`
           : (cur.scoreCp > 0 ? `+${(cur.scoreCp / 100).toFixed(1)}` : (cur.scoreCp / 100).toFixed(1));
 
-        const isOptimal = ['best', 'brilliant', 'great', 'book'].includes(cur.classification);
+        const isOptimal = isForced || ['best', 'brilliant', 'great', 'book', 'forced'].includes(cur.classification);
         const isSuboptimal = !isOptimal;
         const topForCur = (!cur.bestMoveSan && cur.fenBefore) ? this.getTopMovesForFen(cur.fenBefore) : null;
         const bestSan = cur.bestMoveSan || (cur.bestMoveUci && cur.bestMoveUci.length >= 4 ? `${cur.bestMoveUci.slice(0, 2)}-${cur.bestMoveUci.slice(2, 4)}` : (topForCur?.best ? `${topForCur.best.from}-${topForCur.best.to}` : ''));
@@ -611,13 +618,13 @@ class ReviewDashboard {
         const motifs = (Array.isArray(cur.motifs) && cur.motifs.length > 0)
           ? cur.motifs
           : (typeof detectTacticalMotifs === 'function'
-              ? detectTacticalMotifs(cur.fenBefore, cur.fen, { color: cur.color }, cur.bestMoveUci, cur.pv, cur.mate, cur.classification, cur.ply)
+              ? detectTacticalMotifs(cur.fenBefore, cur.fen, { color: cur.color }, cur.bestMoveUci, cur.pv, cur.mate, effectiveCls, cur.ply)
               : []);
 
         stripEl.innerHTML = `
           <div class="d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
             <div class="d-flex align-items-center flex-wrap gap-1.5">
-              <span class="badge border border-dark rounded-pill px-2.5 py-1 cursor-help" data-iq-tip="badge_${cur.classification}" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 12px;">
+              <span class="badge border border-dark rounded-pill px-2.5 py-1 cursor-help" data-iq-tip="badge_${effectiveCls}" style="background-color: ${comic.bg}; color: ${comic.text}; font-weight: 900; font-size: 12px;">
                 ${comic.symbol} ${comic.term}
               </span>
               <span class="font-monospace fw-black fs-5">${cur.san}</span>
@@ -660,11 +667,11 @@ class ReviewDashboard {
               ` : ''}
             </div>
             <div class="d-flex align-items-center gap-2 ms-auto">
-              ${['inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(cur.classification) ? `
+              ${!isForced && ['inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(cur.classification) ? `
                 <button type="button" class="btn btn-sm btn-outline-danger fw-bold comic-btn" id="btn-show-why" title="Explore what happens in the next 5 moves">
                   <i class="bi bi-question-circle me-1"></i>Why?
                 </button>
-              ` : (cur.classification === 'brilliant' ? `
+              ` : (!isForced && cur.classification === 'brilliant' ? `
                 <button type="button" class="btn btn-sm fw-bold comic-btn" id="btn-show-why" style="color: #06b6d4; border: 1px solid #06b6d4; background: rgba(6,182,212,0.08);" title="Explore why this brilliant sacrifice works">
                   <i class="bi bi-gem me-1"></i>Why?
                 </button>

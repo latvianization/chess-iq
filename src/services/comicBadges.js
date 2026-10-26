@@ -65,6 +65,16 @@ var COMIC_DICTIONARY = {
     accentBg: '#ede9fe',
     starColor: '#a78bfa',
   },
+  forced: {
+    words: ['Forced'],
+    symbol: '🔒',
+    standardLabel: '□',
+    bg: '#475569',
+    border: '#1e293b',
+    text: '#ffffff',
+    accentBg: '#f1f5f9',
+    starColor: '#94a3b8',
+  },
   inaccuracy: {
     words: ['Inaccuracy'],
     symbol: '⁈',

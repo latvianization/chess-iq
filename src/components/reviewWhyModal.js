@@ -44,18 +44,6 @@ async function openWhyModal(dashboard, targetEval = null) {
        </div>`
     : '';
 
-  const coachTipHtml = motifs.length > 0 && motifs[0].coachTip
-    ? `<div class="card border-0 mb-2 p-2.5" style="background: rgba(245, 158, 11, 0.09); border: 1px solid rgba(245, 158, 11, 0.35) !important; border-radius: 0.75rem;">
-         <div class="d-flex align-items-start gap-2">
-           <span class="fs-6 lh-1 mt-0.5">🎓</span>
-           <div>
-             <span class="text-uppercase fw-black text-warning d-block" style="font-size: 10px; letter-spacing: 0.5px;">Coach's Pattern Tip (${motifs[0].label})</span>
-             <span class="small fw-semibold text-body" style="font-size: 12px;">${motifs[0].coachTip}</span>
-           </div>
-         </div>
-       </div>`
-    : '';
-
   const modal = document.createElement('div');
   modal.className = 'why-modal-backdrop';
   modal.id = 'why-blunder-modal';
@@ -90,22 +78,21 @@ async function openWhyModal(dashboard, targetEval = null) {
       <div class="row g-3 align-items-stretch">
         <div class="col-12 col-md-7 d-flex flex-column align-items-center">
           <div id="why-modal-board" class="modal-board-container"></div>
-          <!-- Step navigation right under board -->
-          <div class="w-100 mt-2.5">
-            <div class="d-flex align-items-center justify-content-center gap-2 py-1">
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-first" disabled title="Start (Home)">
+          <div class="w-100 mt-1.5">
+            <div class="d-flex align-items-center justify-content-center gap-1.5 py-1 flex-wrap">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-first" disabled title="Start (Home)">
                 <i class="bi bi-chevron-bar-left"></i>
               </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-prev" disabled title="Previous Move (←)">
-                <i class="bi bi-chevron-left"></i>
+              <button type="button" class="btn btn-sm btn-outline-secondary px-3 fw-bold" id="why-btn-prev" disabled title="Previous Move (←)">
+                <i class="bi bi-chevron-left me-1"></i>Prev
               </button>
               <button type="button" class="btn btn-sm btn-primary px-3 fw-bold" id="why-btn-play" disabled title="Play / Pause (Space)">
-                <i class="bi bi-play-fill" id="why-play-icon"></i>
+                <i class="bi bi-play-fill me-1" id="why-play-icon"></i><span id="why-play-label">Play</span>
               </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-next" disabled title="Next Move (→)">
-                <i class="bi bi-chevron-right"></i>
+              <button type="button" class="btn btn-sm btn-outline-secondary px-3 fw-bold" id="why-btn-next" disabled title="Next Move (→)">
+                Next<i class="bi bi-chevron-right ms-1"></i>
               </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="why-btn-last" disabled title="End (End)">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-2.5" id="why-btn-last" disabled title="End (End)">
                 <i class="bi bi-chevron-bar-right"></i>
               </button>
             </div>
@@ -145,8 +132,6 @@ async function openWhyModal(dashboard, targetEval = null) {
                 </div>
               </div>
             </div>
-
-            ${coachTipHtml}
 
             <div class="p-2.5 mb-2.5 rounded-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
               <div class="d-flex align-items-center justify-content-between mb-1.5">
@@ -194,6 +179,14 @@ async function openWhyModal(dashboard, targetEval = null) {
       e.preventDefault();
       e.stopPropagation();
       modal.querySelector('#why-btn-next')?.click();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      e.stopPropagation();
+      modal.querySelector('#why-btn-first')?.click();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      e.stopPropagation();
+      modal.querySelector('#why-btn-last')?.click();
     } else if (e.key === ' ' || e.code === 'Space') {
       e.preventDefault();
       e.stopPropagation();
@@ -304,6 +297,15 @@ async function openWhyModal(dashboard, targetEval = null) {
     if (counterEl) {
       counterEl.textContent = `Move ${stepIdx} / ${currentSteps.length - 1}`;
     }
+
+    const btnFirst = modal.querySelector('#why-btn-first');
+    const btnPrev = modal.querySelector('#why-btn-prev');
+    const btnNext = modal.querySelector('#why-btn-next');
+    const btnLast = modal.querySelector('#why-btn-last');
+    if (btnFirst) btnFirst.disabled = stepIdx <= 0;
+    if (btnPrev) btnPrev.disabled = stepIdx <= 0;
+    if (btnNext) btnNext.disabled = stepIdx >= currentSteps.length - 1;
+    if (btnLast) btnLast.disabled = stepIdx >= currentSteps.length - 1;
 
     const pills = modal.querySelectorAll('.why-move-pill');
     pills.forEach((p, idx) => {
@@ -443,7 +445,11 @@ async function openWhyModal(dashboard, targetEval = null) {
     isPlaying = false;
     const icon = modal.querySelector('#why-play-icon');
     if (icon) {
-      icon.className = 'bi bi-play-fill';
+      icon.className = 'bi bi-play-fill me-1';
+    }
+    const label = modal.querySelector('#why-play-label');
+    if (label) {
+      label.textContent = 'Play';
     }
   };
 
@@ -458,7 +464,11 @@ async function openWhyModal(dashboard, targetEval = null) {
     isPlaying = true;
     const icon = modal.querySelector('#why-play-icon');
     if (icon) {
-      icon.className = 'bi bi-pause-fill';
+      icon.className = 'bi bi-pause-fill me-1';
+    }
+    const label = modal.querySelector('#why-play-label');
+    if (label) {
+      label.textContent = 'Pause';
     }
 
     dashboard.whyTimer = setInterval(() => {

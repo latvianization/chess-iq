@@ -583,6 +583,16 @@ function isMaterialSacrifice(fenBefore, fenAfter, moverColor, opponentBestUci = 
   }
 }
 
+function isForcedMove(fenBefore) {
+  if (!fenBefore) return false;
+  try {
+    const c = new Chess(fenBefore);
+    return c.moves().length === 1;
+  } catch {
+    return false;
+  }
+}
+
 function classifyMove(
   playedUci,
   bestMoveUci,
@@ -597,6 +607,7 @@ function classifyMove(
   moverColor,
   opponentBestUci = null
 ) {
+  if (isForcedMove(fenBefore)) return "forced";
   if (isBook) return "book";
   const isExactBest = Boolean(bestMoveUci && playedUci && playedUci.toLowerCase() === bestMoveUci.toLowerCase());
 

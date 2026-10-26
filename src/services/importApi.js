@@ -283,6 +283,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
 
   for (let i = 0; i < totalPlies; i++) {
     const item = precomputed[i];
+    const forcedMove = typeof isForcedMove === "function" ? isForcedMove(item.fenBefore) : false;
     if (item.isBook) {
       const playedUci2 = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
       const isImpulsive2 = item.timeSpent !== null && item.timeSpent < 2 && !item.isTimeTrouble;
@@ -301,6 +302,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
         color: item.side,
         fen: item.fenAfter,
         fenBefore: item.fenBefore,
+        isForced: forcedMove,
         clock: item.rawClock,
         clockSeconds: item.clockSeconds,
         timeSpent: item.timeSpent,
@@ -316,7 +318,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
         moverWinProbAfter: item.side === "w" ? bookWinProb : 1 - bookWinProb,
         winProbLoss: 0,
         accuracy: 100,
-        classification: "book",
+        classification: forcedMove ? "forced" : "book",
         bestMoveUci: playedUci2,
         bestMoveSan: item.moveObj.san,
         secondBestMoveUci: "",
@@ -349,7 +351,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
       const rawSecond = engineBefore.secondBestMoveUci || "";
       const secondBestMoveUci = isValidUciMove(rawSecond) ? rawSecond : "";
       const playedUci = `${item.moveObj.from}${item.moveObj.to}${item.moveObj.promotion || ""}`;
-      const isExactBest = Boolean(bestMoveUci && playedUci && playedUci.toLowerCase() === bestMoveUci.toLowerCase());
+      const isExactBest = forcedMove || Boolean(bestMoveUci && playedUci && playedUci.toLowerCase() === bestMoveUci.toLowerCase());
 
       const rawWinProbLoss = Math.max(0, moverWinProbBefore - moverWinProbAfter);
       const winProbLoss = isExactBest ? 0 : rawWinProbLoss;
@@ -376,7 +378,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
         ? (item.side === "w" ? multiPv2WinProb : 1 - multiPv2WinProb)
         : void 0;
 
-      const classification = classifyMove(
+      const classification = forcedMove ? "forced" : classifyMove(
         playedUci,
         bestMoveUci,
         moverWinProbBefore,
@@ -446,6 +448,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
         color: item.side,
         fen: item.fenAfter,
         fenBefore: item.fenBefore,
+        isForced: forcedMove,
         clock: item.rawClock,
         clockSeconds: item.clockSeconds,
         timeSpent: item.timeSpent,
@@ -487,6 +490,7 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
     excellent: 0,
     good: 0,
     book: 0,
+    forced: 0,
     inaccuracy: 0,
     mistake: 0,
     blunder: 0,

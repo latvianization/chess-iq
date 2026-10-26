@@ -2618,7 +2618,26 @@ input[type="range"].arcade-range {
 .modal-board-container {
   width: 100%;
   max-width: min(370px, 46vh);
+}
+
+.modal-board-container .board-container {
+  width: 100%;
+  max-width: 100% !important;
   aspect-ratio: 1 / 1;
+}
+
+.modal-board-container .board-player-bar {
+  width: 100%;
+  max-width: 100% !important;
+  margin: 0.15rem 0;
+  padding: 0.22rem 0.5rem;
+  min-height: 30px;
+  font-size: 0.78rem;
+}
+
+.modal-board-container .captured-piece-img {
+  width: 17px;
+  height: 17px;
 }
 
 @media (max-width: 767.98px) {
