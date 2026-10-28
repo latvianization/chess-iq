@@ -76,6 +76,7 @@ class ReviewDashboard {
     this.container.addEventListener('touchend', () => {
       if (!this.game) return;
       if (document.querySelector('.modal.show') || document.querySelector('.why-modal-backdrop') || document.body.classList.contains('modal-open')) return;
+      if (this.sandboxState || this.retryPuzzleState?.active || this.guessMoveState?.active) return;
 
       const isEdgeSwipe = touchStartX < 50;
       if ((isEdgeSwipe || !isBoardDrag) && touchDeltaX > 70 && Math.abs(touchDeltaX) > Math.abs(touchDeltaY) * 1.3) {
@@ -112,6 +113,29 @@ class ReviewDashboard {
       const isPrev = e.key === 'ArrowLeft' || e.key === 'Left' || e.code === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Up' || e.code === 'ArrowUp';
       const isNext = e.key === 'ArrowRight' || e.key === 'Right' || e.code === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'Down' || e.code === 'ArrowDown';
       const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+
+      if (this.sandboxState) {
+        if (e.key === 'Home' || (isCtrlOrMeta && isPrev)) {
+          e.preventDefault();
+          this.goToSandboxStep(0);
+        } else if (e.key === 'End' || (isCtrlOrMeta && isNext)) {
+          e.preventDefault();
+          this.goToSandboxStep(Math.max(0, (this.sandboxState.history?.length || 1) - 1));
+        } else if (isPrev) {
+          e.preventDefault();
+          this.stepSandbox(-1);
+        } else if (isNext) {
+          e.preventDefault();
+          this.stepSandbox(1);
+        } else if (e.key === 'f' || e.key === 'F') {
+          e.preventDefault();
+          this.orientation = this.orientation === 'w' ? 'b' : 'w';
+          this.updateBoardAndControls();
+        }
+        return;
+      }
+
+      if (this.retryPuzzleState?.active || this.guessMoveState?.active) return;
 
       if (e.key === 'Home' || (isCtrlOrMeta && isPrev)) {
         e.preventDefault();
@@ -324,6 +348,62 @@ class ReviewDashboard {
 
   exitSpecialMode() {
     if (typeof exitSpecialMode === 'function') exitSpecialMode(this);
+    else {
+      this.sandboxState = null;
+      this.retryPuzzleState = null;
+      this.guessMoveState = null;
+      if (this.board) this.board.userHighlights.clear();
+      this.updateBoardAndControls();
+    }
+  }
+
+  syncSandboxState() {
+    if (!this.sandboxState || !Array.isArray(this.sandboxState.history)) return;
+    const sb = this.sandboxState;
+    const currentStep = sb.history[sb.sandboxIndex];
+    if (!currentStep) return;
+    sb.fen = currentStep.fen;
+    sb.lastMove = currentStep.lastMove;
+    sb.evalResult = currentStep.evalResult;
+    sb.isEvaluating = Boolean(currentStep.isEvaluating);
+    sb.moveHistorySan = sb.history.slice(1).map((h) => h.san);
+  }
+
+  stepSandbox(delta) {
+    if (!this.sandboxState) return;
+    this.goToSandboxStep((this.sandboxState.sandboxIndex || 0) + delta);
+  }
+
+  goToSandboxStep(targetIdx) {
+    if (!this.sandboxState || !Array.isArray(this.sandboxState.history)) return;
+    const maxIdx = Math.max(0, this.sandboxState.history.length - 1);
+    const clamped = Math.max(0, Math.min(maxIdx, targetIdx));
+    if (clamped === this.sandboxState.sandboxIndex) return;
+
+    this.sandboxState.sandboxIndex = clamped;
+    this.syncSandboxState();
+    if (this.board) this.board.userHighlights.clear();
+
+    const currentStep = this.sandboxState.history[clamped];
+    if (currentStep?.san && typeof soundService !== 'undefined') {
+      soundService.playMove();
+    }
+    this.updateBoardAndControls();
+
+    if (!currentStep.evalResult && !currentStep.isEvaluating && clamped > 0 && typeof evaluateFenHybrid === 'function') {
+      currentStep.isEvaluating = true;
+      this.syncSandboxState();
+      evaluateFenHybrid(currentStep.fen, false).then((evalRes) => {
+        currentStep.evalResult = evalRes;
+        currentStep.isEvaluating = false;
+        if (this.sandboxState && this.sandboxState.sandboxIndex === clamped) {
+          this.syncSandboxState();
+          this.updateBoardAndControls();
+        }
+      }).catch(() => {
+        currentStep.isEvaluating = false;
+      });
+    }
   }
 
   toggleVisionOverlay(mode) {
@@ -640,7 +720,25 @@ class ReviewDashboard {
     // Update Move Strip Badge & Notation
     const stripEl = this.container.querySelector('#review-move-strip');
     if (stripEl) {
-      if (cur && !isBlindActive) {
+      if (isSandboxMode) {
+        const sbIdx = this.sandboxState.sandboxIndex || 0;
+        const currentStep = this.sandboxState.history?.[sbIdx];
+        const stepSan = currentStep?.san;
+        stripEl.innerHTML = `
+          <div class="d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <span class="badge bg-info text-dark border border-dark rounded-pill px-2.5 py-1 fw-black">
+                <i class="bi bi-compass-fill me-1"></i>What-If Step ${sbIdx}
+              </span>
+              ${sbIdx === 0
+                ? '<span class="small fw-bold text-secondary">Starting Position of What-If Sandbox</span>'
+                : `<span class="font-monospace fw-black fs-5">${insEscape(stepSan || '')}</span><span class="small fw-bold text-secondary">Theoretical Move</span>`
+              }
+            </div>
+            <span class="small text-secondary font-monospace">Use ← / → under board to walk theoretical steps</span>
+          </div>
+        `;
+      } else if (cur && !isBlindActive) {
         const isForced = Boolean(cur.isForced || cur.classification === 'forced');
         const effectiveCls = isForced ? 'forced' : cur.classification;
         const comic = getComicBadge(effectiveCls, cur.san);
@@ -749,25 +847,68 @@ class ReviewDashboard {
       }
     }
 
-    // Update Step Counter
+    // Update Step Counter & navigation buttons disabled state
     const counterEl = this.container.querySelector('#ply-counter');
-    if (counterEl) {
-      counterEl.textContent = `${this.currentPly} / ${this.game?.plies.length || 0}`;
-    }
-
-    // Update navigation buttons disabled state
-    const isAtStart = this.currentPly === 0;
-    const isAtEnd = !this.game || this.currentPly >= (this.game.plies?.length || 0);
-
     const btnFirst = this.container.querySelector('#btn-first');
     const btnPrev = this.container.querySelector('#btn-prev');
     const btnNext = this.container.querySelector('#btn-next');
     const btnLast = this.container.querySelector('#btn-last');
 
-    if (btnFirst) btnFirst.disabled = isAtStart;
-    if (btnPrev) btnPrev.disabled = isAtStart;
-    if (btnNext) btnNext.disabled = isAtEnd;
-    if (btnLast) btnLast.disabled = isAtEnd;
+    if (isSandboxMode) {
+      const sbIdx = this.sandboxState.sandboxIndex || 0;
+      const sbTotal = Math.max(0, (this.sandboxState.history?.length || 1) - 1);
+
+      if (counterEl) {
+        counterEl.textContent = `+${sbIdx} / +${sbTotal}`;
+        counterEl.title = `Theoretical Move ${sbIdx} of ${sbTotal}`;
+      }
+
+      if (btnFirst) btnFirst.disabled = (sbIdx === 0);
+      if (btnPrev) btnPrev.disabled = (sbIdx === 0);
+      if (btnNext) btnNext.disabled = (sbIdx >= sbTotal);
+      if (btnLast) btnLast.disabled = (sbIdx >= sbTotal);
+    } else if (isPuzzleMode || isGuessMode) {
+      if (counterEl) {
+        counterEl.textContent = `${this.currentPly} / ${this.game?.plies.length || 0}`;
+        counterEl.removeAttribute('title');
+      }
+      if (btnFirst) btnFirst.disabled = true;
+      if (btnPrev) btnPrev.disabled = true;
+      if (btnNext) btnNext.disabled = true;
+      if (btnLast) btnLast.disabled = true;
+    } else {
+      const isAtStart = this.currentPly === 0;
+      const isAtEnd = !this.game || this.currentPly >= (this.game.plies?.length || 0);
+
+      if (counterEl) {
+        counterEl.textContent = `${this.currentPly} / ${this.game?.plies.length || 0}`;
+        counterEl.removeAttribute('title');
+      }
+
+      if (btnFirst) btnFirst.disabled = isAtStart;
+      if (btnPrev) btnPrev.disabled = isAtStart;
+      if (btnNext) btnNext.disabled = isAtEnd;
+      if (btnLast) btnLast.disabled = isAtEnd;
+    }
+
+    // Toggle Action Strip Buttons in Special Modes (What-If Sandbox, Retry Mistakes, Guess Move)
+    const isSpecialMode = Boolean(isSandboxMode || isPuzzleMode || isGuessMode);
+    const btnKeyMoment = this.container.querySelector('#btn-key-moment');
+    const dropdownTrain = this.container.querySelector('#btn-dropdown-train')?.closest('.dropdown');
+    if (btnKeyMoment) btnKeyMoment.classList.toggle('d-none', isSpecialMode);
+    if (dropdownTrain) dropdownTrain.classList.toggle('d-none', isSpecialMode);
+
+    // Lock Global Game Step Navigation (Advantage Scrubber & Move List) during Special Modes
+    const advChartCard = this.container.querySelector('#advantage-chart-area');
+    const movesCard = this.container.querySelector('#review-moves-card');
+    if (advChartCard) {
+      advChartCard.style.pointerEvents = isSpecialMode ? 'none' : '';
+      advChartCard.style.opacity = isSpecialMode ? '0.6' : '';
+    }
+    if (movesCard) {
+      movesCard.style.pointerEvents = isSpecialMode ? 'none' : '';
+      movesCard.style.opacity = isSpecialMode ? '0.6' : '';
+    }
 
     // Update Active Cell & Row in Move Table (scroll smoothly inside container if visible)
     const scrollContainer = this.container.querySelector('.move-history-container');
@@ -2245,11 +2386,39 @@ class ReviewDashboard {
       });
     };
 
-    bindNavBtn('#btn-first', () => this.goToPly(0));
-    bindNavBtn('#btn-prev', () => this.goToPly(this.currentPly - 1));
-    bindNavBtn('#btn-next', () => this.goToPly(this.currentPly + 1));
-    bindNavBtn('#btn-last', () => this.goToPly(this.game.plies.length));
-    bindNavBtn('#btn-key-moment', () => this.nextKeyMoment());
+    bindNavBtn('#btn-first', () => {
+      if (this.sandboxState) {
+        this.goToSandboxStep(0);
+      } else if (!this.retryPuzzleState?.active && !this.guessMoveState?.active) {
+        this.goToPly(0);
+      }
+    });
+    bindNavBtn('#btn-prev', () => {
+      if (this.sandboxState) {
+        this.stepSandbox(-1);
+      } else if (!this.retryPuzzleState?.active && !this.guessMoveState?.active) {
+        this.goToPly(this.currentPly - 1);
+      }
+    });
+    bindNavBtn('#btn-next', () => {
+      if (this.sandboxState) {
+        this.stepSandbox(1);
+      } else if (!this.retryPuzzleState?.active && !this.guessMoveState?.active) {
+        this.goToPly(this.currentPly + 1);
+      }
+    });
+    bindNavBtn('#btn-last', () => {
+      if (this.sandboxState) {
+        this.goToSandboxStep(Math.max(0, (this.sandboxState.history?.length || 1) - 1));
+      } else if (!this.retryPuzzleState?.active && !this.guessMoveState?.active) {
+        this.goToPly(this.game.plies.length);
+      }
+    });
+    bindNavBtn('#btn-key-moment', () => {
+      if (!this.sandboxState && !this.retryPuzzleState?.active && !this.guessMoveState?.active) {
+        this.nextKeyMoment();
+      }
+    });
 
     // Bind Tab Switching
     this.container.querySelectorAll('[data-review-tab]').forEach((btn) => {
@@ -2317,6 +2486,7 @@ class ReviewDashboard {
     // Bind Coaching Callout Cards
     this.container.querySelectorAll('[data-callout-ply]').forEach((card) => {
       card.addEventListener('click', () => {
+        if (this.sandboxState || this.retryPuzzleState?.active || this.guessMoveState?.active) return;
         const ply = parseInt(card.getAttribute('data-callout-ply'), 10);
         if (!isNaN(ply)) this.goToPly(ply);
       });
@@ -2378,6 +2548,7 @@ class ReviewDashboard {
 
     this.container.querySelectorAll('[data-filter-jump]').forEach((chip) => {
       chip.addEventListener('click', () => {
+        if (this.sandboxState || this.retryPuzzleState?.active || this.guessMoveState?.active) return;
         const cls = chip.getAttribute('data-filter-jump');
         const userColor = this.game?.userColor || 'w';
         const target = (this.game?.plies || []).find((p) => p && p.classification === cls && (p.color === userColor));

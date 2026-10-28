@@ -80,8 +80,25 @@ async function handleReviewBoardMove(dashboard, from, to) {
 
   // 3. Interactive What-If Sandbox Mode
   try {
-    const baseFen = dashboard.getActiveBoardFen();
-    const c = new Chess(baseFen);
+    if (!dashboard.sandboxState || !Array.isArray(dashboard.sandboxState.history)) {
+      const baseFen = dashboard.getActiveBoardFen();
+      const curEval = dashboard.getCurrentEval();
+      const baseStep = {
+        fen: baseFen,
+        lastMove: curEval ? { from: curEval.from, to: curEval.to } : null,
+        san: null,
+        evalResult: curEval ? { scoreCp: curEval.scoreCp, mate: curEval.mate, bestMoveUci: curEval.bestMoveUci, bestMoveSan: curEval.bestMoveSan } : null,
+        isEvaluating: false
+      };
+      dashboard.sandboxState = {
+        basePly: dashboard.currentPly,
+        sandboxIndex: 0,
+        history: [baseStep]
+      };
+    }
+
+    const currentStep = dashboard.sandboxState.history[dashboard.sandboxState.sandboxIndex] || dashboard.sandboxState.history[0];
+    const c = new Chess(currentStep.fen);
     const move = c.move({ from, to, promotion: 'q' });
     if (!move) return;
 
@@ -89,21 +106,34 @@ async function handleReviewBoardMove(dashboard, from, to) {
     else soundService.playMove();
 
     const newFen = c.fen();
-    const prevMoves = dashboard.sandboxState?.moveHistorySan || [];
-    dashboard.sandboxState = {
+    const newStep = {
       fen: newFen,
       lastMove: { from: move.from, to: move.to },
-      moveHistorySan: [...prevMoves, move.san],
+      san: move.san,
       evalResult: null,
       isEvaluating: true
     };
+
+    dashboard.sandboxState.history = dashboard.sandboxState.history.slice(0, dashboard.sandboxState.sandboxIndex + 1);
+    dashboard.sandboxState.history.push(newStep);
+    dashboard.sandboxState.sandboxIndex = dashboard.sandboxState.history.length - 1;
+    if (typeof dashboard.syncSandboxState === 'function') {
+      dashboard.syncSandboxState();
+    }
     dashboard.updateBoardAndControls();
 
-    const evalRes = await evaluateFenHybrid(newFen, false);
-    if (dashboard.sandboxState && dashboard.sandboxState.fen === newFen) {
-      dashboard.sandboxState.evalResult = evalRes;
-      dashboard.sandboxState.isEvaluating = false;
-      dashboard.updateBoardAndControls();
+    if (typeof evaluateFenHybrid === 'function') {
+      const evalRes = await evaluateFenHybrid(newFen, false);
+      if (dashboard.sandboxState) {
+        newStep.evalResult = evalRes;
+        newStep.isEvaluating = false;
+        if (dashboard.sandboxState.history[dashboard.sandboxState.sandboxIndex] === newStep) {
+          if (typeof dashboard.syncSandboxState === 'function') {
+            dashboard.syncSandboxState();
+          }
+          dashboard.updateBoardAndControls();
+        }
+      }
     }
   } catch {}
 }
@@ -366,8 +396,15 @@ function updateModeBanner(dashboard, cur) {
 
   if (dashboard.sandboxState) {
     const sb = dashboard.sandboxState;
-    const movesArr = sb.moveHistorySan || sb.moves || [];
-    const movesStr = movesArr.join(' → ');
+    const sbIdx = sb.sandboxIndex || 0;
+    const sbTotal = Math.max(0, (sb.history?.length || 1) - 1);
+    const movesArr = sb.history?.slice(1) || [];
+    const movesHtml = movesArr.map((h, i) => {
+      const stepNum = i + 1;
+      const isCurrent = stepNum === sbIdx;
+      return `<button type="button" class="btn btn-xs ${isCurrent ? 'btn-info fw-black text-dark border border-dark' : 'btn-dark text-light border border-secondary opacity-75'} font-monospace px-1.5 py-0.5" data-sb-step="${stepNum}">${insEscape(h.san)}</button>`;
+    }).join('<span class="text-secondary mx-0.5">→</span>');
+
     let evalBadge = '';
     if (sb.isEvaluating || sb.evaluating) {
       evalBadge = `<span class="badge bg-secondary font-monospace"><span class="spinner-border spinner-border-sm me-1" style="width: 10px; height: 10px;"></span>Stockfish thinking...</span>`;
@@ -386,7 +423,9 @@ function updateModeBanner(dashboard, cur) {
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
           <div class="d-flex align-items-center gap-2 flex-wrap">
             <span class="badge bg-info text-dark border border-dark fw-black"><i class="bi bi-compass-fill me-1"></i>WHAT-IF SANDBOX</span>
-            <span class="small font-monospace fw-bold">${insEscape(movesStr)}</span>
+            <span class="badge bg-secondary font-monospace fw-bold">Step ${sbIdx} of ${sbTotal}</span>
+            <button type="button" class="btn btn-xs ${sbIdx === 0 ? 'btn-info fw-black text-dark border border-dark' : 'btn-outline-secondary text-secondary'} font-monospace px-1.5 py-0.5" id="btn-sb-step-0" title="Starting Position of Sandbox">Start</button>
+            ${movesHtml ? `<span class="text-secondary mx-0.5">→</span><div class="d-inline-flex align-items-center flex-wrap gap-1">${movesHtml}</div>` : ''}
             ${evalBadge}
           </div>
           <div class="d-flex align-items-center gap-1.5">
@@ -398,6 +437,17 @@ function updateModeBanner(dashboard, cur) {
       </div>
     `;
     bannerEl.querySelector('#btn-sandbox-reset')?.addEventListener('click', () => (typeof dashboard.exitSpecialMode === 'function' ? dashboard.exitSpecialMode() : exitSpecialMode(dashboard)));
+    bannerEl.querySelector('#btn-sb-step-0')?.addEventListener('click', () => {
+      if (typeof dashboard.goToSandboxStep === 'function') dashboard.goToSandboxStep(0);
+    });
+    bannerEl.querySelectorAll('[data-sb-step]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const stepNum = parseInt(btn.getAttribute('data-sb-step'), 10);
+        if (!isNaN(stepNum) && typeof dashboard.goToSandboxStep === 'function') {
+          dashboard.goToSandboxStep(stepNum);
+        }
+      });
+    });
     return;
   }
 

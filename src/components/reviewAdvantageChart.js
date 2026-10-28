@@ -174,6 +174,7 @@ function renderAdvantageChart(dashboard) {
   const tooltip = chartArea.querySelector('#advantage-chart-tooltip');
   if (canvas) {
     const handleInteraction = (clientX) => {
+      if (dashboard.sandboxState || dashboard.retryPuzzleState?.active || dashboard.guessMoveState?.active) return;
       const rect = canvas.getBoundingClientRect();
       if (rect.width <= 0) return;
       const relX = clientX - rect.left;
