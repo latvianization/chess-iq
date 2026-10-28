@@ -249,7 +249,6 @@ class App {
     }
     document.getElementById('why-blunder-modal')?.remove();
     document.getElementById('winning-path-modal')?.remove();
-    document.getElementById('blunder-bank-modal')?.remove();
     document.getElementById('positional-pillars-modal')?.remove();
     if (typeof closeGameOverModal === 'function') {
       closeGameOverModal();
@@ -290,7 +289,6 @@ class App {
     }
     document.getElementById('why-blunder-modal')?.remove();
     document.getElementById('winning-path-modal')?.remove();
-    document.getElementById('blunder-bank-modal')?.remove();
     document.getElementById('positional-pillars-modal')?.remove();
     if (typeof closeGameOverModal === 'function') {
       closeGameOverModal();
@@ -335,10 +333,9 @@ class App {
       this.updateSoundIcon();
     });
     document.getElementById('menu-btn-clear-cache')?.addEventListener('click', () => {
-      if (confirm('Clear all cached games, analysis results, and blunder bank data? This cannot be undone.')) {
+      if (confirm('Clear all cached games and analysis results? This cannot be undone.')) {
         try {
           if (typeof clearGameCache === 'function') clearGameCache();
-          if (typeof clearBlunderBank === 'function') clearBlunderBank();
           localStorage.removeItem('chess_toon_theme');
           window.location.reload();
         } catch (e) {

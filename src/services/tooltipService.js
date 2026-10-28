@@ -100,32 +100,8 @@ const IQ_TOOLTIPS = {
   },
 
   // ==========================================
-  // RETRY MISTAKES & TRAINING MODES
+  // TRAINING MODES & BOT SPARRING
   // ==========================================
-  ctrl_retry_mistakes: {
-    title: 'Retry Mistakes Workout',
-    category: 'ACTIVE TRAINING',
-    what: 'Interactive puzzle mode generated from your real mistakes! Rewinds the board to your Inaccuracies, Mistakes, Blunders, and Missed Wins, hides your bad move, and challenges you to find the engine\'s best move.',
-    why: 'Passive review is quickly forgotten; active recall builds muscle memory. By physically finding and playing the correct move on the board, you rewire your tactical calculation so you never repeat the same blunder.',
-  },
-  coach_drill_mistakes: {
-    title: 'Drill Mistakes',
-    category: 'ACTIVE TRAINING',
-    what: 'Launches the interactive Retry Mistakes workout for all key errors in this game.',
-    why: 'Directly addresses your tactical oversights from this game to turn weaknesses into strengths.',
-  },
-  coach_guess_move: {
-    title: 'Guess the Move Mode',
-    category: 'GM CALCULATION',
-    what: 'Plays through the game from your perspective, asking you to predict each move to earn calculation points.',
-    why: 'Tests your deep positional understanding and calculation stamina against grandmaster-level play.',
-  },
-  coach_blunder_bank: {
-    title: 'Personal Blunder Bank',
-    category: 'SPACED REPETITION',
-    what: 'A persistent library saving every mistake and blunder you make across all analyzed games into spaced-repetition flashcard puzzles.',
-    why: 'Over time, your personal Blunder Bank reveals your recurring blind spots (pins, forks, back-rank mates) and tests you periodically until mastered.',
-  },
   coach_practice_bot: {
     title: 'Practice Key Position vs Bot',
     category: 'BOT SPARRING',
@@ -423,7 +399,7 @@ const IQ_TOOLTIPS = {
     title: 'Blunder (??)',
     category: 'MOVE QUALITY',
     what: 'A catastrophic blunder that loses a piece, overlooks a tactical strike, or ruins a winning position.',
-    why: 'The primary cause of game losses. Use the "Why?" button and Retry Mistakes to learn from it.',
+    why: 'The primary cause of game losses. Use the "Why?" button to learn from it.',
   },
   badge_missed_win: {
     title: 'Missed Win (≠)',

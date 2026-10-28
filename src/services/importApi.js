@@ -685,10 +685,6 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
     botAvatar: botAvatar || (botMatch ? botMatch.avatar : (isBotGame ? '🤖' : null))
   };
 
-  if (typeof syncGameToBlunderBank === "function") {
-    try { syncGameToBlunderBank(analyzedResult); } catch {}
-  }
-
   const totalDuration = Date.now() - analysisStart;
   console.log(`[Analysis] Finished in ${totalDuration}ms: User accuracy ${userAccuracy}%, Opponent ${opponentAccuracy}%, Performance ${overallGameElo} Elo`);
   return analyzedResult;

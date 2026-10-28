@@ -7,7 +7,7 @@ function bindMoveTableRowClicks(dashboard) {
   if (!dashboard || !dashboard.container) return;
   dashboard.container.querySelectorAll('[data-row-ply]').forEach((el) => {
     el.addEventListener('click', () => {
-      if (dashboard.sandboxState || dashboard.retryPuzzleState?.active || dashboard.guessMoveState?.active) return;
+      if (dashboard.sandboxState) return;
       const ply = parseInt(el.getAttribute('data-row-ply'), 10);
       if (!isNaN(ply)) dashboard.goToPly(ply);
     });

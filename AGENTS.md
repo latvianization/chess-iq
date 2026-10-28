@@ -14,7 +14,6 @@
   - `engineRefutations.js`: Tactical threats, continuation lines (5 moves), blunder refutations.
   - `importApi.js`: Game fetching (Chess.com) and PGN parsing/analysis.
   - `gameCacheService.js`: Per-game analysis cache in localStorage.
-  - `blunderBankService.js`: Persistent spaced-repetition blunder/mistake trainer bank in localStorage.
   - `sound.js`: Web Audio synthesized sound effects.
 - **`src/components/`**:
   - `board.js`: Interactive SVG chessboard, captured piece bars, drag-and-drop, check highlight.
@@ -25,9 +24,8 @@
   - `reviewAdvantageChart.js`: Interactive evaluation timeline chart.
   - `reviewPillars.js`: 4-pillar positional evaluation (Material, Activity, Safety, Structure) and guide modal.
   - `reviewOpeningModal.js`: ECO opening book and departure explorer modal.
-  - `reviewBlunderBankModal.js`: Spaced-repetition blunder & mistake practice modal.
   - `reviewReportModal.js`: Full game executive performance report modal.
-  - `reviewTrainingModes.js`: Interactive training modes (Retry Mistakes, Guess-the-Move, Sandbox, Vision).
+  - `reviewTrainingModes.js`: Interactive training modes (Sandbox, Vision).
   - `reviewMoveTable.js`: Move history table, move filtering, and classification summary badges.
   - `importModal.js`: Game import dialog and user games list.
 - **`src/main.js`**: App coordinator, theme switching, and mode toggling.

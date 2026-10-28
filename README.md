@@ -75,17 +75,7 @@ You don't need to install, compile, or configure anything. Click the link below 
 
 ---
 
-### 🧠 4. Automated Blunder Bank (Spaced-Repetition Trainer)
-- **Turn Mistakes Into Mastery:** Every inaccuracy, mistake, blunder, and missed win made across your analyzed games is automatically saved to your browser's persistent local bank.
-- **Spaced-Repetition System:** Tracks your solving streak, attempts, mastery status, and last practice timestamp for each position.
-- **Daily Workout Mode:** Curated 5-puzzle drill sessions prioritizing unmastered positions.
-- **Tactical Hints & Solution Reveal:** Click **"Hint"** to highlight the key piece or idea, or **"Show Solution"** to reveal the engine-approved move.
-- **Interactive Puzzle Filters:** Filter flashcards by All, Blunders only, Mistakes only, Inaccuracies only, or by specific tactical motifs.
-- **Game & Move Management:** Remove individual flashcards or delete imported games to purge all their associated moves from your bank.
-
----
-
-### 🏛️ 5. 4-Pillar Positional X-Ray & Board Vision Suite
+### 🏛️ 4. 4-Pillar Positional X-Ray & Board Vision Suite
 - **4-Pillar Positional Breakdown:** Evaluates every position across four strategic dimensions:
   - ⚖️ **Material Balance:** Compares non-king piece values with bishop pair bonuses.
   - ⚡ **Piece Activity & Territory:** Measures square influence with a 1.5× center dominance multiplier (c3–f6).
@@ -100,17 +90,15 @@ You don't need to install, compile, or configure anything. Click the link below 
 
 ---
 
-### 🎓 6. Coach's Study Plan, Clock Discipline & Workouts
+### 🎓 5. Coach's Study Plan, Clock Discipline & Workouts
 - **Priority Coaching Diagnostic:** Post-game breakdown highlighting your most critical area for improvement (e.g., *Pattern Alert: Hanging Pieces*, *Clock Discipline: 2+ Impulsive Blunders*, or *Endgame Precision Deficit*).
 - **Clock Discipline & Impulsive Blunder Detection:** Extracts move timestamps from PGN clock data (`[%clk ...]`), flagging impulsive moves played in under 1.5 seconds during high-stakes tactical moments.
-- **In-Dashboard "Retry Mistakes" Mode:** Step through all mistakes from your current game directly on the main review board with interactive move attempts, hints, and feedback.
-- **"Guess the Move" Mode:** Step through any reviewed master or user game blind and test your calculation by trying to guess the best move on each ply.
 - **Key Moments Navigation:** Cycle directly between critical turning points, lead changes, and blunders with one click or by pressing <kbd>Space</kbd>.
 - **Phase Elo Ratings:** Independent performance Elo ratings estimated for your **Opening**, **Middlegame**, and **Endgame** play.
 
 ---
 
-### 🤖 7. 33-Bot Sparring Arena
+### 🤖 6. 33-Bot Sparring Arena
 - 33 unique bot personalities spread across 4 distinct Elo tiers (400 to 2000 Elo).
 - **Search & Tier Filtering:** Search bots instantly by name, title, or tier.
 - **Persistent Head-to-Head Records:** Automatically tracks your lifetime match record (Wins, Losses, Draws) against every bot in localStorage.
@@ -306,7 +294,6 @@ chess-iq/
     ├── data/
     │   └── botsData.js          # 33 bot profiles, Elo ratings, depths & banter
     ├── services/
-    │   ├── blunderBankService.js# Spaced-repetition blunder trainer & storage
     │   ├── comicBadges.js       # Move classification badges and stylings
     │   ├── ecoDictionary.js     # Opening book dictionary and ECO code matcher
     │   ├── engine.js            # Win probability, accuracy & Elo evaluation logic

@@ -28,12 +28,10 @@ class ReviewDashboard {
     this.visionOverlay = 'none'; // 'none' | 'heatmap'
     this.moveFilter = 'all'; // 'all' | 'key' | 'errors'
     this.sandboxState = null;
-    this.retryPuzzleState = null;
-    this.guessMoveState = null;
     this.board = null;
     this.analysisStartTime = null;
     this.advantagePoints = [];
-    this.advantageMidY = 42;
+    this.advantageMidY = 48;
     this.savedGamesFilter = 'all'; // 'all' | 'players' | 'bots'
 
     window.addEventListener('chess_iq_cache_updated', () => {
@@ -76,7 +74,7 @@ class ReviewDashboard {
     this.container.addEventListener('touchend', () => {
       if (!this.game) return;
       if (document.querySelector('.modal.show') || document.querySelector('.why-modal-backdrop') || document.body.classList.contains('modal-open')) return;
-      if (this.sandboxState || this.retryPuzzleState?.active || this.guessMoveState?.active) return;
+      if (this.sandboxState) return;
 
       const isEdgeSwipe = touchStartX < 50;
       if ((isEdgeSwipe || !isBoardDrag) && touchDeltaX > 70 && Math.abs(touchDeltaX) > Math.abs(touchDeltaY) * 1.3) {
@@ -134,8 +132,6 @@ class ReviewDashboard {
         }
         return;
       }
-
-      if (this.retryPuzzleState?.active || this.guessMoveState?.active) return;
 
       if (e.key === 'Home' || (isCtrlOrMeta && isPrev)) {
         e.preventDefault();
@@ -249,9 +245,6 @@ class ReviewDashboard {
     this.analysisStartTime = null;
     this.lastUiYieldTime = 0;
     this.game = analyzedGame;
-    if (analyzedGame && typeof syncGameToBlunderBank === 'function') {
-      try { syncGameToBlunderBank(analyzedGame); } catch {}
-    }
     this.currentPly = analyzedGame && Array.isArray(analyzedGame.plies) && analyzedGame.plies.length > 0 ? 1 : 0;
     this.orientation = analyzedGame ? analyzedGame.userColor : 'w';
     this.isThreatActive = true;
@@ -260,8 +253,6 @@ class ReviewDashboard {
     this.visionOverlay = 'none';
     this.moveFilter = 'all';
     this.sandboxState = null;
-    this.retryPuzzleState = null;
-    this.guessMoveState = null;
     this.render();
   }
 
@@ -291,12 +282,6 @@ class ReviewDashboard {
   }
 
   getActiveBoardFen() {
-    if (this.retryPuzzleState?.active && this.retryPuzzleState.boardFen) {
-      return this.retryPuzzleState.boardFen;
-    }
-    if (this.guessMoveState?.active && this.guessMoveState.boardFen) {
-      return this.guessMoveState.boardFen;
-    }
     if (this.sandboxState?.fen) {
       return this.sandboxState.fen;
     }
@@ -322,36 +307,10 @@ class ReviewDashboard {
     }
   }
 
-  startRetryMistakes() {
-    if (typeof startRetryMistakes === 'function') startRetryMistakes(this);
-  }
-
-  loadMistakeAtIndex(idx) {
-    if (typeof loadMistakeAtIndex === 'function') loadMistakeAtIndex(this, idx);
-  }
-
-  showPuzzleHint() {
-    if (typeof showPuzzleHint === 'function') showPuzzleHint(this);
-  }
-
-  revealPuzzleSolution() {
-    if (typeof revealPuzzleSolution === 'function') revealPuzzleSolution(this);
-  }
-
-  startGuessTheMove() {
-    if (typeof startGuessTheMove === 'function') startGuessTheMove(this);
-  }
-
-  loadGuessTurnAtIndex(idx) {
-    if (typeof loadGuessTurnAtIndex === 'function') loadGuessTurnAtIndex(this, idx);
-  }
-
   exitSpecialMode() {
     if (typeof exitSpecialMode === 'function') exitSpecialMode(this);
     else {
       this.sandboxState = null;
-      this.retryPuzzleState = null;
-      this.guessMoveState = null;
       if (this.board) this.board.userHighlights.clear();
       this.updateBoardAndControls();
     }
@@ -418,8 +377,6 @@ class ReviewDashboard {
   goToPly(ply) {
     if (!this.game) return;
     this.sandboxState = null;
-    this.retryPuzzleState = null;
-    this.guessMoveState = null;
     if (this.board) this.board.userHighlights.clear();
     this.currentPly = Math.max(0, Math.min(this.game.plies.length, ply));
 
@@ -613,29 +570,17 @@ class ReviewDashboard {
 
   updateBoardAndControls() {
     const cur = this.getCurrentEval();
-    const isPuzzleMode = Boolean(this.retryPuzzleState?.active);
-    const isPuzzleUnsolved = isPuzzleMode && !this.retryPuzzleState.solved;
-    const isGuessMode = Boolean(this.guessMoveState?.active);
-    const isGuessUnanswered = isGuessMode && !this.guessMoveState.answered;
-    const isBlindActive = isPuzzleUnsolved || isGuessUnanswered;
-    const isSandboxMode = Boolean(this.sandboxState && !isPuzzleMode && !isGuessMode);
+    const isSandboxMode = Boolean(this.sandboxState);
 
     const fen = this.getActiveBoardFen();
-    const lastMove = isPuzzleMode
-      ? this.retryPuzzleState.lastMove
-      : (isGuessMode
-          ? this.guessMoveState.lastMove
-          : (isSandboxMode ? this.sandboxState.lastMove : (cur ? { from: cur.from, to: cur.to } : null)));
+    const lastMove = isSandboxMode ? this.sandboxState.lastMove : (cur ? { from: cur.from, to: cur.to } : null);
 
     let bestMove = null;
     let secondBestMove = null;
 
     const isValidUci = (u) => typeof u === 'string' && u.length >= 4 && /^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(u);
 
-    if (isBlindActive) {
-      bestMove = null;
-      secondBestMove = null;
-    } else if (isSandboxMode) {
+    if (isSandboxMode) {
       const sbBestUci = this.sandboxState.evalResult?.bestMoveUci;
       bestMove = isValidUci(sbBestUci)
         ? { from: sbBestUci.slice(0, 2), to: sbBestUci.slice(2, 4) }
@@ -656,7 +601,7 @@ class ReviewDashboard {
         if (!secondUci && top.second) secondUci = `${top.second.from}${top.second.to}`;
       }
 
-      if (isOptimal && !isPuzzleMode && !isGuessMode) {
+      if (isOptimal) {
         bestMove = { from: cur.from, to: cur.to };
         secondBestMove = null;
       } else {
@@ -674,12 +619,12 @@ class ReviewDashboard {
       secondBestMove = top.second;
     }
 
-    const threatMove = !isBlindActive && !isSandboxMode && this.isThreatActive && cur?.threat?.uci && cur.threat.uci.length >= 4
+    const threatMove = !isSandboxMode && this.isThreatActive && cur?.threat?.uci && cur.threat.uci.length >= 4
       ? { from: cur.threat.uci.slice(0, 2), to: cur.threat.uci.slice(2, 4) }
       : null;
 
     const isCurForced = Boolean(cur && (cur.isForced || cur.classification === 'forced'));
-    const badge = !isBlindActive && !isSandboxMode && cur ? { square: cur.to, classification: isCurForced ? 'forced' : cur.classification } : null;
+    const badge = !isSandboxMode && cur ? { square: cur.to, classification: isCurForced ? 'forced' : cur.classification } : null;
 
     this.board?.setProps({
       fen,
@@ -690,14 +635,14 @@ class ReviewDashboard {
       threatMove,
       badge,
       visionOverlay: this.visionOverlay,
-      showBestMove: !isBlindActive && this.showBestMove,
-      showLoosePieces: !isBlindActive && this.showLoosePieces,
+      showBestMove: this.showBestMove,
+      showLoosePieces: this.showLoosePieces,
       whiteName: this.game?.white || 'White',
       blackName: this.game?.black || 'Black',
       showPlayerBars: true,
     });
 
-    // Update Banner Area (Sandbox, Retry Mistakes Puzzle, or Guess the Move)
+    // Update Banner Area (Sandbox)
     this.updateModeBanner(cur);
 
     // Update 4-Pillar Positional Breakdown
@@ -867,15 +812,6 @@ class ReviewDashboard {
       if (btnPrev) btnPrev.disabled = (sbIdx === 0);
       if (btnNext) btnNext.disabled = (sbIdx >= sbTotal);
       if (btnLast) btnLast.disabled = (sbIdx >= sbTotal);
-    } else if (isPuzzleMode || isGuessMode) {
-      if (counterEl) {
-        counterEl.textContent = `${this.currentPly} / ${this.game?.plies.length || 0}`;
-        counterEl.removeAttribute('title');
-      }
-      if (btnFirst) btnFirst.disabled = true;
-      if (btnPrev) btnPrev.disabled = true;
-      if (btnNext) btnNext.disabled = true;
-      if (btnLast) btnLast.disabled = true;
     } else {
       const isAtStart = this.currentPly === 0;
       const isAtEnd = !this.game || this.currentPly >= (this.game.plies?.length || 0);
@@ -891,8 +827,8 @@ class ReviewDashboard {
       if (btnLast) btnLast.disabled = isAtEnd;
     }
 
-    // Toggle Action Strip Buttons in Special Modes (What-If Sandbox, Retry Mistakes, Guess Move)
-    const isSpecialMode = Boolean(isSandboxMode || isPuzzleMode || isGuessMode);
+    // Toggle Action Strip Buttons in Special Modes (What-If Sandbox)
+    const isSpecialMode = Boolean(isSandboxMode);
     const btnKeyMoment = this.container.querySelector('#btn-key-moment');
     const dropdownTrain = this.container.querySelector('#btn-dropdown-train')?.closest('.dropdown');
     if (btnKeyMoment) btnKeyMoment.classList.toggle('d-none', isSpecialMode);
@@ -995,87 +931,6 @@ class ReviewDashboard {
 
   openPillarsGuideModal(activeKey = null) {
     if (typeof openPillarsGuideModal === 'function') openPillarsGuideModal(this, activeKey);
-  }
-
-
-  buildCoachStudyPlanCard() {
-    if (!this.game) return '';
-    const summary = this.game.gameCoachSummary || {};
-    const mistakes = this.getUserMistakePlies();
-    const bankStats = typeof getBlunderBankStats === 'function' ? getBlunderBankStats() : { total: 0, due: 0 };
-
-    // Determine #1 Priority Coaching Focus
-    let priorityTitle = 'Solid Positional Consistency';
-    let priorityDesc = 'You played a clean game with very few tactical oversights. Use Guess-the-Move mode to test your grandmaster calculation!';
-    let priorityIcon = '🏆';
-
-    if (summary.topMotifId && typeof TACTICAL_MOTIF_CATALOG !== 'undefined' && TACTICAL_MOTIF_CATALOG[summary.topMotifId]) {
-      const cat = TACTICAL_MOTIF_CATALOG[summary.topMotifId];
-      priorityIcon = cat.icon;
-      priorityTitle = `Pattern Alert: ${cat.label} (${summary.topMotifCount}× in this game)`;
-      priorityDesc = cat.coachTip;
-    } else if ((this.game.impulsiveBlunders || 0) >= 1) {
-      priorityIcon = '⚡';
-      priorityTitle = `Clock Discipline: ${this.game.impulsiveBlunders} Rushed Mistake${this.game.impulsiveBlunders > 1 ? 's' : ''}`;
-      priorityDesc = 'You played critical mistakes in under 2 seconds despite having plenty of clock time. Sit on your hands for 5 seconds before capturing or responding to threats!';
-    } else if (summary.weakestPhase && summary.weakestPhaseAcc < 78) {
-      priorityIcon = '📉';
-      const phCap = summary.weakestPhase.charAt(0).toUpperCase() + summary.weakestPhase.slice(1);
-      priorityTitle = `${phCap} Precision (${summary.weakestPhaseAcc}% Accuracy)`;
-      priorityDesc = `Your accuracy dipped most during the ${summary.weakestPhase}. Practice playing from the critical ${summary.weakestPhase} transition against an Elo-matched bot!`;
-    } else if (mistakes.length > 0) {
-      priorityIcon = '🎯';
-      priorityTitle = `Tactical Calculation (${mistakes.length} Key Error${mistakes.length > 1 ? 's' : ''})`;
-      priorityDesc = 'Re-play your mistakes on the board right now to build muscle memory for the correct tactical continuation.';
-    }
-
-    const bright = summary.brightestMove;
-    const practicePly = summary.practicePly || this.game.turningPoint?.ply || 1;
-
-    return `
-      <div class="comic-card p-3 coach-plan-card">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom" style="border-color: var(--arcade-border) !important;">
-          <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-warning text-dark border border-dark fw-black px-2 py-1" style="font-size: 11px;">
-              🎓 COACH'S STUDY PLAN
-            </span>
-            <span class="small fw-bold text-secondary">Personalized Takeaways & Active Drills</span>
-            ${typeof renderInfoIcon === 'function' ? renderInfoIcon('card_coach_study_plan') : ''}
-          </div>
-          ${bright ? `
-            <button type="button" class="btn btn-xs btn-outline-info comic-btn fw-bold py-0.5 px-2" data-callout-ply="${bright.ply}" title="Jump to your highest-rated move">
-              ✨ Best Moment: Move ${Math.ceil(bright.ply / 2)} (${insEscape(bright.san)})
-            </button>
-          ` : ''}
-        </div>
-
-        <div class="d-flex align-items-start gap-2.5 mb-2.5">
-          <div class="fs-4 lh-1 mt-0.5">${priorityIcon}</div>
-          <div class="flex-grow-1">
-            <div class="fw-black small text-warning">${insEscape(priorityTitle)}</div>
-            <div class="text-secondary small" style="font-size: 12px;">${insEscape(priorityDesc)}</div>
-          </div>
-        </div>
-
-        <div class="d-flex align-items-center flex-wrap gap-2 pt-1">
-          <button type="button" class="btn btn-sm btn-primary comic-btn fw-black py-1 px-2.5 flex-grow-1" id="btn-coach-guess-move" style="font-size: 11px;">
-            <i class="bi bi-question-diamond-fill me-1"></i>Guess the Move Mode
-          </button>
-          <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black py-1 px-2.5 flex-grow-1" id="btn-coach-blunder-bank" style="font-size: 11px;">
-            <i class="bi bi-bank2 me-1"></i>Blunder Bank (${bankStats.total})
-          </button>
-        </div>
-      </div>
-    `;
-  }
-
-
-  closeBlunderBankModal() {
-    if (typeof closeBlunderBankModal === 'function') closeBlunderBankModal();
-  }
-
-  openBlunderBankModal(initialFilter = 'all') {
-    if (typeof openBlunderBankModal === 'function') openBlunderBankModal(this, initialFilter);
   }
 
 
@@ -1600,28 +1455,6 @@ class ReviewDashboard {
       <div class="mb-2">
         ${this.buildCoachingCallouts()}
       </div>
-
-      <!-- 4. Practice & Actionable Drills -->
-      <div class="comic-card p-2.5">
-        <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
-          <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
-            <i class="bi bi-mortarboard-fill text-warning me-1"></i>Practice & Drills
-          </span>
-        </div>
-        <div class="d-flex align-items-center gap-1.5 flex-wrap">
-          ${totalErrors > 0 ? `
-            <button type="button" class="btn btn-sm btn-danger comic-btn flex-grow-1 fw-black py-1.5 px-2.5" id="btn-coach-retry-errors" style="font-size: 11.5px;">
-              <i class="bi bi-bullseye me-1"></i>Retry Mistakes (${totalErrors})
-            </button>
-          ` : ''}
-          <button type="button" class="btn btn-sm btn-outline-warning comic-btn flex-grow-1 fw-bold py-1.5 px-2.5" id="btn-coach-guess-move" style="font-size: 11.5px;">
-            <i class="bi bi-patch-question-fill me-1"></i>Guess Move
-          </button>
-          <button type="button" class="btn btn-sm btn-warning comic-btn flex-grow-1 fw-bold text-dark py-1.5 px-2.5" id="btn-coach-goto-bank" style="font-size: 11.5px;">
-            <i class="bi bi-bank2 me-1"></i>Daily 5 Bank
-          </button>
-        </div>
-      </div>
     `;
   }
 
@@ -1673,7 +1506,6 @@ class ReviewDashboard {
         return true;
       });
 
-      const bankStats = typeof getBlunderBankStats === 'function' ? getBlunderBankStats() : { total: 0, due: 0 };
       this.container.innerHTML = `
         <div class="d-flex flex-column align-items-center justify-content-center p-4 p-sm-5 text-center comic-card max-w-2xl mx-auto my-4">
           <div class="badge bg-warning text-dark border border-dark rounded-4 p-3 fs-1 mb-3 shadow-sm d-inline-flex align-items-center justify-content-center" style="width: 72px; height: 72px;">
@@ -1690,9 +1522,6 @@ class ReviewDashboard {
             </button>
             <button type="button" class="btn btn-light comic-btn px-4 py-2.5" id="zero-btn-bots">
               <i class="bi bi-robot me-1.5"></i> Play 33 Bots
-            </button>
-            <button type="button" class="btn btn-outline-warning comic-btn px-3.5 py-2.5 fw-bold" id="zero-btn-blunder-bank">
-              <i class="bi bi-bank2 me-1.5"></i> Blunder Bank (${bankStats.total})
             </button>
           </div>
         </div>
@@ -1885,7 +1714,7 @@ class ReviewDashboard {
                                 <i class="bi bi-cloud-arrow-down-fill"></i><span class="d-none d-sm-inline ms-1">Imported</span>
                               </span>
                             ` : ''}
-                            <button type="button" class="btn btn-outline-danger btn-sm comic-btn fw-bold px-2 py-1 btn-delete-saved-game text-nowrap d-inline-flex align-items-center justify-content-center" data-game-key="${insEscape(item.key || item.id)}" title="Remove this game and moves from blunder bank" aria-label="Remove game" style="font-size: 11px;">
+                            <button type="button" class="btn btn-outline-danger btn-sm comic-btn fw-bold px-2 py-1 btn-delete-saved-game text-nowrap d-inline-flex align-items-center justify-content-center" data-game-key="${insEscape(item.key || item.id)}" title="Remove game" aria-label="Remove game" style="font-size: 11px;">
                               <i class="bi bi-trash3"></i><span class="d-none d-sm-inline ms-1">Remove</span>
                             </button>
                             ${item.type === 'analyzed' ? `
@@ -1914,9 +1743,6 @@ class ReviewDashboard {
       });
       this.container.querySelector('#zero-btn-bots')?.addEventListener('click', () => {
         if (this.onSwitchToBots) this.onSwitchToBots();
-      });
-      this.container.querySelector('#zero-btn-blunder-bank')?.addEventListener('click', () => {
-        this.openBlunderBankModal('all');
       });
       this.container.querySelector('#zero-btn-clear-history')?.addEventListener('click', () => {
         clearGameCache();
@@ -1954,14 +1780,6 @@ class ReviewDashboard {
               removeCachedGame(key);
             }
             const targetGame = filteredGames.find((g) => (g.key === key || g.id === key));
-            if (targetGame && typeof removeGameFromBlunderBank === 'function') {
-              removeGameFromBlunderBank({
-                gameId: targetGame.id,
-                white: targetGame.white,
-                black: targetGame.black,
-                date: targetGame.date
-              });
-            }
             try {
               const savedImport = JSON.parse(localStorage.getItem('chess_iq_imported_games') || 'null');
               if (savedImport && Array.isArray(savedImport.games)) {
@@ -2075,17 +1893,13 @@ class ReviewDashboard {
       });
     }
 
-    const userMistakes = this.getUserMistakePlies();
-    const mistakesCount = userMistakes.length;
-    const bankStats = typeof getBlunderBankStats === 'function' ? getBlunderBankStats() : { total: 0 };
-
     // Active Review Dashboard - Streamlined Prominent Large Board & Compact Tabbed Sidebar Layout
     this.container.innerHTML = `
       <div class="row g-2.5 g-xl-3 align-items-start w-100 mx-0">
         <!-- Column 1: Board & Tactical Controls (Dominant Large Desktop Workspace) -->
         <div class="col-12 col-lg-7 col-xl-6 col-xxl-6 mobile-sticky-top d-flex flex-column align-items-center gap-2 px-1 px-sm-2">
           <div class="w-100 review-board-column-inner">
-            <!-- Active Mode / Sandbox / Retry Mistakes Banner -->
+            <!-- Active Mode / Sandbox Banner -->
             <div id="sandbox-banner" class="d-none w-100"></div>
             <div id="pv-banner-area" class="d-none"></div>
 
@@ -2134,29 +1948,8 @@ class ReviewDashboard {
                 <div class="dropdown">
                   <button class="btn btn-sm btn-outline-warning comic-btn dropdown-toggle fw-bold py-1.5 px-2.5 d-flex align-items-center" type="button" id="btn-dropdown-train" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 11.5px;">
                     <i class="bi bi-mortarboard-fill me-1"></i>Train
-                    ${mistakesCount > 0 ? `<span class="badge bg-danger ms-1 font-monospace" style="font-size: 9.5px;">${mistakesCount}</span>` : ''}
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end shadow-lg py-2" aria-labelledby="btn-dropdown-train" style="min-width: 220px;">
-                    <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Active Drills</li>
-                    <li>
-                      <button class="dropdown-item py-1.5 px-3 d-flex align-items-center justify-content-between" id="action-retry-mistakes" type="button" ${mistakesCount === 0 ? 'disabled' : ''}>
-                        <span><i class="bi bi-bullseye me-2 text-danger"></i>Retry Mistakes</span>
-                        <span class="badge ${mistakesCount > 0 ? 'bg-danger' : 'bg-secondary'} font-monospace">${mistakesCount}</span>
-                      </button>
-                    </li>
-                    <li>
-                      <button class="dropdown-item py-1.5 px-3 d-flex align-items-center justify-content-between" id="action-guess-move" type="button">
-                        <span><i class="bi bi-patch-question-fill me-2 text-warning"></i>Guess Move Drill</span>
-                        <span class="badge bg-warning text-dark font-monospace">GM</span>
-                      </button>
-                    </li>
-                    <li>
-                      <button class="dropdown-item py-1.5 px-3 d-flex align-items-center justify-content-between" id="action-blunder-bank" type="button">
-                        <span><i class="bi bi-bank2 me-2 text-primary"></i>Blunder Bank</span>
-                        <span class="badge bg-primary font-monospace">${bankStats.total}</span>
-                      </button>
-                    </li>
-                    <li><hr class="dropdown-divider my-1"></li>
                     <li class="dropdown-header text-uppercase font-monospace fw-bold small text-secondary px-3 py-1">Position Sparring</li>
                     <li>
                       <button class="dropdown-item py-1.5 px-3" id="action-show-win" type="button">
@@ -2389,33 +2182,33 @@ class ReviewDashboard {
     bindNavBtn('#btn-first', () => {
       if (this.sandboxState) {
         this.goToSandboxStep(0);
-      } else if (!this.retryPuzzleState?.active && !this.guessMoveState?.active) {
+      } else {
         this.goToPly(0);
       }
     });
     bindNavBtn('#btn-prev', () => {
       if (this.sandboxState) {
         this.stepSandbox(-1);
-      } else if (!this.retryPuzzleState?.active && !this.guessMoveState?.active) {
+      } else {
         this.goToPly(this.currentPly - 1);
       }
     });
     bindNavBtn('#btn-next', () => {
       if (this.sandboxState) {
         this.stepSandbox(1);
-      } else if (!this.retryPuzzleState?.active && !this.guessMoveState?.active) {
+      } else {
         this.goToPly(this.currentPly + 1);
       }
     });
     bindNavBtn('#btn-last', () => {
       if (this.sandboxState) {
         this.goToSandboxStep(Math.max(0, (this.sandboxState.history?.length || 1) - 1));
-      } else if (!this.retryPuzzleState?.active && !this.guessMoveState?.active) {
+      } else {
         this.goToPly(this.game.plies.length);
       }
     });
     bindNavBtn('#btn-key-moment', () => {
-      if (!this.sandboxState && !this.retryPuzzleState?.active && !this.guessMoveState?.active) {
+      if (!this.sandboxState) {
         this.nextKeyMoment();
       }
     });
@@ -2429,9 +2222,6 @@ class ReviewDashboard {
     });
 
     // Bind Train Dropdown Actions
-    this.container.querySelector('#action-retry-mistakes')?.addEventListener('click', () => this.startRetryMistakes());
-    this.container.querySelector('#action-guess-move')?.addEventListener('click', () => this.startGuessTheMove());
-    this.container.querySelector('#action-blunder-bank')?.addEventListener('click', () => this.openBlunderBankModal('all'));
     this.container.querySelector('#action-show-win')?.addEventListener('click', () => {
       if (typeof openWinningPathModal === 'function') openWinningPathModal(this);
     });
@@ -2467,13 +2257,7 @@ class ReviewDashboard {
       }
     });
 
-    // Bind Coach Tab Specific Actions
-    this.container.querySelector('#btn-coach-retry-errors')?.addEventListener('click', () => this.startRetryMistakes());
-    this.container.querySelector('#btn-coach-guess-move')?.addEventListener('click', () => this.startGuessTheMove());
-    this.container.querySelector('#btn-coach-goto-bank')?.addEventListener('click', () => this.openBlunderBankModal('daily'));
-
     // Legacy compatibility triggers
-    bindNavBtn('#btn-retry-mistakes', () => this.startRetryMistakes());
     bindNavBtn('#btn-show-win', () => {
       if (typeof openWinningPathModal === 'function') openWinningPathModal(this);
     });
@@ -2486,7 +2270,7 @@ class ReviewDashboard {
     // Bind Coaching Callout Cards
     this.container.querySelectorAll('[data-callout-ply]').forEach((card) => {
       card.addEventListener('click', () => {
-        if (this.sandboxState || this.retryPuzzleState?.active || this.guessMoveState?.active) return;
+        if (this.sandboxState) return;
         const ply = parseInt(card.getAttribute('data-callout-ply'), 10);
         if (!isNaN(ply)) this.goToPly(ply);
       });
@@ -2548,7 +2332,7 @@ class ReviewDashboard {
 
     this.container.querySelectorAll('[data-filter-jump]').forEach((chip) => {
       chip.addEventListener('click', () => {
-        if (this.sandboxState || this.retryPuzzleState?.active || this.guessMoveState?.active) return;
+        if (this.sandboxState) return;
         const cls = chip.getAttribute('data-filter-jump');
         const userColor = this.game?.userColor || 'w';
         const target = (this.game?.plies || []).find((p) => p && p.classification === cls && (p.color === userColor));

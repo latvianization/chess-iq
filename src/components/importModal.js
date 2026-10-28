@@ -394,7 +394,7 @@ class ImportModal {
                       </div>
 
                       <div class="d-flex align-items-center gap-1.5 flex-shrink-0">
-                        <button type="button" class="btn btn-outline-danger btn-sm p-1.5 btn-delete-import-game" data-delete-id="${g.id}" title="Remove game & moves from blunder bank" style="border-radius: 0.65rem; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;">
+                        <button type="button" class="btn btn-outline-danger btn-sm p-1.5 btn-delete-import-game" data-delete-id="${g.id}" title="Delete game" style="border-radius: 0.65rem; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;">
                           <i class="bi bi-trash3" style="font-size: 13px;"></i>
                         </button>
                         <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5 ${isReviewed ? 'bg-success border-success' : ''}" style="border-radius: 0.65rem; font-size: 13px !important;">
@@ -443,15 +443,6 @@ class ImportModal {
         if (typeof removeCachedGame === 'function') {
           removeCachedGame(game.id);
           if (game.pgn) removeCachedGame(game.pgn);
-        }
-
-        if (typeof removeGameFromBlunderBank === 'function') {
-          removeGameFromBlunderBank({
-            gameId: game.id,
-            white: game.white,
-            black: game.black,
-            date: game.date
-          });
         }
 
         window.dispatchEvent(new CustomEvent('chess_iq_games_imported'));

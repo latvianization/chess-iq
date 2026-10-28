@@ -285,9 +285,8 @@ function openFullReportModal(dashboard) {
 
   // Coach Study Plan stats
   const summary = dashboard.game.gameCoachSummary || {};
-  const bankStats = typeof getBlunderBankStats === 'function' ? getBlunderBankStats() : { total: 0, due: 0 };
   let priorityTitle = 'Solid Positional Consistency';
-  let priorityDesc = 'You played a clean game with very few tactical oversights. Use Guess-the-Move mode to sharpen your grandmaster calculation!';
+  let priorityDesc = 'You played a clean game with very few tactical oversights. Keep up the sharp positional play!';
   let priorityIcon = '🏆';
 
   if (summary.topMotifId && typeof TACTICAL_MOTIF_CATALOG !== 'undefined' && TACTICAL_MOTIF_CATALOG[summary.topMotifId]) {
@@ -683,12 +682,6 @@ function openFullReportModal(dashboard) {
                     </div>
                   `}
                 </div>
-
-                ${userMistakes.length > 0 ? `
-                  <button type="button" class="btn btn-sm btn-danger comic-btn fw-black w-100 py-1" id="btn-report-retry-mistakes">
-                    <i class="bi bi-bullseye me-1"></i>Retry All Mistakes in Puzzle Workout (${userMistakes.length})
-                  </button>
-                ` : ''}
               </div>
             </div>
           </div>
@@ -752,15 +745,6 @@ function openFullReportModal(dashboard) {
                 <div class="fw-black small text-warning mb-0.5">${insEscape(priorityTitle)}</div>
                 <div class="text-secondary small" style="font-size: 12px;">${insEscape(priorityDesc)}</div>
               </div>
-            </div>
-
-            <div class="d-flex align-items-center flex-wrap gap-2 pt-1 border-top border-opacity-10" style="border-color: var(--arcade-border) !important;">
-              <button type="button" class="btn btn-sm btn-primary comic-btn fw-black py-1 px-2.5 flex-grow-1" id="btn-coach-guess-move" style="font-size: 11px;">
-                <i class="bi bi-question-diamond-fill me-1"></i>Guess the Move Workout
-              </button>
-              <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black py-1 px-2.5 flex-grow-1" id="btn-coach-blunder-bank" style="font-size: 11px;">
-                <i class="bi bi-bank2 me-1"></i>Open Blunder Bank (${bankStats.total})
-              </button>
             </div>
           </div>
         </div>
@@ -845,19 +829,6 @@ ${priorityDesc}`;
 
   modal.querySelector('#btn-report-copy')?.addEventListener('click', (e) => copyReportSummary(e.currentTarget));
   modal.querySelector('#btn-report-copy-footer')?.addEventListener('click', (e) => copyReportSummary(e.currentTarget));
-
-  modal.querySelector('#btn-coach-guess-move')?.addEventListener('click', () => {
-    safeClose();
-    dashboard.startGuessTheMove();
-  });
-  modal.querySelector('#btn-coach-blunder-bank')?.addEventListener('click', () => {
-    safeClose();
-    dashboard.openBlunderBankModal('all');
-  });
-  modal.querySelector('#btn-report-retry-mistakes')?.addEventListener('click', () => {
-    safeClose();
-    dashboard.startRetryMistakes();
-  });
 
   modal.querySelectorAll('[data-report-jump]').forEach((btn) => {
     btn.addEventListener('click', () => {
