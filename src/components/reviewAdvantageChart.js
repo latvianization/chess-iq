@@ -41,7 +41,7 @@ function updateAdvantageScrubber(dashboard) {
     line.setAttribute('x1', pt.x);
     line.setAttribute('x2', pt.x);
     circle.setAttribute('cx', pt.x);
-    circle.setAttribute('cy', dashboard.advantageMidY || 48);
+    circle.setAttribute('cy', dashboard.advantageMidY || 42);
   } else {
     group.style.display = 'none';
   }
@@ -54,17 +54,13 @@ function renderAdvantageChart(dashboard) {
     return;
   }
 
-  const existingCanvas = chartArea.querySelector('#advantage-chart-canvas');
-  const measuredWidth = existingCanvas && existingCanvas.clientWidth > 0
-    ? existingCanvas.clientWidth
-    : (chartArea.clientWidth > 0 ? chartArea.clientWidth - 16 : 400);
-  const width = Math.max(200, Math.round(measuredWidth));
-  const height = existingCanvas && existingCanvas.clientHeight > 0 ? existingCanvas.clientHeight : 96;
+  const totalPlies = dashboard.game.plies.length;
+  const width = 1000;
+  const height = 84;
   const midY = height / 2;
   const padX = 12;
-  const padY = 12;
+  const padY = 10;
 
-  const totalPlies = dashboard.game.plies.length;
   dashboard.advantageMidY = midY;
   dashboard.advantagePoints = dashboard.game.plies.map((ply, i) => {
     const x = padX + (i / (totalPlies - 1 || 1)) * (width - padX * 2);
@@ -88,18 +84,16 @@ function renderAdvantageChart(dashboard) {
   let phaseMarkersSvg = '';
   if (mgPly > 1 && mgPly <= totalPlies) {
     const mgPt = dashboard.advantagePoints[mgPly - 1];
-    const mgAnchor = mgPt.x < 25 ? 'start' : (mgPt.x > width - 25 ? 'end' : 'middle');
     phaseMarkersSvg += `
       <line x1="${mgPt.x}" y1="6" x2="${mgPt.x}" y2="${height - 6}" stroke="#60a5fa" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.65" />
-      <text x="${mgPt.x}" y="13" fill="#93c5fd" font-size="10" font-weight="800" font-family="ui-monospace, monospace" text-anchor="${mgAnchor}">Middle</text>
+      <text x="${mgPt.x}" y="12" fill="#93c5fd" font-size="10.5" font-weight="800" font-family="ui-monospace, monospace" text-anchor="middle">Middle</text>
     `;
   }
   if (egPly > 1 && egPly <= totalPlies) {
     const egPt = dashboard.advantagePoints[egPly - 1];
-    const egAnchor = egPt.x < 28 ? 'start' : (egPt.x > width - 28 ? 'end' : 'middle');
     phaseMarkersSvg += `
       <line x1="${egPt.x}" y1="6" x2="${egPt.x}" y2="${height - 6}" stroke="#34d399" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.65" />
-      <text x="${egPt.x}" y="13" fill="#6ee7b7" font-size="10" font-weight="800" font-family="ui-monospace, monospace" text-anchor="${egAnchor}">Endgame</text>
+      <text x="${egPt.x}" y="12" fill="#6ee7b7" font-size="10.5" font-weight="800" font-family="ui-monospace, monospace" text-anchor="middle">Endgame</text>
     `;
   }
 
@@ -137,7 +131,7 @@ function renderAdvantageChart(dashboard) {
       </div>
     </div>
     <div class="advantage-chart-canvas position-relative" id="advantage-chart-canvas">
-      <svg class="w-100 h-100" viewBox="0 0 ${width} ${height}" style="display: block;">
+      <svg class="w-100 h-100" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display: block;">
         <defs>
           <linearGradient id="advWhiteGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.52" />
@@ -184,7 +178,7 @@ function renderAdvantageChart(dashboard) {
       const rect = canvas.getBoundingClientRect();
       if (rect.width <= 0) return;
       const relX = clientX - rect.left;
-      const ratio = Math.max(0, Math.min(1, (relX - padX) / Math.max(1, rect.width - padX * 2)));
+      const ratio = Math.max(0, Math.min(1, relX / rect.width));
       const targetPly = Math.max(1, Math.min(totalPlies, Math.round(ratio * (totalPlies - 1)) + 1));
       dashboard.goToPly(targetPly);
     };
@@ -207,7 +201,7 @@ function renderAdvantageChart(dashboard) {
       if (!tooltip || !dashboard.game || !dashboard.game.plies.length) return;
       const rect = canvas.getBoundingClientRect();
       const relX = e.clientX - rect.left;
-      const ratio = Math.max(0, Math.min(1, (relX - padX) / Math.max(1, rect.width - padX * 2)));
+      const ratio = Math.max(0, Math.min(1, relX / rect.width));
       const idx = Math.max(0, Math.min(totalPlies - 1, Math.round(ratio * (totalPlies - 1))));
       const ply = dashboard.game.plies[idx];
       if (!ply) return;
@@ -238,21 +232,4 @@ function renderAdvantageChart(dashboard) {
       if (tooltip) tooltip.classList.add('d-none');
     });
   }
-
-  if (!dashboard._advChartObserver && typeof ResizeObserver !== 'undefined') {
-    dashboard._advChartObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const crWidth = Math.round(entry.contentRect.width);
-        if (crWidth > 0 && Math.abs(crWidth - (dashboard._advChartLastWidth || 0)) > 2) {
-          renderAdvantageChart(dashboard);
-        }
-      }
-    });
-  }
-  if (dashboard._advChartObserver && dashboard._advChartObservedEl !== chartArea) {
-    dashboard._advChartObserver.disconnect();
-    dashboard._advChartObserver.observe(chartArea);
-    dashboard._advChartObservedEl = chartArea;
-  }
-  dashboard._advChartLastWidth = width;
 }

@@ -31,7 +31,7 @@ class ReviewDashboard {
     this.board = null;
     this.analysisStartTime = null;
     this.advantagePoints = [];
-    this.advantageMidY = 48;
+    this.advantageMidY = 42;
     this.savedGamesFilter = 'all'; // 'all' | 'players' | 'bots'
 
     window.addEventListener('chess_iq_cache_updated', () => {
@@ -683,7 +683,7 @@ class ReviewDashboard {
             <span class="small text-secondary font-monospace">Use ← / → under board to walk theoretical steps</span>
           </div>
         `;
-      } else if (cur && !isBlindActive) {
+      } else if (cur) {
         const isForced = Boolean(cur.isForced || cur.classification === 'forced');
         const effectiveCls = isForced ? 'forced' : cur.classification;
         const comic = getComicBadge(effectiveCls, cur.san);
@@ -763,15 +763,6 @@ class ReviewDashboard {
           </div>
         `;
         stripEl.querySelector('#btn-show-why')?.addEventListener('click', () => this.openWhyModal());
-      } else if (isBlindActive) {
-        stripEl.innerHTML = `
-          <div class="d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge bg-warning text-dark border border-dark rounded-pill px-2.5 py-1 fw-black">🧠 Active Training</span>
-              <span class="small fw-bold text-secondary">Move hidden — drag your chosen move directly on the board!</span>
-            </div>
-          </div>
-        `;
       } else {
         const top = this.getTopMovesForFen(fen);
         const topSan = top?.best ? `${top.best.from}-${top.best.to}` : '';
