@@ -10,7 +10,7 @@
 <br />
 
 **A modern, client-side chess game analysis suite and 33-bot sparring arena.**  
-Powered by an in-browser Stockfish engine pool, instant tactical blunder & brilliant move diagnostics, interactive "What-If" sandbox, 4-pillar positional X-ray, phase-based Elo ratings, spaced-repetition trainer, and responsive neo-arcade aesthetics.
+Powered by an in-browser Stockfish engine pool, instant tactical blunder & brilliant move diagnostics, interactive "What-If" sandbox, 4-pillar positional X-ray, phase-based Elo ratings, clock discipline audits, opening departure explorer, and responsive neo-arcade aesthetics.
 
 [🎮 **Launch Live Application**](https://latvianization.github.io/chess-iq/) • [✨ Features](#-features) • [🤖 33-Bot Arena](#-the-33-bot-arena) • [🔍 Analysis Metrics](#-in-depth-analysis--engine-metrics) • [⌨️ Controls](#️-keyboard-shortcuts--board-controls) • [🚀 Quick Start](#-zero-build-quick-start)
 
@@ -21,11 +21,11 @@ Powered by an in-browser Stockfish engine pool, instant tactical blunder & brill
 <a id="live-demo"></a>
 ## 🌐 Try It Right in Your Browser
 
-You don't need to install, compile, or configure anything. Click the link below to run Chess IQ instantly in any modern browser:
+You don't need to install, compile, or configure anything. Run Chess IQ instantly in any modern browser:
 
 ### 👉 [https://latvianization.github.io/chess-iq/](https://latvianization.github.io/chess-iq/)
 
-> **Tip:** Analyze games directly from **Chess.com** by entering your username, review previously analyzed games from your persistent local cache, paste PGN or FEN notation, or battle 33 custom AI bots!
+> **Tip:** Analyze games directly from **Chess.com** by entering your username, review previously analyzed games from your persistent local cache, load shareable review links, or battle 33 custom AI bots!
 
 ---
 
@@ -40,38 +40,40 @@ You don't need to install, compile, or configure anything. Click the link below 
   - ⭐ **Best (`★`)** — Exact engine top choice
   - ✓ **Excellent** & 👍 **Good** — Sound positional moves maintaining game tempo
   - 📖 **Book** — Opening book theory matched via the built-in ECO catalog
+  - 🔒 **Forced (`□`)** — The only legal move available
   - ⚠️ **Inaccuracy (`?!`)** — Minor slip softening your position
   - ❓ **Mistake (`?`)** — Significant drop in evaluation
   - ❌ **Blunder (`??`)** — Severe game-altering mistake (>28% win-probability swing; dampened when already winning or hopelessly lost)
   - 🎯 **Missed Win (`✖`)** — Letting an outright winning position slip through your fingers
-- **🏆 "Show Win" Engine Continuation Generator:** Wondering how to finish off a winning position? Click **"Show Win"** at any moment to generate moves until checkmate, forced mate, or an unstoppable advantage (+900cp) with interactive board step-through and quick jumps to decisive winning moves.
-- **🔗 Shareable Game Review Links:** Click **"Share Link"** to copy a direct review URL with embedded sanitized PGN data (`#pgn=...&color=...`). Using URL hash fragments ensures zero server-side URI length errors (bypassing HTTP 414), while stripping clock annotations and unneeded metadata. Anyone opening the link gets an instant automated game review with zero manual import required!
-- **Smooth Animated Eval Bar & Advantage Timeline:** Real-time centipawn and win-percentage visualizer dynamically sized to match the exact height of the chessboard on desktop and mobile. Click anywhere on the interactive timeline chart to jump immediately to that move.
-- **ECO Opening Identification:** Automatic recognition of hundreds of openings and variations (e.g., *Ruy Lopez Closed*, *Sicilian Najdorf*, *Fried Liver Attack*, *King's Indian Defense*), complete with opening deviation alerts showing the exact ply the game left master theory.
+- **🏆 "Show Winning Path" Engine Continuation Generator:** Wondering how to finish off a winning position? Click **"Show Winning Path"** at any moment to generate moves until checkmate, forced mate, or an unstoppable advantage (+900cp). Includes an in-modal game-move navigation bar, autoplay step-through, and a one-click button to jump directly to the next decisive winning move in the game.
+- **🔗 Shareable Game Review Links:** Click **"Share Review Link"** to copy a direct review URL with embedded sanitized PGN data (`#pgn=...&color=...`). Using URL hash fragments ensures zero server-side URI length errors (bypassing HTTP 414), while stripping clock annotations and unneeded metadata. Anyone opening the link gets an instant automated game review with zero manual import required!
+- **Smooth Animated Eval Bar & Advantage Timeline:** Real-time centipawn and win-percentage visualizer dynamically sized to match the exact height of the chessboard on desktop and mobile. Interactive curved SVG advantage chart with a tracking scrubber lets you jump immediately to any ply.
+- **Coach's Plain-English Explanation Strip:** Contextual commentary rendered directly beneath the move strip explaining why each move succeeded or failed, tactical motifs involved, and the engine's recommended continuation.
+- **Persistent Local Cache & Saved Games Dashboard:** All analyzed matches are automatically stored in `localStorage`. Browse saved games with instant filtering (**All**, **vs Players**, **vs Bots**), re-open analyzed games with zero re-calculation delay, remove individual games with confirmation, or clear the cache on demand.
 - **💾 Export & Utility Suite:**
   - **Annotated PGN Download (`.pgn`):** Export games annotated with standard numeric annotation glyphs (NAGs like `$1`, `$2`, `$4`, `$6`) and Stockfish evaluation comments embedded directly.
   - **One-Click FEN Copy:** Copy the current board position's FEN string to the clipboard with one click.
-  - **Full Game Report Modal:** Printable and copyable post-game debrief with phase accuracies, move quality breakdown, critical moments, and time discipline metrics.
-  - **Detailed Performance Modal:** Side-by-side performance comparison breakdown between White and Black.
-  - **Move Table Filters:** Filter moves by **All**, **Key Moments**, or **Mistakes & Blunders** for focused study.
+  - **Move Table Filters:** Filter moves by **All**, **Key Moments**, or **Errors** for focused study.
   - **Re-Analyze Game:** One-click option to trigger a fresh, deep Stockfish re-analysis.
 
 ---
 
 ### ❓ 2. Tactical "Why?" Diagnostics (Blunders & Brilliant Sacrifices)
-- **Immediate Tactical Refutations:** Wondering why a move was marked as a blunder? Click the **"Why?"** button on any mistake.
+- **Immediate Tactical Refutations:** Wondering why a move was marked as a blunder, mistake, inaccuracy, or missed win? Click the **"Why?"** button on any mistake.
 - **Brilliant Move Sacrifices:** Click **"Why?"** on Brilliant (`!!`) moves to inspect why the material sacrifice works, comparing the **Winning Follow-up** line against the engine's **Quiet Alternative**.
-- **Step Controls Right Under the Board:** Navigation buttons (`|◀`, `◀`, `▶/❚❚`, `▶`, `▶|`) are positioned directly beneath the board for seamless stepping on desktop and mobile, with keyboard shortcuts for auto-play and step navigation.
-- **Interactive "Best Alternative" Line:** Switch to the **Best Alternative** tab to instantly watch the recommended engine move played out on the board with highlighted squares and directional arrows.
-- **5-Move Continuation Lines:** Stockfish calculates and showcases the exact tactical punishment line.
+- **Dual Analytical Tabs:**
+  - **Opponent's Punishment:** Shows how the opponent can punish the mistake with Stockfish's calculated continuation line.
+  - **Best Alternative:** Plays out the engine's recommended top move on the board with highlighted squares and directional arrows.
+- **Step Controls Right Under the Board:** Navigation buttons (`|◀`, `◀`, `▶/❚❚` Autoplay, `▶`, `▶|`) with keyboard shortcuts (<kbd>Space</kbd> for play/pause, <kbd>←</kbd>/<kbd>→</kbd> arrows).
 - **Identified Tactical Motifs:** Instant detection of tactical themes including forks, pins, skewers, discovered attacks, hanging pieces, back-rank mates, queen traps, and mate threats.
-- **Coach's Pattern Tips:** Contextual tactical coaching insights displayed directly inside the diagnostic dialog.
+- **Coach's Pattern Tips:** Contextual coaching insights displayed directly inside the diagnostic dialog.
 
 ---
 
-### 🧭 3. Interactive "What-If" Sandbox & Sparring
+### 🧭 3. Interactive "What-If" Candidate Move Sandbox & Sparring
 - **Freeform "What-If" Sandbox:** Click and move any piece on the board during review to explore alternate candidate moves. The sandbox automatically spins up Stockfish to evaluate the custom branch in real time, displaying centipawn and mate evaluations, candidate move breadcrumbs, and a quick **"Return to Game"** button.
-- **Spar from Current Position ("Play vs Bot from Here"):** Want to see if you can hold or win from a specific board state? Click **"Play vs Bot"** at any ply or opening deviation to instantly launch a live match against an AI bot calibrated to your opponent's Elo from that exact position!
+- **Interactive Variation Breadcrumbs:** Click any intermediate sandbox step (`Start → e4 → e5...`) to review alternate hypothetical branches without losing your place.
+- **Spar from Current Position ("Play vs Bot from Position"):** Want to see if you can hold or win from a specific board state? Click **"Play vs Bot from Position"** at any ply or opening deviation to instantly launch a live match against an AI bot calibrated to your opponent's Elo from that exact position!
 
 ---
 
@@ -83,25 +85,43 @@ You don't need to install, compile, or configure anything. Click the link below 
   - ♟️ **Pawn Structure:** Detects doubled, isolated, and backward pawn weaknesses.
 - **Interactive Positional Guide Modal:** Click **"How it works"** or any pillar card to view full mathematical formulas, balance ratios, and tactical advice.
 - **Tactical Vision & Visual Overlays:**
-  - **Loose & Undefended Pieces X-Ray:** Dotted warning rings highlighting unprotected and hanging pieces.
-  - **Territory Control Heatmap:** Visualizes square dominance and control across the board.
-  - **Threat Arrows:** Highlights immediate opponent tactical threats.
+  - **Control Heatmap:** Visualizes square dominance and control across the board.
+  - **Loose Pieces (LPDO):** Dotted warning rings highlighting unprotected and hanging pieces.
+  - **Opponent Threat Arrows:** Highlights immediate opponent tactical threats.
+  - **Best Move Arrow:** Displays Stockfish's recommended continuation arrow.
   - **User Right-Click Drawing:** Right-click and drag to draw custom planning arrows; right-click any square to toggle colored square highlights (matching Chess.com and Lichess conventions).
 
 ---
 
-### 🎓 5. Coach's Study Plan, Clock Discipline & Workouts
-- **Priority Coaching Diagnostic:** Post-game breakdown highlighting your most critical area for improvement (e.g., *Pattern Alert: Hanging Pieces*, *Clock Discipline: 2+ Impulsive Blunders*, or *Endgame Precision Deficit*).
-- **Clock Discipline & Impulsive Blunder Detection:** Extracts move timestamps from PGN clock data (`[%clk ...]`), flagging impulsive moves played in under 1.5 seconds during high-stakes tactical moments.
-- **Key Moments Navigation:** Cycle directly between critical turning points, lead changes, and blunders with one click or by pressing <kbd>Space</kbd>.
-- **Phase Elo Ratings:** Independent performance Elo ratings estimated for your **Opening**, **Middlegame**, and **Endgame** play.
+### 📊 5. Full Game Performance & Executive Report Modal
+- **Executive Head-to-Head Overview:** Side-by-side performance comparison between White and Black, including move accuracies, performance Elos, and accuracy tier ratings (Grandmaster Precision, Master Execution, Solid Tactical Play, Fighting Game, Volatile Battle).
+- **Phase-by-Phase Mastery:** Independent accuracy percentages and estimated performance Elos for **Opening**, **Middlegame**, and **Endgame** for both players.
+- **Move Quality Matrix:** Visual comparison tracks showing the exact count and percentage distribution of Brilliant, Great, Best, Excellent, Good, Book, Forced, Inaccuracy, Mistake, Blunder, and Missed Win moves.
+- **Critical Turning Points & Tactical Highlights:** Highlights the single move that caused the greatest win-probability swing, accompanied by the Stockfish recommended alternative and direct jump button.
+- **Key Blunders & Missed Wins List:** Quick-access list of top mistakes sorted by evaluation swing with one-click board navigation.
+- **Time Management & Clock Discipline:** Compares White and Black average move times, rushed moves played in under 2 seconds, and moves played in critical time trouble (<20s).
+- **One-Click Report Copy:** Click **"Copy Summary"** to copy a formatted text executive debrief to the clipboard.
 
 ---
 
-### 🤖 6. 33-Bot Sparring Arena
-- 33 unique bot personalities spread across 4 distinct Elo tiers (400 to 2000 Elo).
-- **Search & Tier Filtering:** Search bots instantly by name, title, or tier.
-- **Persistent Head-to-Head Records:** Automatically tracks your lifetime match record (Wins, Losses, Draws) against every bot in localStorage.
+### 📖 6. ECO Opening Book Explorer & Theory Deviation
+- **Automatic Recognition:** Detects opening names and ECO codes across hundreds of openings and variations (e.g., *Ruy Lopez Closed*, *Sicilian Najdorf*, *Fried Liver Attack*, *King's Indian Defense*).
+- **Opening Strategic Theme:** Displays volume, category, strategic principles, and canonical starting moves.
+- **Theory Departure Detection:** Flags the exact move and ply where the game branched from established master theory, with a one-click button to jump directly to the book departure on the board.
+
+---
+
+### 🎓 7. Coach's Insights, Clock Discipline & Key Moments
+- **Clock Discipline Diagnostic:** Extracts move timestamps from PGN clock data (`[%clk ...]`), auditing move pace, impulsive blunders, and time trouble.
+- **Key Moments Navigation:** Cycle directly between critical turning points, lead changes, and blunders with one click or by pressing <kbd>Space</kbd>.
+- **Phase Elo Ratings:** Independent performance Elo ratings estimated for your Opening, Middlegame, and Endgame play.
+
+---
+
+### 🤖 8. 33-Bot Sparring Arena
+- 33 unique bot personalities spread across 4 distinct Elo tiers (400 to 2000 Elo in 50-point increments).
+- **Search & Tier Filtering:** Search bots instantly by name, title, or tier (**Rookies**, **Challengers**, **Heroes**, **Titans**).
+- **Persistent Head-to-Head Records:** Automatically tracks your lifetime match record (Wins, Losses, Draws) against every bot in `localStorage`.
 - **Dynamic In-Game Banter:** Bots react with speech bubbles to game starts, user blunders, checks, great moves, wins, and losses.
 - **In-Game "Undo Move" Support:** Made a slip during friendly practice? Take back moves seamlessly.
 - **Customized Playstyles:** Realistically calibrated search depths, evaluation jitter, and tactical blindness designed to mimic human play at each rating level.
@@ -109,24 +129,23 @@ You don't need to install, compile, or configure anything. Click the link below 
 
 ---
 
-### 📱 8. Mobile Gestures, Haptics & Responsive Neo-Arcade UX
+### 📱 9. Mobile Gestures, Controls & Responsive Neo-Arcade UX
+- **Mouse Wheel Board Navigation:** Hover over the chessboard and scroll up or down to step backward and forward through moves smoothly.
 - **Swipe-to-Close Modals:** Swipe horizontally on any modal to dismiss it naturally on touchscreens.
-- **OS Back-Gesture Interception:** Edge-swiping back on mobile devices closes the active modal instead of leaving the application.
-- **Haptic Feedback:** Tactile vibrations (`navigator.vibrate`) on supported mobile devices for moves, captures, checks, and blunders.
+- **OS Back-Gesture Interception:** Edge-swiping back on mobile devices closes the active modal or returns to the game list instead of leaving the application.
 - **Dynamic Eval Bar Alignment:** The vertical eval bar stays 100% synchronized with the physical height of the chessboard via ResizeObserver.
-- **Edge Badge Protection:** Move badges on rank 8 and boundary files stay safely within the board area without clipping.
 - **Day & Cyber Dark Themes:** Seamless switching between high-contrast light mode and neo-arcade dark mode.
-- **Chess IQ Guide & Feature Glossary:** Built-in searchable glossary and contextual tooltips explaining every metric and badge.
+- **Interactive Tooltip Glossary:** Built-in contextual tooltips ("What & Why") explaining every metric, phase, and classification badge.
 
 ---
 
-### 🔊 9. Algorithmic Web Audio Synthesizer
+### 🔊 10. Algorithmic Web Audio Synthesizer
 - **Zero Audio Assets Required:** All sound effects (moves, captures, checks, blunders, brilliant moves, and victory fanfare) are synthesized live using the **Web Audio API**.
 - Crisp, low-latency acoustic feedback with an instant mute toggle and automatic AudioContext resume on user interaction.
 
 ---
 
-### ⚡ 10. Zero-Build Architecture & Pure Web Runtime
+### ⚡ 11. Zero-Build Architecture & Pure Web Runtime
 - **No Node.js, Webpack, Vite, or npm build step required.**
 - Runs natively in any browser via ES modules and standard `<script>` tags.
 - Fully compatible with local `file:///` execution on Windows, macOS, and Linux with zero CORS errors.
@@ -210,9 +229,10 @@ Navigate through games and interact with the chessboard seamlessly:
 | :--- | :--- |
 | <kbd>←</kbd> / <kbd>↑</kbd> | Previous move |
 | <kbd>→</kbd> / <kbd>↓</kbd> | Next move |
+| **Mouse Wheel (Scroll on Board)** | Step forward (scroll down) or backward (scroll up) |
 | <kbd>Home</kbd> or <kbd>Ctrl</kbd> + <kbd>←</kbd> | Jump to start of game |
 | <kbd>End</kbd> or <kbd>Ctrl</kbd> + <kbd>→</kbd> | Jump to final move |
-| <kbd>Space</kbd> | Jump to next **Key Moment** / turning point *(or Play/Pause in modals)* |
+| <kbd>Space</kbd> | Jump to next **Key Moment** *(or Play/Pause in modals)* |
 | <kbd>F</kbd> | Flip board orientation (White vs Black) |
 | <kbd>Esc</kbd> | Close any open modal, sandbox, or refutation inspector |
 | **Right-Click + Drag** | Draw custom arrows on the board |
@@ -261,53 +281,6 @@ Visit the live deployment directly in any browser:
    npx serve .
    ```
    Then open `http://localhost:8080` in your browser.
-
----
-
-## 📁 Repository Structure
-
-```text
-chess-iq/
-├── index.html                   # Core single-page web app entrypoint
-├── package.json                 # Project metadata (zero build dependencies)
-├── LICENSE                      # MIT License
-├── README.md                    # Documentation & feature guide
-├── AGENTS.md                    # Architecture notes for AI coding agents
-├── public/
-│   ├── favicon.ico              # Multi-resolution app icon
-│   ├── favicon.svg              # Scalable vector favicon
-│   ├── favicon-32x32.png        # Standard browser favicon
-│   ├── apple-touch-icon.png     # iOS home screen icon
-│   └── stockfish.js             # Stockfish engine Web Worker & WASM build
-└── src/
-    ├── main.js                  # Application coordinator & mode switcher
-    ├── components/
-    │   ├── board.js             # Interactive SVG chessboard, drag-and-drop & arrows
-    │   ├── botArena.js          # 33-bot sparring arena UI & AI move dispatch
-    │   ├── botGameOverModal.js  # End-of-game dialog with instant "Analyze" bridge
-    │   ├── importModal.js       # Chess.com username & PGN/FEN import interface
-    │   ├── pieceSvgs.js         # Scalable vector graphics piece set & captured bars
-    │   ├── reviewAdvantageChart.js # Interactive evaluation advantage timeline graph
-    │   ├── reviewDashboard.js   # Main game review view, phase ratings & coach plan
-    │   ├── reviewWhyModal.js    # Interactive blunder & brilliant sacrifice refutations
-    │   └── reviewWinningPathModal.js # Engine "Show Win" forced continuation modal
-    ├── data/
-    │   └── botsData.js          # 33 bot profiles, Elo ratings, depths & banter
-    ├── services/
-    │   ├── comicBadges.js       # Move classification badges and stylings
-    │   ├── ecoDictionary.js     # Opening book dictionary and ECO code matcher
-    │   ├── engine.js            # Win probability, accuracy & Elo evaluation logic
-    │   ├── engineEvaluationTables.js # PST positional evaluation & material scoring tables
-    │   ├── engineRefutations.js # Tactical threats & continuation calculator
-    │   ├── gameCacheService.js  # LocalStorage caching for analyzed games
-    │   ├── importApi.js         # Chess.com public API client, clocks & PGN sanitization
-    │   ├── modalHelper.js       # Mobile swipe gestures & browser back navigation
-    │   ├── sound.js             # Algorithmic Web Audio API sound synthesizer
-    │   ├── stockfishWorker.js   # Stockfish Web Worker pool manager
-    │   └── tooltipService.js    # Contextual UI explanations & metric glossary
-    └── styles/
-        └── comic-bootstrap.css  # Neo-arcade UI styling, glassmorphism & dark theme
-```
 
 ---
 

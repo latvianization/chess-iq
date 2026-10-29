@@ -26,6 +26,20 @@ function matchesMoveFilter(dashboard, plyObj) {
   return true;
 }
 
+const QUALITY_FULL_NAME = {
+  brilliant: 'Brilliant',
+  great: 'Great',
+  best: 'Best',
+  excellent: 'Excellent',
+  book: 'Book',
+  forced: 'Forced',
+  inaccuracy: 'Inaccuracy',
+  mistake: 'Mistake',
+  blunder: 'Blunder',
+  missed_win: 'Missed Win',
+  good: 'Good'
+};
+
 function renderMoveCellContent(dashboard, plyObj) {
   if (!plyObj) return '';
   if (plyObj.isForced === undefined && plyObj.fenBefore && typeof isForcedMove === 'function') {
@@ -42,19 +56,16 @@ function renderMoveCellContent(dashboard, plyObj) {
     ? `<span class="move-cell-clock font-monospace text-secondary" title="Remaining Clock: ${rawClock}">${rawClock}</span>`
     : '';
 
-  const showPillBadge = ['brilliant', 'great', 'best', 'excellent', 'book', 'forced', 'inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(cls);
-  const symbolStr = comic ? (comic.badgeLabel || comic.symbol || '') : '';
-  const isMultiChar = String(symbolStr).length > 1;
-
-  const badgeHtml = comic && showPillBadge
-    ? `<span class="mini-move-badge rounded-circle d-inline-flex align-items-center justify-content-center fw-black flex-shrink-0 ${isMultiChar ? 'multi-char' : ''}" style="background-color: ${comic.bg}; color: ${comic.text};" title="${comic.term}">${symbolStr}</span>`
-    : (comic ? `<span class="classification-dot flex-shrink-0" style="background-color: ${comic.bg};" title="${comic.term}"></span>` : '');
+  const qualityName = QUALITY_FULL_NAME[cls] || (comic ? comic.term : 'Good');
+  const badgeHtml = comic
+    ? `<span class="badge move-quality-pill fw-bold text-nowrap flex-shrink-0" style="background-color: ${comic.bg}; color: ${comic.text}; font-size: 9.5px; padding: 1.5px 5.5px; border-radius: 4px; font-family: system-ui, -apple-system, sans-serif; letter-spacing: 0.2px;">${qualityName}</span>`
+    : '';
 
   return `
     <div class="d-flex align-items-center justify-content-between w-100 px-2 py-1 rounded-2 cursor-pointer move-cell ${isSelected ? 'active-cell' : ''} ${dimClass}" data-row-ply="${plyObj.ply}">
-      <span class="d-flex align-items-center gap-1.5 font-monospace fw-bold text-truncate">
+      <span class="d-flex align-items-center gap-1.5 font-monospace fw-bold text-truncate min-w-0">
+        <span class="flex-shrink-0">${plyObj.san}</span>
         ${badgeHtml}
-        <span>${plyObj.san}</span>
       </span>
       <div class="d-flex align-items-center gap-1 ms-1 flex-shrink-0">
         ${clockHtml}

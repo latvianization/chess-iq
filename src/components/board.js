@@ -86,6 +86,7 @@ class Chessboard {
     this.visionOverlay = options.visionOverlay || 'none'; // 'none' | 'hanging' | 'heatmap'
     this.showBestMove = options.showBestMove !== undefined ? options.showBestMove : false;
     this.showLoosePieces = options.showLoosePieces !== undefined ? options.showLoosePieces : false;
+    this.dangerSquare = options.dangerSquare || null;
 
     this.selectedSquare = null;
     this.possibleDests = [];
@@ -196,7 +197,7 @@ class Chessboard {
 
   setProps(newProps) {
     let shouldRerender = false;
-    ['fen', 'orientation', 'theme', 'interactive', 'showPlayerBars', 'whiteName', 'blackName', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'secondBestMove', 'threatMove', 'badge', 'visionOverlay', 'showBestMove', 'showLoosePieces'].forEach((k) => {
+    ['fen', 'orientation', 'theme', 'interactive', 'showPlayerBars', 'whiteName', 'blackName', 'onMove', 'legalMovesFrom', 'lastMove', 'bestMove', 'secondBestMove', 'threatMove', 'badge', 'visionOverlay', 'showBestMove', 'showLoosePieces', 'dangerSquare'].forEach((k) => {
       if (newProps[k] !== undefined && newProps[k] !== this[k]) {
         this[k] = newProps[k];
         shouldRerender = true;
@@ -483,6 +484,12 @@ class Chessboard {
             dot.className = 'move-dot';
             sqDiv.appendChild(dot);
           }
+        }
+
+        if (this.dangerSquare && this.dangerSquare === square) {
+          const dangerEl = document.createElement('div');
+          dangerEl.className = 'square-danger-spotlight';
+          sqDiv.appendChild(dangerEl);
         }
 
         if (this.badge && this.badge.square === square) {

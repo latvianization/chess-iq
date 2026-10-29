@@ -640,6 +640,13 @@ class ReviewDashboard {
     const isCurForced = Boolean(cur && (cur.isForced || cur.classification === 'forced'));
     const badge = !isSandboxMode && cur ? { square: cur.to, classification: isCurForced ? 'forced' : cur.classification } : null;
 
+    if (threatMove || (cur && ['blunder', 'mistake', 'missed_win'].includes(cur.classification))) {
+      secondBestMove = null;
+    }
+
+    const isError = Boolean(cur && ['blunder', 'mistake', 'missed_win'].includes(cur.classification));
+    const dangerSquare = !isSandboxMode && isError && cur?.to ? cur.to : null;
+
     this.board?.setProps({
       fen,
       orientation: this.orientation,
@@ -648,6 +655,7 @@ class ReviewDashboard {
       secondBestMove,
       threatMove,
       badge,
+      dangerSquare,
       visionOverlay: this.visionOverlay,
       showBestMove: this.showBestMove,
       showLoosePieces: this.showLoosePieces,
@@ -829,6 +837,8 @@ class ReviewDashboard {
       }
     }
 
+    this.updateCoachLine(cur);
+
     // Update Step Counter & navigation buttons disabled state
     const counterEl = this.container.querySelector('#ply-counter');
     const btnFirst = this.container.querySelector('#btn-first');
@@ -982,7 +992,7 @@ class ReviewDashboard {
     const afterPct = Math.round((tp.winProb ?? 0.5) * 100);
 
     return `
-      <div class="row g-2">
+      <div class="row g-2 mb-2">
         <div class="col-12">
           <div class="comic-card p-2.5 h-100 coaching-callout-card border-start border-4 border-danger cursor-pointer" data-callout-ply="${tp.ply}" title="Click to jump to the Game Turning Point">
             <div class="d-flex align-items-center justify-content-between mb-1">
@@ -1004,6 +1014,206 @@ class ReviewDashboard {
             ` : ''}
           </div>
         </div>
+      </div>
+    `;
+  }
+
+  buildKeyMomentsChips(userCounts) {
+    if (!userCounts) return '';
+    const totalErrors = (userCounts.blunder || 0) + (userCounts.mistake || 0) + (userCounts.missed_win || 0);
+    return `
+      <div class="comic-card-sm p-2 mb-2" id="unified-key-moments-card">
+        <div class="d-flex align-items-center justify-content-between mb-1.5 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
+          <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
+            <i class="bi bi-lightning-charge-fill text-warning me-1"></i>Key Moments (Click to Jump)
+          </span>
+          <span class="badge bg-secondary font-monospace" style="font-size: 10px;">${this.game?.plies?.length || 0} Plies</span>
+        </div>
+        <div class="d-flex align-items-center flex-wrap gap-1.5">
+          ${userCounts.brilliant > 0 ? `
+            <span class="badge glance-chip bg-info text-dark font-monospace fw-black cursor-pointer" data-filter-jump="brilliant" title="Jump to Brilliant Move">
+              💎 ${userCounts.brilliant} Brilliant
+            </span>
+          ` : ''}
+          ${userCounts.great > 0 ? `
+            <span class="badge glance-chip bg-primary-subtle text-primary border border-primary font-monospace fw-black cursor-pointer" data-filter-jump="great" title="Jump to Great Move">
+              ⭐ ${userCounts.great} Great
+            </span>
+          ` : ''}
+          ${userCounts.best > 0 ? `
+            <span class="badge glance-chip bg-success-subtle text-success border border-success font-monospace fw-bold cursor-pointer" data-filter-jump="best" title="Cycle through Best Moves">
+              ✓ ${userCounts.best} Best
+            </span>
+          ` : ''}
+          ${userCounts.inaccuracy > 0 ? `
+            <span class="badge glance-chip bg-warning-subtle text-warning border border-warning font-monospace fw-bold cursor-pointer" data-filter-jump="inaccuracy" title="Jump to First Inaccuracy">
+              ⚠️ ${userCounts.inaccuracy} Inacc.
+            </span>
+          ` : ''}
+          ${userCounts.mistake > 0 ? `
+            <span class="badge glance-chip bg-warning text-dark font-monospace fw-black cursor-pointer" data-filter-jump="mistake" title="Jump to First Mistake">
+              ❓ ${userCounts.mistake} Mistake${userCounts.mistake > 1 ? 's' : ''}
+            </span>
+          ` : ''}
+          ${userCounts.blunder > 0 ? `
+            <span class="badge glance-chip bg-danger text-white font-monospace fw-black cursor-pointer" data-filter-jump="blunder" title="Jump to First Blunder">
+              💥 ${userCounts.blunder} Blunder${userCounts.blunder > 1 ? 's' : ''}
+            </span>
+          ` : ''}
+          ${userCounts.missed_win > 0 ? `
+            <span class="badge glance-chip bg-danger-subtle text-danger border border-danger font-monospace fw-black cursor-pointer" data-filter-jump="missed_win" title="Jump to Missed Win">
+              ❌ ${userCounts.missed_win} Missed Win${userCounts.missed_win > 1 ? 's' : ''}
+            </span>
+          ` : ''}
+          ${totalErrors === 0 && (userCounts.best || 0) > 0 ? `
+            <span class="badge bg-success-subtle text-success border border-success fw-bold px-2 py-1">
+              🌟 Impeccable Play! Zero Tactical Errors.
+            </span>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  generateMoveExplanation(cur) {
+    if (!cur) {
+      return {
+        icon: '🏁',
+        cls: 'coach-best',
+        text: `Starting position. Game between <strong>${insEscape(this.game?.white || 'White')}</strong> and <strong>${insEscape(this.game?.black || 'Black')}</strong>.`
+      };
+    }
+
+    if (this.sandboxState) {
+      const sbIdx = this.sandboxState.sandboxIndex || 0;
+      return {
+        icon: '🧭',
+        cls: 'coach-best',
+        text: `Exploring "What-If" theoretical line (Step ${sbIdx}). Drag pieces on the board to test alternative candidate moves.`
+      };
+    }
+
+    const isForced = Boolean(cur.isForced || cur.classification === 'forced');
+    const classification = isForced ? 'forced' : (cur.classification || 'good');
+    const bestSan = cur.bestMoveSan || (cur.bestMoveUci ? `${cur.bestMoveUci.slice(0, 2)}-${cur.bestMoveUci.slice(2, 4)}` : '');
+    const threatSan = cur.threat?.san || (cur.threat?.uci ? `${cur.threat.uci.slice(0, 2)}-${cur.threat.uci.slice(2, 4)}` : '');
+    const motifs = Array.isArray(cur.motifs) ? cur.motifs : [];
+    const firstMotif = motifs[0]?.label || null;
+
+    let dropStr = '';
+    if (typeof cur.scoreBefore === 'number' && typeof cur.scoreCp === 'number') {
+      const isMoverWhite = cur.color ? cur.color === 'w' : (cur.ply % 2 === 1);
+      const diff = isMoverWhite ? (cur.scoreBefore - cur.scoreCp) : (cur.scoreCp - cur.scoreBefore);
+      if (diff >= 30) dropStr = `(-${(diff / 100).toFixed(1)} pawns)`;
+    }
+
+    const impulsiveSuffix = cur.isImpulsive ? ' <span class="badge bg-danger-subtle text-danger font-monospace px-1">⚡ Rushed</span>' : '';
+    const timeTroubleSuffix = cur.isTimeTrouble ? ' <span class="badge bg-warning-subtle text-warning font-monospace px-1">🔥 Under 20s</span>' : '';
+
+    switch (classification) {
+      case 'blunder':
+        if (firstMotif) {
+          return {
+            icon: '💥',
+            cls: 'coach-blunder',
+            text: `Blunder: <strong>${cur.san}</strong> leaves your position exposed to a <strong>${insEscape(firstMotif)}</strong> ${dropStr}.${bestSan ? ` Engine preferred <strong>${insEscape(bestSan)}</strong>.` : ''}${impulsiveSuffix}${timeTroubleSuffix}`
+          };
+        }
+        if (threatSan) {
+          return {
+            icon: '💥',
+            cls: 'coach-blunder',
+            text: `Blunder: <strong>${cur.san}</strong> allows opponent immediate counterplay with <strong>${insEscape(threatSan)}</strong> ${dropStr}.${bestSan ? ` Stronger was <strong>${insEscape(bestSan)}</strong>.` : ''}${impulsiveSuffix}${timeTroubleSuffix}`
+          };
+        }
+        if (cur.mate) {
+          return {
+            icon: '💥',
+            cls: 'coach-blunder',
+            text: `Blunder: <strong>${cur.san}</strong> permits a forced checkmate in ${Math.abs(cur.mate)}!${bestSan ? ` Best was <strong>${insEscape(bestSan)}</strong>.` : ''}${impulsiveSuffix}`
+          };
+        }
+        return {
+          icon: '💥',
+          cls: 'coach-blunder',
+          text: `Blunder: <strong>${cur.san}</strong> drops significant advantage ${dropStr}.${bestSan ? ` <strong>${insEscape(bestSan)}</strong> was necessary to keep the balance.` : ''}${impulsiveSuffix}${timeTroubleSuffix}`
+        };
+
+      case 'missed_win':
+        return {
+          icon: '❌',
+          cls: 'coach-blunder',
+          text: `Missed Win: <strong>${cur.san}</strong> overlooks a decisive advantage.${bestSan ? ` <strong>${insEscape(bestSan)}</strong> was a winning tactical continuation.` : ''}${impulsiveSuffix}`
+        };
+
+      case 'mistake':
+        if (firstMotif) {
+          return {
+            icon: '❓',
+            cls: 'coach-mistake',
+            text: `Mistake: <strong>${cur.san}</strong> overlooks a tactical <strong>${insEscape(firstMotif)}</strong> ${dropStr}.${bestSan ? ` Engine suggests <strong>${insEscape(bestSan)}</strong>.` : ''}${impulsiveSuffix}${timeTroubleSuffix}`
+          };
+        }
+        return {
+          icon: '❓',
+          cls: 'coach-mistake',
+          text: `Mistake: <strong>${cur.san}</strong> concedes the initiative ${dropStr}.${bestSan ? ` <strong>${insEscape(bestSan)}</strong> maintained better control.` : ''}${impulsiveSuffix}${timeTroubleSuffix}`
+        };
+
+      case 'inaccuracy':
+        return {
+          icon: '⚠️',
+          cls: 'coach-inaccuracy',
+          text: `Inaccuracy: <strong>${cur.san}</strong> is slightly passive.${bestSan ? ` <strong>${insEscape(bestSan)}</strong> applied more pressure.` : ''}${impulsiveSuffix}`
+        };
+
+      case 'brilliant':
+        return {
+          icon: '💎',
+          cls: 'coach-brilliant',
+          text: `Brilliant Move: <strong>${cur.san}</strong> offers an inspired piece sacrifice that decisively breaks open the opponent's defense!`
+        };
+
+      case 'great':
+        return {
+          icon: '⭐',
+          cls: 'coach-brilliant',
+          text: `Great Move: <strong>${cur.san}</strong> is the only critical continuation that preserves the advantage in a tense position.`
+        };
+
+      case 'best':
+      case 'forced':
+        return {
+          icon: '✓',
+          cls: 'coach-best',
+          text: `Best Move: <strong>${cur.san}</strong> matches Stockfish top engine recommendation, optimizing piece activity and safety.`
+        };
+
+      case 'book':
+        return {
+          icon: '📖',
+          cls: 'coach-best',
+          text: `Book Move: <strong>${cur.san}</strong> follows established opening theory${this.game?.ecoName ? ` in the <em>${insEscape(this.game.ecoName)}</em>` : ''}.`
+        };
+
+      default:
+        return {
+          icon: '👍',
+          cls: 'coach-best',
+          text: `Good Move: <strong>${cur.san}</strong> keeps the position solid and maintains comfortable piece balance.`
+        };
+    }
+  }
+
+  updateCoachLine(cur) {
+    const el = this.container.querySelector('#review-coach-line');
+    if (!el) return;
+    const info = this.generateMoveExplanation(cur);
+    el.className = `comic-card-sm review-coach-strip p-2 mb-1.5 d-flex align-items-center justify-content-between w-100 ${info.cls}`;
+    el.innerHTML = `
+      <div class="d-flex align-items-center gap-2">
+        <span class="fs-5 lh-1 flex-shrink-0">${info.icon}</span>
+        <div class="small fw-semibold text-body" style="font-size: 12px; line-height: 1.4;">${info.text}</div>
       </div>
     `;
   }
@@ -1288,56 +1498,7 @@ class ReviewDashboard {
 
     return `
       <!-- 1. Key Moments Chips -->
-      <div class="comic-card p-2.5 mb-2">
-        <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-opacity-10" style="border-color: var(--arcade-border) !important;">
-          <span class="small fw-black text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
-            <i class="bi bi-lightning-charge-fill text-warning me-1"></i>Key Moments
-          </span>
-          <span class="text-secondary small font-monospace" style="font-size: 10px;">Click to jump</span>
-        </div>
-        <div class="d-flex align-items-center flex-wrap gap-1.5">
-          ${userCounts.brilliant > 0 ? `
-            <span class="badge glance-chip bg-info text-dark font-monospace fw-black cursor-pointer" data-filter-jump="brilliant" title="Jump to Brilliant Move">
-              💎 ${userCounts.brilliant} Brilliant
-            </span>
-          ` : ''}
-          ${userCounts.great > 0 ? `
-            <span class="badge glance-chip bg-primary-subtle text-primary border border-primary font-monospace fw-black cursor-pointer" data-filter-jump="great" title="Jump to Great Move">
-              ⭐ ${userCounts.great} Great
-            </span>
-          ` : ''}
-          ${userCounts.best > 0 ? `
-            <span class="badge glance-chip bg-success-subtle text-success border border-success font-monospace fw-bold" title="${userCounts.best} Best Moves played">
-              ✓ ${userCounts.best} Best
-            </span>
-          ` : ''}
-          ${userCounts.inaccuracy > 0 ? `
-            <span class="badge glance-chip bg-warning-subtle text-warning border border-warning font-monospace fw-bold cursor-pointer" data-filter-jump="inaccuracy" title="Jump to First Inaccuracy">
-              ⚠️ ${userCounts.inaccuracy} Inacc.
-            </span>
-          ` : ''}
-          ${userCounts.mistake > 0 ? `
-            <span class="badge glance-chip bg-warning text-dark font-monospace fw-black cursor-pointer" data-filter-jump="mistake" title="Jump to First Mistake">
-              ❓ ${userCounts.mistake} Mistake${userCounts.mistake > 1 ? 's' : ''}
-            </span>
-          ` : ''}
-          ${userCounts.blunder > 0 ? `
-            <span class="badge glance-chip bg-danger text-white font-monospace fw-black cursor-pointer" data-filter-jump="blunder" title="Jump to First Blunder">
-              💥 ${userCounts.blunder} Blunder${userCounts.blunder > 1 ? 's' : ''}
-            </span>
-          ` : ''}
-          ${userCounts.missed_win > 0 ? `
-            <span class="badge glance-chip bg-danger-subtle text-danger border border-danger font-monospace fw-black cursor-pointer" data-filter-jump="missed_win" title="Jump to Missed Win">
-              ❌ ${userCounts.missed_win} Missed Win${userCounts.missed_win > 1 ? 's' : ''}
-            </span>
-          ` : ''}
-          ${totalErrors === 0 && (userCounts.best || 0) > 0 ? `
-            <span class="badge bg-success-subtle text-success border border-success fw-bold px-2 py-1">
-              🌟 Impeccable Play! Zero Tactical Errors.
-            </span>
-          ` : ''}
-        </div>
-      </div>
+      ${this.buildKeyMomentsChips(userCounts)}
 
       <!-- 2. Phase Accuracy Snapshot -->
       <div class="comic-card p-2.5 mb-2">
@@ -1886,7 +2047,7 @@ class ReviewDashboard {
             </div>
 
             <!-- Dedicated Step Navigation Card (Right under the board) -->
-            <div class="comic-card-sm p-1.5 mb-1 d-flex align-items-center justify-content-between gap-1.5 w-100" id="review-nav-controls">
+            <div class="comic-card-sm p-1.5 mb-1 d-flex align-items-center justify-content-between gap-1.5 w-100 review-mobile-nav-sticky" id="review-nav-controls">
               <button type="button" class="btn btn-light arcade-step-btn-sm" id="btn-first" title="First Move (Home / Ctrl+←)">
                 <i class="bi bi-chevron-bar-left fs-6"></i>
               </button>
@@ -1905,7 +2066,10 @@ class ReviewDashboard {
             </div>
 
             <!-- Move Notation & Comic Sound Effect Strip -->
-            <div class="comic-card-sm p-1.5 mb-1.5 d-flex align-items-center justify-content-between w-100" id="review-move-strip"></div>
+            <div class="comic-card-sm p-1.5 mb-1 d-flex align-items-center justify-content-between w-100" id="review-move-strip"></div>
+
+            <!-- Plain-English Coach Explanation Strip (Feature 1) -->
+            <div class="comic-card-sm review-coach-strip p-2 mb-1.5 d-flex align-items-center justify-content-between w-100" id="review-coach-line"></div>
 
             <!-- Streamlined Action Strip (3 Grouped Dropdowns + Key Moment) -->
             <div class="comic-card-sm p-1.5 mb-1 d-flex align-items-center justify-content-between gap-1.5 flex-wrap w-100" id="review-action-strip">
@@ -2090,6 +2254,10 @@ class ReviewDashboard {
           <div class="review-tab-pane ${this.reviewTab === 'moves' ? '' : 'd-none'}" data-pane-tab="moves">
             <!-- Advantage Timeline Line Graph -->
             <div class="comic-card-sm p-2 mb-2" id="advantage-chart-area"></div>
+
+            <!-- Turning Point & Key Moments (Feature 4: Pinned in primary view, no tab-jumping!) -->
+            ${this.buildCoachingCallouts()}
+            ${this.buildKeyMomentsChips(userCounts)}
 
             <!-- Move History Card -->
             <div class="comic-card p-2 mb-2" id="review-moves-card">
@@ -2337,7 +2505,12 @@ class ReviewDashboard {
         if (this.sandboxState) return;
         const cls = chip.getAttribute('data-filter-jump');
         const userColor = this.game?.userColor || 'w';
-        const target = (this.game?.plies || []).find((p) => p && p.classification === cls && (p.color === userColor));
+        const isUserPly = (p) => p && (p.color ? p.color === userColor : (p.ply % 2 === (userColor === 'w' ? 1 : 0)));
+        const matchingPlies = (this.game?.plies || []).filter((p) => isUserPly(p) && p.classification === cls);
+        if (matchingPlies.length === 0) return;
+
+        const next = matchingPlies.find((p) => p.ply > this.currentPly);
+        const target = next || matchingPlies[0];
         if (target && typeof target.ply === 'number') {
           this.goToPly(target.ply);
         }

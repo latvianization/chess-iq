@@ -118,6 +118,85 @@ function renderAdvantageChart(dashboard) {
     })
     .join('');
 
+  // Storyboard Milestone Pins (Turning Point, Book Exit, Brilliant, Blunders)
+  const milestones = [];
+  if (tpPly && tpPly <= totalPlies) {
+    const tp = dashboard.game.turningPoint;
+    const pt = dashboard.advantagePoints[tp.ply - 1];
+    if (pt) {
+      milestones.push({
+        ply: tp.ply,
+        x: pt.x,
+        y: pt.y,
+        symbol: '⚡',
+        label: 'Turning Point',
+        color: '#ef4444',
+        tip: `Move ${Math.ceil(tp.ply / 2)}${tp.color === 'b' ? '...' : '. '}${tp.san || ''} — Turning Point (${tp.swingPct || 35}% swing)`
+      });
+    }
+  }
+
+  const odPly = dashboard.game.openingDeparture?.ply;
+  if (odPly && odPly <= totalPlies && !milestones.some((m) => m.ply === odPly)) {
+    const pt = dashboard.advantagePoints[odPly - 1];
+    if (pt) {
+      milestones.push({
+        ply: odPly,
+        x: pt.x,
+        y: pt.y,
+        symbol: '🏁',
+        label: 'Book Exit',
+        color: '#38bdf8',
+        tip: `Move ${Math.ceil(odPly / 2)}${odPly % 2 === 1 ? '.' : '...'} — Book Departure (${dashboard.game.ecoName || 'Out of Book'})`
+      });
+    }
+  }
+
+  dashboard.advantagePoints.forEach((pt) => {
+    if (pt.ply?.classification === 'brilliant' && !milestones.some((m) => m.ply === pt.ply.ply)) {
+      milestones.push({
+        ply: pt.ply.ply,
+        x: pt.x,
+        y: pt.y,
+        symbol: '💎',
+        label: 'Brilliant',
+        color: '#06b6d4',
+        tip: `Move ${Math.ceil(pt.ply.ply / 2)}${pt.ply.ply % 2 === 1 ? '.' : '...'} ${pt.ply.san} — Brilliant Sacrifice`
+      });
+    }
+  });
+
+  const blunders = dashboard.advantagePoints
+    .filter((pt) => ['blunder', 'missed_win'].includes(pt.ply?.classification) && !milestones.some((m) => m.ply === pt.ply.ply))
+    .slice(0, 2);
+
+  blunders.forEach((pt) => {
+    milestones.push({
+      ply: pt.ply.ply,
+      x: pt.x,
+      y: pt.y,
+      symbol: pt.ply.classification === 'missed_win' ? '❌' : '💥',
+      label: pt.ply.classification === 'missed_win' ? 'Missed Win' : 'Blunder',
+      color: '#ef4444',
+      tip: `Move ${Math.ceil(pt.ply.ply / 2)}${pt.ply.ply % 2 === 1 ? '.' : '...'} ${pt.ply.san} — ${pt.ply.classification === 'missed_win' ? 'Missed Win' : 'Blunder'}`
+    });
+  });
+
+  const milestoneSvg = milestones
+    .map((m) => {
+      const isTop = m.y < midY;
+      const pinY = isTop ? 4 : height - 19;
+      const textY = isTop ? 14 : height - 9;
+      return `
+        <g class="chart-milestone-pin" data-milestone-ply="${m.ply}">
+          <line x1="${m.x.toFixed(1)}" y1="${isTop ? 19 : m.y.toFixed(1)}" x2="${m.x.toFixed(1)}" y2="${isTop ? m.y.toFixed(1) : height - 19}" stroke="${m.color}" stroke-width="1.2" stroke-dasharray="2,2" opacity="0.8" />
+          <rect x="${(m.x - 11).toFixed(1)}" y="${pinY.toFixed(1)}" width="22" height="15" rx="7.5" fill="#0f172a" stroke="${m.color}" stroke-width="1.4" />
+          <text x="${m.x.toFixed(1)}" y="${textY.toFixed(1)}" font-size="9.5" text-anchor="middle" dominant-baseline="middle">${m.symbol}</text>
+        </g>
+      `;
+    })
+    .join('');
+
   chartArea.innerHTML = `
     <div class="d-flex align-items-center justify-content-between px-1 pb-1 mb-1 border-bottom border-secondary border-opacity-25">
       <div class="d-flex align-items-center gap-1.5">
@@ -160,6 +239,8 @@ function renderAdvantageChart(dashboard) {
         ${phaseMarkersSvg}
         <!-- Key Moment Advantage Points -->
         ${pointDotsSvg}
+        <!-- Storyboard Milestone Pins -->
+        ${milestoneSvg}
         <!-- Active Move Scrubber -->
         <g id="advantage-scrubber-group" style="display: ${selectedPoint ? 'inline' : 'none'};">
           <line id="scrubber-line" x1="${selectedPoint?.x || 0}" y1="0" x2="${selectedPoint?.x || 0}" y2="${height}" stroke="#fbbf24" stroke-width="2.2" opacity="0.95" />
@@ -173,8 +254,18 @@ function renderAdvantageChart(dashboard) {
   const canvas = chartArea.querySelector('#advantage-chart-canvas');
   const tooltip = chartArea.querySelector('#advantage-chart-tooltip');
   if (canvas) {
-    const handleInteraction = (clientX) => {
+    const handleInteraction = (clientX, targetEl = null) => {
       if (dashboard.sandboxState) return;
+      if (targetEl) {
+        const pin = targetEl.closest?.('[data-milestone-ply]');
+        if (pin) {
+          const mPly = parseInt(pin.getAttribute('data-milestone-ply'), 10);
+          if (!isNaN(mPly)) {
+            dashboard.goToPly(mPly);
+            return;
+          }
+        }
+      }
       const rect = canvas.getBoundingClientRect();
       if (rect.width <= 0) return;
       const relX = clientX - rect.left;
@@ -183,16 +274,16 @@ function renderAdvantageChart(dashboard) {
       dashboard.goToPly(targetPly);
     };
 
-    canvas.addEventListener('click', (e) => handleInteraction(e.clientX));
+    canvas.addEventListener('click', (e) => handleInteraction(e.clientX, e.target));
 
-    const onWindowMouseMove = (e) => handleInteraction(e.clientX);
+    const onWindowMouseMove = (e) => handleInteraction(e.clientX, e.target);
     const onWindowMouseUp = () => {
       window.removeEventListener('mousemove', onWindowMouseMove);
       window.removeEventListener('mouseup', onWindowMouseUp);
     };
 
     canvas.addEventListener('mousedown', (e) => {
-      handleInteraction(e.clientX);
+      handleInteraction(e.clientX, e.target);
       window.addEventListener('mousemove', onWindowMouseMove);
       window.addEventListener('mouseup', onWindowMouseUp);
     });
@@ -201,6 +292,22 @@ function renderAdvantageChart(dashboard) {
       if (!tooltip || !dashboard.game || !dashboard.game.plies.length) return;
       const rect = canvas.getBoundingClientRect();
       const relX = e.clientX - rect.left;
+
+      const pin = e.target.closest?.('[data-milestone-ply]');
+      if (pin) {
+        const mPly = parseInt(pin.getAttribute('data-milestone-ply'), 10);
+        const mObj = milestones.find((m) => m.ply === mPly);
+        if (mObj) {
+          tooltip.innerHTML = `<div class="fw-bold font-monospace text-warning d-flex align-items-center gap-1"><span>${mObj.symbol}</span><span>${mObj.tip}</span></div>`;
+          tooltip.classList.remove('d-none');
+          const tipWidth = tooltip.offsetWidth || 150;
+          const leftPos = Math.max(8, Math.min(rect.width - tipWidth - 8, relX + 10));
+          tooltip.style.left = `${leftPos}px`;
+          tooltip.style.top = `6px`;
+          return;
+        }
+      }
+
       const ratio = Math.max(0, Math.min(1, relX / rect.width));
       const idx = Math.max(0, Math.min(totalPlies - 1, Math.round(ratio * (totalPlies - 1))));
       const ply = dashboard.game.plies[idx];
