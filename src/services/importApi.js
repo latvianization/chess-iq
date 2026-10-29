@@ -727,7 +727,20 @@ async function fetchChessComGames(username, limit = 15) {
     }
     const monthData = await gamesRes.json();
     const standardGames = (monthData.games || []).filter((g) => g.rules === "chess" && g.pgn);
-    collected.push(...standardGames.reverse());
+    for (const g of standardGames.reverse()) {
+      const mapped = mapChessComGame(g, collected.length);
+      const isUserWhite = mapped.white.toLowerCase() === cleanUsername;
+      const isUserBlack = mapped.black.toLowerCase() === cleanUsername;
+      const userColor = isUserWhite ? 'w' : (isUserBlack ? 'b' : 'w');
+      const isAnalyzed = Boolean(
+        (typeof getGameCacheInfo === 'function' && (getGameCacheInfo(mapped.pgn || mapped.id, userColor) || getGameCacheInfo(mapped.id, userColor))) ||
+        (typeof getCachedGame === 'function' && (getCachedGame(mapped.pgn || mapped.id, userColor) || getCachedGame(mapped.id, userColor)))
+      );
+      if (!isAnalyzed) {
+        collected.push(mapped);
+        if (collected.length >= limit) break;
+      }
+    }
   }
-  return collected.slice(0, limit).map(mapChessComGame);
+  return collected;
 }

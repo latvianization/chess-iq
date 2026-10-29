@@ -44,18 +44,56 @@ class ImportModal {
         }
         this.username = saved.username || '';
         this.activeTab = 'chesscom';
-        this.fetchedGames = saved.games;
+        this.fetchedGames = saved.games.filter((g) => !this.isGameAnalyzed(g));
       }
     } catch {}
 
     window.addEventListener('chess_iq_cache_cleared', () => {
-      if (this.fetchedGames.length > 0) this.renderTabContent();
+      try {
+        const saved = JSON.parse(localStorage.getItem('chess_iq_imported_games') || 'null');
+        if (saved && Array.isArray(saved.games)) {
+          this.fetchedGames = saved.games;
+        }
+      } catch {}
+      this.renderTabContent();
     });
     window.addEventListener('chess_iq_cache_updated', () => {
-      if (this.fetchedGames.length > 0) this.renderTabContent();
+      this.fetchedGames = this.fetchedGames.filter((g) => !this.isGameAnalyzed(g));
+      this.syncStorage();
+      this.renderTabContent();
     });
 
     this.render();
+  }
+
+  isGameAnalyzed(g) {
+    if (!g) return false;
+    const username = (this.username || '').trim().toLowerCase();
+    const isUserWhite = g.white && g.white.toLowerCase() === username;
+    const isUserBlack = g.black && g.black.toLowerCase() === username;
+    const userColor = isUserWhite ? 'w' : (isUserBlack ? 'b' : 'w');
+    if (typeof getGameCacheInfo === 'function') {
+      if (getGameCacheInfo(g.pgn || g.id, userColor) || getGameCacheInfo(g.id, userColor)) return true;
+      if (getGameCacheInfo(g.pgn || g.id, 'w') || getGameCacheInfo(g.pgn || g.id, 'b')) return true;
+    }
+    if (typeof getCachedGame === 'function') {
+      if (getCachedGame(g.pgn || g.id, userColor) || getCachedGame(g.id, userColor)) return true;
+      if (getCachedGame(g.pgn || g.id, 'w') || getCachedGame(g.pgn || g.id, 'b')) return true;
+    }
+    return false;
+  }
+
+  syncStorage() {
+    try {
+      if (this.username) {
+        localStorage.setItem('chess_iq_imported_games', JSON.stringify({
+          platform: 'chesscom',
+          username: this.username,
+          games: this.fetchedGames,
+          timestamp: Date.now()
+        }));
+      }
+    } catch {}
   }
 
   formatOpeningBadge(eco) {
@@ -177,19 +215,14 @@ class ImportModal {
 
     try {
       const games = await fetchChessComGames(this.username);
-      this.fetchedGames = games;
+      this.fetchedGames = games.filter((g) => !this.isGameAnalyzed(g));
       if (games.length === 0) {
         this.fetchError = 'No recent games found for this player.';
+      } else if (this.fetchedGames.length === 0) {
+        this.fetchError = 'All recent games found for this player have already been analyzed.';
       } else {
-        try {
-          localStorage.setItem('chess_iq_imported_games', JSON.stringify({
-            platform: 'chesscom',
-            username: this.username,
-            games,
-            timestamp: Date.now()
-          }));
-          window.dispatchEvent(new CustomEvent('chess_iq_games_imported'));
-        } catch {}
+        this.syncStorage();
+        window.dispatchEvent(new CustomEvent('chess_iq_games_imported'));
       }
     } catch (err) {
       this.fetchError = err.message || 'Failed to fetch games.';
@@ -234,6 +267,8 @@ class ImportModal {
     const container = this.modalEl.querySelector('#import-tab-body');
     if (!container) return;
 
+    const unanalyzedGames = this.fetchedGames.filter((g) => !this.isGameAnalyzed(g));
+
     container.innerHTML = `
       <div class="d-flex flex-column gap-3">
         <div class="input-group">
@@ -274,7 +309,14 @@ class ImportModal {
           <div class="alert alert-danger py-2 px-3 small font-medium mb-0">${this.fetchError}</div>
         ` : ''}
 
-        ${this.fetchedGames.length > 0 ? `
+        ${this.fetchedGames.length > 0 && unanalyzedGames.length === 0 && !this.fetchError ? `
+          <div class="alert alert-info py-2 px-3 small font-medium mb-0 d-flex align-items-center gap-2">
+            <i class="bi bi-check-circle-fill text-success flex-shrink-0"></i>
+            <span>All imported games have already been analyzed.</span>
+          </div>
+        ` : ''}
+
+        ${unanalyzedGames.length > 0 ? `
           <div class="d-flex flex-column gap-2 mt-1 w-100">
             <div class="d-flex align-items-center justify-content-between">
               <span class="small fw-bold text-secondary">Select a recent game to analyze:</span>
@@ -287,12 +329,10 @@ class ImportModal {
               </div>
             </div>
             <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden pe-1.5 w-100 pretty-scrollbar" style="max-height: 280px;">
-              ${this.fetchedGames.map((g) => {
+              ${unanalyzedGames.map((g) => {
                 const isUserWhite = g.white.toLowerCase() === this.username.trim().toLowerCase();
                 const isUserBlack = g.black.toLowerCase() === this.username.trim().toLowerCase();
                 const userColor = isUserWhite ? 'w' : (isUserBlack ? 'b' : 'w');
-                const cacheInfo = getGameCacheInfo(g.pgn || g.id, userColor) || getGameCacheInfo(g.id, userColor);
-                const isReviewed = Boolean(cacheInfo);
 
                 let userWon = false;
                 let userLost = false;
@@ -359,11 +399,6 @@ class ImportModal {
                         ${this.formatOpeningBadge(g.eco)}
                       </div>
                       <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                        ${isReviewed ? `
-                          <span class="badge bg-success-subtle text-success border border-success-subtle fw-bold font-monospace" style="font-size: 10px;">
-                            <i class="bi bi-lightning-charge-fill me-0.5"></i>Reviewed
-                          </span>
-                        ` : ''}
                         <span class="text-secondary small font-monospace text-nowrap" style="font-size: 11px;">${g.date}</span>
                         ${resultBadge}
                       </div>
@@ -384,21 +419,14 @@ class ImportModal {
                           <span class="badge saved-game-elo-badge font-monospace">${insEscape(g.blackElo)} Elo</span>
                           ${isUserBlack ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.5 rounded-pill" style="font-size: 10px;">YOU</span>' : ''}
                         </div>
-
-                        ${isReviewed ? `
-                          <div class="d-flex align-items-center gap-1.5 mt-0.5 flex-wrap">
-                            <span class="match-stat-badge match-acc-badge font-monospace"><i class="bi bi-bullseye me-0.5"></i><span class="stat-num">${cacheInfo.accuracy}%</span> <span class="stat-lbl">Acc</span></span>
-                            <span class="match-stat-badge match-perf-badge font-monospace"><i class="bi bi-star-fill me-0.5"></i><span class="stat-num">${cacheInfo.elo}</span> <span class="stat-lbl">Perf</span></span>
-                          </div>
-                        ` : ''}
                       </div>
 
                       <div class="d-flex align-items-center gap-1.5 flex-shrink-0">
                         <button type="button" class="btn btn-outline-danger btn-sm p-1.5 btn-delete-import-game" data-delete-id="${g.id}" title="Delete game" style="border-radius: 0.65rem; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;">
                           <i class="bi bi-trash3" style="font-size: 13px;"></i>
                         </button>
-                        <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5 ${isReviewed ? 'bg-success border-success' : ''}" style="border-radius: 0.65rem; font-size: 13px !important;">
-                          <span>${isReviewed ? 'View Review' : 'Analyze'}</span> <i class="bi ${isReviewed ? 'bi-lightning-charge-fill' : 'bi-chevron-right'}" style="font-size: 11px;"></i>
+                        <button type="button" class="arcade-btn-primary px-3 py-1.5 text-nowrap btn-analyze-card d-flex align-items-center gap-1.5" style="border-radius: 0.65rem; font-size: 13px !important;">
+                          <span>Analyze</span> <i class="bi bi-chevron-right" style="font-size: 11px;"></i>
                         </button>
                       </div>
                     </div>
@@ -431,14 +459,7 @@ class ImportModal {
         if (!game) return;
 
         this.fetchedGames = this.fetchedGames.filter((g) => g.id !== gameId);
-        try {
-          localStorage.setItem('chess_iq_imported_games', JSON.stringify({
-            platform: 'chesscom',
-            username: this.username,
-            games: this.fetchedGames,
-            timestamp: Date.now()
-          }));
-        } catch {}
+        this.syncStorage();
 
         if (typeof removeCachedGame === 'function') {
           removeCachedGame(game.id);

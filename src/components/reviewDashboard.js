@@ -1127,61 +1127,6 @@ class ReviewDashboard {
       });
     });
 
-    try {
-      if (savedImport && Array.isArray(savedImport.games)) {
-        const username = (savedImport.username || '').toLowerCase();
-        savedImport.games.forEach((g) => {
-          if (!seenIds.has(g.id)) {
-            seenIds.add(g.id);
-            const isUserWhite = g.white && g.white.toLowerCase() === username;
-            const isUserBlack = g.black && g.black.toLowerCase() === username;
-            const userColor = isUserWhite ? 'w' : (isUserBlack ? 'b' : 'w');
-
-            const botMatch = typeof detectBotInGame === 'function' ? detectBotInGame(g.white, g.black) : null;
-            const isBotGame = Boolean(
-              g.isBotGame ||
-              botMatch ||
-              g.botId ||
-              (g.white && (g.white.toLowerCase().includes('bot') || g.white.toLowerCase().includes('computer'))) ||
-              (g.black && (g.black.toLowerCase().includes('bot') || g.black.toLowerCase().includes('computer'))) ||
-              (g.pgn && (g.pgn.includes('[GameType "bot"]') || g.pgn.toLowerCase().includes('vs computer')))
-            );
-
-            let botInfo = botMatch;
-            if (!botInfo && isBotGame) {
-              const botRawName = isUserWhite ? g.black : g.white;
-              botInfo = {
-                name: g.botName || botRawName || 'Bot',
-                avatar: g.botAvatar || '🤖',
-                elo: isUserWhite ? g.blackElo : g.whiteElo
-              };
-            }
-
-            list.push({
-              type: 'imported',
-              id: g.id,
-              key: g.id,
-              pgn: g.pgn,
-              white: g.white || 'White',
-              black: g.black || 'Black',
-              whiteElo: g.whiteElo || 1500,
-              blackElo: g.blackElo || 1500,
-              result: g.result || '*',
-              date: g.date || '',
-              userColor,
-              eco: g.eco || '',
-              ecoName: '',
-              timeControl: isBotGame ? '' : (g.timeControl || ''),
-              savedAt: g.endTime || 0,
-              isImported: true,
-              isBotGame,
-              botInfo
-            });
-          }
-        });
-      }
-    } catch {}
-
     return list;
   }
 
