@@ -539,19 +539,29 @@ class ReviewDashboard {
     return this.game.plies[this.currentPly - 1];
   }
 
+  formatEvalScore(scoreCp, mate = null) {
+    if (mate !== null && mate !== undefined) {
+      return mate > 0 ? `+M${Math.abs(mate)}` : `-M${Math.abs(mate)}`;
+    }
+    if (typeof scoreCp !== 'number' || isNaN(scoreCp)) return null;
+    const pawns = (scoreCp / 100).toFixed(1);
+    return scoreCp > 0 ? `+${pawns}` : pawns;
+  }
+
   getTopMovesForFen(fen) {
-    if (!fen) return { best: null, second: null };
+    if (!fen) return { best: null, second: null, bestScoreCp: null, secondScoreCp: null, bestMate: null };
     try {
       const isValidUci = (u) => typeof u === 'string' && u.length >= 4 && /^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(u);
       const normKey = normalizeFenKey(fen);
       const cached = FEN_EVAL_CACHE.get(`${normKey}_deep`) || FEN_EVAL_CACHE.get(`${normKey}_fast`) || FEN_EVAL_CACHE.get(fen);
       let bestUci = isValidUci(cached?.bestMoveUci) ? cached.bestMoveUci : null;
       let secondUci = isValidUci(cached?.secondBestMoveUci) ? cached.secondBestMoveUci : null;
+      let local = null;
 
       if (!bestUci) {
-        const local = findBestMoveLocal(fen, 2);
-        bestUci = isValidUci(local.bestMoveUci) ? local.bestMoveUci : null;
-        secondUci = isValidUci(local.secondBestMoveUci) ? local.secondBestMoveUci : null;
+        local = findBestMoveLocal(fen, 2);
+        bestUci = isValidUci(local?.bestMoveUci) ? local.bestMoveUci : null;
+        secondUci = isValidUci(local?.secondBestMoveUci) ? local.secondBestMoveUci : null;
       }
 
       const best = bestUci && bestUci.length >= 4
@@ -562,9 +572,13 @@ class ReviewDashboard {
         ? { from: secondUci.slice(0, 2), to: secondUci.slice(2, 4) }
         : null;
 
-      return { best, second };
+      const bestScoreCp = cached?.scoreCp ?? local?.evalCp ?? null;
+      const secondScoreCp = cached?.multiPv2ScoreCp ?? local?.multiPv2Cp ?? null;
+      const bestMate = cached?.mate ?? null;
+
+      return { best, second, bestScoreCp, secondScoreCp, bestMate };
     } catch {
-      return { best: null, second: null };
+      return { best: null, second: null, bestScoreCp: null, secondScoreCp: null, bestMate: null };
     }
   }
 
@@ -691,11 +705,31 @@ class ReviewDashboard {
           ? `M${Math.abs(cur.mate)}`
           : (cur.scoreCp > 0 ? `+${(cur.scoreCp / 100).toFixed(1)}` : (cur.scoreCp / 100).toFixed(1));
 
-        const isOptimal = isForced || ['best', 'brilliant', 'great', 'book', 'forced'].includes(cur.classification);
-        const isSuboptimal = !isOptimal;
-        const topForCur = (!cur.bestMoveSan && cur.fenBefore) ? this.getTopMovesForFen(cur.fenBefore) : null;
+        const isMoverWhite = cur.color ? cur.color === 'w' : (cur.ply % 2 === 1);
+        const topForCur = cur.fenBefore ? this.getTopMovesForFen(cur.fenBefore) : null;
         const bestSan = cur.bestMoveSan || (cur.bestMoveUci && cur.bestMoveUci.length >= 4 ? `${cur.bestMoveUci.slice(0, 2)}-${cur.bestMoveUci.slice(2, 4)}` : (topForCur?.best ? `${topForCur.best.from}-${topForCur.best.to}` : ''));
         const secondSan = cur.secondBestMoveSan || (topForCur?.second ? `${topForCur.second.from}-${topForCur.second.to}` : null);
+
+        const bestScoreCp = (typeof cur.bestMoveScoreCp === 'number') ? cur.bestMoveScoreCp : ((typeof cur.scoreBefore === 'number') ? cur.scoreBefore : topForCur?.bestScoreCp);
+        const bestMate = (cur.mateBefore !== undefined && cur.mateBefore !== null) ? cur.mateBefore : topForCur?.bestMate;
+        const bestEvalStr = this.formatEvalScore(bestScoreCp, bestMate);
+
+        const secondScoreCp = (typeof cur.secondBestScoreCp === 'number') ? cur.secondBestScoreCp : topForCur?.secondScoreCp;
+        const secondEvalStr = this.formatEvalScore(secondScoreCp);
+
+        let gapBetweenBestAndSecond = null;
+        if (typeof bestScoreCp === 'number' && typeof secondScoreCp === 'number') {
+          const diff = isMoverWhite ? (bestScoreCp - secondScoreCp) : (secondScoreCp - bestScoreCp);
+          gapBetweenBestAndSecond = (Math.max(0, diff) / 100).toFixed(1);
+        }
+
+        let dropFromBest = null;
+        if (typeof bestScoreCp === 'number' && typeof cur.scoreCp === 'number') {
+          const diff = isMoverWhite ? (bestScoreCp - cur.scoreCp) : (cur.scoreCp - bestScoreCp);
+          dropFromBest = (Math.max(0, diff) / 100).toFixed(1);
+        }
+
+        const isPlayedBest = isForced || (bestSan && cur.san === bestSan) || ['best', 'brilliant', 'great', 'book', 'forced'].includes(cur.classification);
         const clockStr = this.formatClock(cur.clockSeconds ?? cur.clock);
         const spentStr = this.formatTimeSpent(cur.timeSpent);
         const motifs = (Array.isArray(cur.motifs) && cur.motifs.length > 0)
@@ -713,15 +747,27 @@ class ReviewDashboard {
               <span class="font-monospace fw-black fs-5">${cur.san}</span>
               <span class="badge eval-chip-badge font-monospace fw-bold cursor-help" data-iq-tip="metric_eval_bar"><i class="bi bi-speedometer2 me-1"></i>${evalStr}</span>
 
-              ${isSuboptimal && bestSan && bestSan !== cur.san ? `
+              ${!isPlayedBest && bestSan && bestSan !== cur.san ? `
                 <span class="badge best-move-chip font-monospace fw-bold px-2 py-1 cursor-help" data-iq-tip="badge_best" title="Top Engine Move (Thick Arrow)">
-                  ★ Best: ${bestSan}
+                  ★ Best: ${bestSan}${bestEvalStr ? ` (${bestEvalStr})` : ''}
                 </span>
               ` : ''}
 
-              ${isSuboptimal && secondSan && secondSan !== cur.san && secondSan !== bestSan ? `
+              ${secondSan && secondSan !== cur.san && secondSan !== bestSan ? `
                 <span class="badge second-move-chip font-monospace fw-bold px-2 py-1 cursor-help" data-iq-tip="badge_great" title="2nd Best Option (Thin Arrow)">
-                  2nd: ${secondSan}
+                  2nd: ${secondSan}${secondEvalStr ? ` (${secondEvalStr})` : ''}
+                </span>
+              ` : ''}
+
+              ${!isPlayedBest && dropFromBest && parseFloat(dropFromBest) >= 0.2 ? `
+                <span class="badge eval-drop-badge font-monospace fw-bold text-danger bg-danger-subtle border border-danger-subtle px-1.5 py-1" title="Evaluation drop from best engine move">
+                  <i class="bi bi-arrow-down-right me-0.5"></i>-${dropFromBest} drop
+                </span>
+              ` : ''}
+
+              ${gapBetweenBestAndSecond !== null && secondSan && secondSan !== bestSan ? `
+                <span class="badge eval-gap-badge font-monospace px-1.5 py-1 ${parseFloat(gapBetweenBestAndSecond) >= 1.0 ? 'text-warning border-warning' : 'text-secondary border-secondary-subtle'}" title="${parseFloat(gapBetweenBestAndSecond) >= 1.0 ? 'Big difference between 1st and 2nd best move — critical choice!' : 'Close alternatives between 1st and 2nd best moves'}">
+                  ${parseFloat(gapBetweenBestAndSecond) >= 1.0 ? '<i class="bi bi-lightning-fill me-0.5"></i>' : ''}Δ ${gapBetweenBestAndSecond}
                 </span>
               ` : ''}
 

@@ -755,11 +755,7 @@ Moves: ${totalMoves} moves (${totalPlies} plies)
 ${tp ? `
 ⚡ TURNING POINT:
 Move ${Math.ceil(tp.ply / 2)}${tp.color === 'b' ? '...' : '.'}${tp.san} swung win probability by ${tp.swingPct}% (${Math.round((tp.prevWinProb ?? 0.5) * 100)}% → ${Math.round((tp.winProb ?? 0.5) * 100)}% White).
-${tp.bestMoveSan ? `Stockfish Recommended: ${tp.bestMoveSan}` : ''}` : ''}
-
-🎓 COACH TAKEAWAY:
-${priorityTitle}
-${priorityDesc}`;
+${tp.bestMoveSan ? `Stockfish Recommended: ${tp.bestMoveSan}` : ''}` : ''}`.trim();
 
     if (navigator.clipboard) {
       navigator.clipboard.writeText(summaryText).then(() => {

@@ -2352,6 +2352,22 @@ input[type="range"].arcade-range {
   border-color: #7dd3fc;
 }
 
+.eval-gap-badge {
+  background: var(--arcade-surface, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--arcade-border);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+
+.eval-drop-badge {
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+
 /* Move Table Mini Badge */
 .mini-move-badge {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
