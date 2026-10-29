@@ -227,7 +227,7 @@ async function openWhyModal(dashboard, targetEval = null) {
       punishmentSteps = [
         { ply: 0, fen: cur.fen, from: cur.from, to: cur.to, san: cur.san }
       ];
-      const deepPunish = await getDeepContinuation(cur.fen, 5);
+      const deepPunish = await getDeepContinuation(cur.fen, 10);
       punishmentSteps.push(...deepPunish);
       const endFen = punishmentSteps[punishmentSteps.length - 1].fen;
       punishmentSummary = isBrilliant

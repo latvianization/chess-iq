@@ -297,9 +297,9 @@ function replayPv(fen, pvMoves, maxPlies = 5) {
   return steps;
 }
 
-var MIN_CONTINUATION_PLIES = 5;
+var MIN_CONTINUATION_PLIES = 10;
 
-async function extendContinuation(startFen, steps, maxPlies = 5) {
+async function extendContinuation(startFen, steps, maxPlies = 10) {
   const validSteps = Array.isArray(steps) ? steps : [];
   if (validSteps.length >= MIN_CONTINUATION_PLIES) return validSteps;
   const lastFen = validSteps.length > 0 ? validSteps[validSteps.length - 1].fen : startFen;
@@ -324,7 +324,7 @@ function prepareMoveExplanation(cur) {
     ];
 
     if (cur.punishmentPv && cur.punishmentPv.length > 0) {
-      punishmentSteps.push(...replayPv(cur.fen, cur.punishmentPv, 5));
+      punishmentSteps.push(...replayPv(cur.fen, cur.punishmentPv, 10));
     }
 
     const isBrilliant = cur.classification === "brilliant";
@@ -339,11 +339,11 @@ function prepareMoveExplanation(cur) {
 
     let deepBest = [];
     if (isBrilliant && Array.isArray(cur.secondBestPv) && cur.secondBestPv.length > 0) {
-      deepBest = replayPv(cur.fenBefore, cur.secondBestPv, 5);
+      deepBest = replayPv(cur.fenBefore, cur.secondBestPv, 10);
     } else if (isBrilliant && cur.secondBestMoveUci) {
       deepBest = replayPv(cur.fenBefore, [cur.secondBestMoveUci], 1);
     } else if (cur.bestPv && cur.bestPv.length > 0) {
-      deepBest = replayPv(cur.fenBefore, cur.bestPv, 5);
+      deepBest = replayPv(cur.fenBefore, cur.bestPv, 10);
     }
     if (deepBest.length === 0 && (cur.secondBestMoveUci || cur.bestMoveUci)) {
       deepBest = replayPv(
