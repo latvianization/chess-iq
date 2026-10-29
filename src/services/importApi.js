@@ -605,38 +605,6 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
   const oppMiddlegameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.middlegame ?? opponentAccuracy, oppPhaseAcc.middlegame.length, "*", oppColor) ?? oppBaseElo;
   const oppEndgameElo = calculatePerformanceElo(oppBaseElo, opponentPhaseAccuracy.endgame ?? opponentAccuracy, oppPhaseAcc.endgame.length, "*", oppColor) ?? oppBaseElo;
 
-  // Build Coach's Study Plan Summary
-  let topMotifId = null;
-  let topMotifCount = 0;
-  Object.entries(userMotifCounts).forEach(([id, cnt]) => {
-    if (cnt > topMotifCount) {
-      topMotifId = id;
-      topMotifCount = cnt;
-    }
-  });
-
-  let weakestPhase = "middlegame";
-  let lowestPhaseAcc = 101;
-  ["opening", "middlegame", "endgame"].forEach((ph) => {
-    const val = userPhaseAccuracy[ph];
-    if (val !== null && val !== undefined && val < lowestPhaseAcc) {
-      lowestPhaseAcc = val;
-      weakestPhase = ph;
-    }
-  });
-
-  const gameCoachSummary = {
-    topMotifId,
-    topMotifCount,
-    userMotifCounts,
-    weakestPhase,
-    weakestPhaseAcc: lowestPhaseAcc <= 100 ? lowestPhaseAcc : userAccuracy,
-    impulsiveBlunders,
-    timeTroubleBlunders,
-    brightestMove,
-    practicePly: turningPoint?.ply || endgameStartPly || middlegameStartPly || 1
-  };
-
   const analyzedResult = {
     id: `game_${Date.now()}`,
     platform: "pgn",
@@ -655,7 +623,6 @@ async function analyzeFullPgn(pgn, userColorTarget, isDeep = true, onProgress) {
     plies,
     openingDeviation,
     turningPoint,
-    gameCoachSummary,
     overallAccuracy,
     userAccuracy,
     opponentAccuracy,

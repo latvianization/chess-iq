@@ -928,18 +928,16 @@ class ReviewDashboard {
   buildCoachingCallouts() {
     if (!this.game) return '';
     const tp = this.game.turningPoint;
-    const od = this.game.openingDeviation;
-    if (!tp && !od) return '';
+    if (!tp) return '';
 
-    const cards = [];
+    const moveNum = Math.ceil(tp.ply / 2);
+    const moveDots = tp.color === 'b' ? '...' : '.';
+    const beforePct = Math.round((tp.prevWinProb ?? 0.5) * 100);
+    const afterPct = Math.round((tp.winProb ?? 0.5) * 100);
 
-    if (tp) {
-      const moveNum = Math.ceil(tp.ply / 2);
-      const moveDots = tp.color === 'b' ? '...' : '.';
-      const beforePct = Math.round((tp.prevWinProb ?? 0.5) * 100);
-      const afterPct = Math.round((tp.winProb ?? 0.5) * 100);
-      cards.push(`
-        <div class="col-12 ${od ? 'col-md-6' : ''}">
+    return `
+      <div class="row g-2">
+        <div class="col-12">
           <div class="comic-card p-2.5 h-100 coaching-callout-card border-start border-4 border-danger cursor-pointer" data-callout-ply="${tp.ply}" title="Click to jump to the Game Turning Point">
             <div class="d-flex align-items-center justify-content-between mb-1">
               <div class="d-flex align-items-center gap-1">
@@ -960,45 +958,6 @@ class ReviewDashboard {
             ` : ''}
           </div>
         </div>
-      `);
-    }
-
-    if (od) {
-      const moveNum = Math.ceil(od.ply / 2);
-      const moveDots = od.color === 'b' ? '...' : '.';
-      const bookAlts = (od.alternatives || []).map((a) => `<span class="badge bg-body-secondary text-body font-monospace me-1">${insEscape(a.move)} (${insEscape(a.eco)})</span>`).join('');
-      cards.push(`
-        <div class="col-12 ${tp ? 'col-md-6' : ''}">
-          <div class="comic-card p-2.5 h-100 coaching-callout-card border-start border-4 border-warning cursor-pointer" data-callout-ply="${od.ply}" title="Click to jump to the Opening Book Deviation">
-            <div class="d-flex align-items-center justify-content-between mb-1">
-              <div class="d-flex align-items-center gap-1">
-                <span class="badge bg-warning text-dark fw-black" style="font-size: 10px;">
-                  <i class="bi bi-book-half me-1"></i>LEFT OPENING BOOK
-                </span>
-                ${typeof renderInfoIcon === 'function' ? renderInfoIcon('card_opening_deviation') : ''}
-              </div>
-              <span class="badge bg-body-secondary text-secondary font-monospace" style="font-size: 10px;">Move ${moveNum}${moveDots}${insEscape(od.san)}</span>
-            </div>
-            <div class="small fw-bold mb-1">
-              Deviated from <span class="text-warning fw-black">${insEscape(od.lastBookEco)} ${insEscape(od.lastBookName)}</span> with <span class="font-monospace fw-black">${moveNum}${moveDots}${insEscape(od.san)}</span>.
-            </div>
-            ${bookAlts ? `
-              <div class="text-secondary d-flex align-items-center flex-wrap gap-1" style="font-size: 11px;">
-                <span>Book lines:</span> ${bookAlts}
-              </div>
-            ` : `
-              <div class="text-secondary" style="font-size: 11px;">
-                Best continuation: <span class="font-monospace fw-bold text-success">${insEscape(od.bestMoveSan || 'Standard development')}</span>
-              </div>
-            `}
-          </div>
-        </div>
-      `);
-    }
-
-    return `
-      <div class="row g-2">
-        ${cards.join('')}
       </div>
     `;
   }
@@ -2161,6 +2120,37 @@ class ReviewDashboard {
       showBestMove: true,
       showLoosePieces: this.showLoosePieces,
     });
+
+    let lastWheelTime = 0;
+    mount.addEventListener('wheel', (e) => {
+      if (
+        document.querySelector('.modal.show') ||
+        document.getElementById('why-blunder-modal') ||
+        document.getElementById('winning-path-modal') ||
+        document.querySelector('.why-modal-backdrop') ||
+        document.body.classList.contains('modal-open')
+      ) return;
+      if (!this.game) return;
+
+      e.preventDefault();
+      const now = Date.now();
+      if (now - lastWheelTime < 50) return;
+      lastWheelTime = now;
+
+      if (e.deltaY > 0) {
+        if (this.sandboxState) {
+          this.stepSandbox(1);
+        } else {
+          this.goToPly(this.currentPly + 1);
+        }
+      } else if (e.deltaY < 0) {
+        if (this.sandboxState) {
+          this.stepSandbox(-1);
+        } else {
+          this.goToPly(this.currentPly - 1);
+        }
+      }
+    }, { passive: false });
 
     // Bind Navigation Buttons
     const bindNavBtn = (id, fn) => {

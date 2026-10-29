@@ -42,7 +42,7 @@ function renderMoveCellContent(dashboard, plyObj) {
     ? `<span class="move-cell-clock font-monospace text-secondary" title="Remaining Clock: ${rawClock}">${rawClock}</span>`
     : '';
 
-  const showPillBadge = ['brilliant', 'great', 'best', 'book', 'forced', 'inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(cls);
+  const showPillBadge = ['brilliant', 'great', 'best', 'excellent', 'book', 'forced', 'inaccuracy', 'mistake', 'blunder', 'missed_win'].includes(cls);
   const symbolStr = comic ? (comic.badgeLabel || comic.symbol || '') : '';
   const isMultiChar = String(symbolStr).length > 1;
 

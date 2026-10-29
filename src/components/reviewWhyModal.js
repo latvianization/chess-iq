@@ -158,6 +158,20 @@ async function openWhyModal(dashboard, targetEval = null) {
     interactive: false,
   });
 
+  let lastWhyWheelTime = 0;
+  boardMount.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const now = Date.now();
+    if (now - lastWhyWheelTime < 50) return;
+    lastWhyWheelTime = now;
+
+    if (e.deltaY > 0) {
+      modal.querySelector('#why-btn-next')?.click();
+    } else if (e.deltaY < 0) {
+      modal.querySelector('#why-btn-prev')?.click();
+    }
+  }, { passive: false });
+
   const dialogEl = modal.querySelector('.why-dialog');
   const safeClose = typeof setupModalSwipeAndHistory === 'function'
     ? setupModalSwipeAndHistory(modal, dialogEl, () => closeWhyModal(dashboard))

@@ -236,6 +236,20 @@ async function openWinningPathModal(dashboard, plyOverride = null) {
   });
   modal._winBoard = winBoard;
 
+  let lastWinWheelTime = 0;
+  boardMount.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const now = Date.now();
+    if (now - lastWinWheelTime < 50) return;
+    lastWinWheelTime = now;
+
+    if (e.deltaY > 0) {
+      modal.querySelector('#win-step-next')?.click();
+    } else if (e.deltaY < 0) {
+      modal.querySelector('#win-step-prev')?.click();
+    }
+  }, { passive: false });
+
   // Autoplay management
   let isPlaying = false;
   let steps = [];

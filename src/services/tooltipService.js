@@ -206,29 +206,11 @@ const IQ_TOOLTIPS = {
     what: 'Displays current engine advantage in pawns (+1.5 = White is ahead by 1.5 pawns, -2.0 = Black ahead) or forced checkmate (M3 = Mate in 3).',
     why: 'White fill height visually represents White\'s statistical win probability from master databases.',
   },
-  card_coach_study_plan: {
-    title: 'Coach\'s Study Plan',
-    category: 'CARD INFO',
-    what: 'Synthesizes your game\'s tactical motifs, time management, and phase dips into a prioritized training action plan.',
-    why: 'Transforms post-game analysis from passive reading into active, high-impact practice drills.',
-  },
-  coach_best_moment: {
-    title: 'Best Moment of the Game',
-    category: 'HIGHLIGHT',
-    what: 'Your highest-rated, most accurate move of the entire match as evaluated by Stockfish.',
-    why: 'Reviewing your best moves reinforces positive calculation patterns and tactical vision.',
-  },
   card_turning_point: {
     title: 'Game Turning Point',
     category: 'CARD INFO',
     what: 'The single move in the game that caused the most catastrophic win probability shift between White and Black.',
     why: 'Click to jump directly to this move. This is the pivotal moment where the victory slipped away or was clinched.',
-  },
-  card_opening_deviation: {
-    title: 'Left Opening Book',
-    category: 'CARD INFO',
-    what: 'The exact ply where the game departed from established master opening theory in the ECO encyclopedia.',
-    why: 'Click to jump to this move. Studying the recommended theoretical book continuations helps you improve your opening repertoire.',
   },
   eco_opening: {
     title: 'ECO (Encyclopaedia of Chess Openings) Code',

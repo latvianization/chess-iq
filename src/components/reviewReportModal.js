@@ -283,32 +283,6 @@ function openFullReportModal(dashboard) {
   const whiteAvgTime = whiteTimeMoves > 0 ? (whiteTimeTotal / whiteTimeMoves).toFixed(1) + 's' : null;
   const blackAvgTime = blackTimeMoves > 0 ? (blackTimeTotal / blackTimeMoves).toFixed(1) + 's' : null;
 
-  // Coach Study Plan stats
-  const summary = dashboard.game.gameCoachSummary || {};
-  let priorityTitle = 'Solid Positional Consistency';
-  let priorityDesc = 'You played a clean game with very few tactical oversights. Keep up the sharp positional play!';
-  let priorityIcon = '🏆';
-
-  if (summary.topMotifId && typeof TACTICAL_MOTIF_CATALOG !== 'undefined' && TACTICAL_MOTIF_CATALOG[summary.topMotifId]) {
-    const cat = TACTICAL_MOTIF_CATALOG[summary.topMotifId];
-    priorityIcon = cat.icon;
-    priorityTitle = `Pattern Alert: ${cat.label} (${summary.topMotifCount}× in this game)`;
-    priorityDesc = cat.coachTip;
-  } else if ((dashboard.game.impulsiveBlunders || 0) >= 1) {
-    priorityIcon = '⚡';
-    priorityTitle = `Clock Discipline: ${dashboard.game.impulsiveBlunders} Rushed Mistake${dashboard.game.impulsiveBlunders > 1 ? 's' : ''}`;
-    priorityDesc = 'You played critical mistakes in under 2 seconds despite having plenty of clock time. Take a deep breath and sit on your hands for 5 seconds before capturing or responding to threats!';
-  } else if (summary.weakestPhase && summary.weakestPhaseAcc < 78) {
-    priorityIcon = '📉';
-    const phCap = summary.weakestPhase.charAt(0).toUpperCase() + summary.weakestPhase.slice(1);
-    priorityTitle = `${phCap} Precision (${summary.weakestPhaseAcc}% Accuracy)`;
-    priorityDesc = `Your accuracy dipped most during the ${summary.weakestPhase}. Practice critical transitions from this phase against an Elo-matched bot!`;
-  } else if (userMistakes.length > 0) {
-    priorityIcon = '🎯';
-    priorityTitle = `Tactical Calculation (${userMistakes.length} Key Error${userMistakes.length > 1 ? 's' : ''})`;
-    priorityDesc = 'Re-play your mistakes on the board right now in puzzle workout mode to build muscle memory for the correct tactical continuation.';
-  }
-
   const modal = document.createElement('div');
   modal.id = 'review-detailed-modal';
   modal.className = 'why-modal-backdrop';
@@ -321,7 +295,7 @@ function openFullReportModal(dashboard) {
             <i class="bi bi-file-earmark-bar-graph-fill me-1.5"></i>Full Game Report
           </span>
           <button type="button" class="eco-interactive-btn cursor-pointer" id="btn-report-open-eco" data-iq-tip="eco_opening" title="Click to view Opening theory & ECO details">
-            <span class="badge bg-secondary font-monospace eco-code-badge">${dashboard.game.ecoCode || 'PGN'}</span>
+            <span class="badge bg-secondary font-monospace eco-code-badge">${dashboard.game.ecoCode || '—'}</span>
             <span class="fw-black text-truncate eco-name-label" style="max-width: 280px; font-size: 14px;">${insEscape(dashboard.game.ecoName || 'Chess Match')}</span>
             <i class="bi bi-info-circle text-secondary" style="font-size: 11px;"></i>
           </button>
@@ -354,8 +328,6 @@ function openFullReportModal(dashboard) {
         </div>
         <div class="d-flex align-items-center gap-2 font-monospace">
           <span><i class="bi bi-hash me-0.5 text-secondary"></i><strong>${totalMoves} moves (${totalPlies} plies)</strong></span>
-          <span class="text-secondary opacity-50">·</span>
-          <span class="badge bg-secondary-subtle text-secondary border font-monospace text-uppercase">${dashboard.game.platform || 'PGN'}</span>
         </div>
       </div>
 
@@ -722,33 +694,6 @@ function openFullReportModal(dashboard) {
           </div>
         ` : ''}
 
-        <!-- 8. Personalized Coach Study Plan & Drills -->
-        <div class="border-top pt-3" style="border-color: var(--arcade-border) !important;">
-          <div class="comic-card p-3 coach-plan-card">
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom" style="border-color: var(--arcade-border) !important;">
-              <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-warning text-dark border border-dark fw-black px-2 py-1" style="font-size: 11px;">
-                  🎓 COACH'S STUDY PLAN
-                </span>
-                <span class="small fw-bold text-secondary">Personalized Takeaways & Active Drills</span>
-              </div>
-              ${summary.brightestMove ? `
-                <button type="button" class="btn btn-xs btn-outline-info comic-btn fw-bold py-0.5 px-2" data-report-jump="${summary.brightestMove.ply}" title="Jump to your highest-rated move">
-                  ✨ Best Moment: Move ${Math.ceil(summary.brightestMove.ply / 2)} (${insEscape(summary.brightestMove.san)})
-                </button>
-              ` : ''}
-            </div>
-
-            <div class="d-flex align-items-start gap-2.5 mb-3">
-              <div class="fs-3 lh-1 mt-0.5">${priorityIcon}</div>
-              <div class="flex-grow-1">
-                <div class="fw-black small text-warning mb-0.5">${insEscape(priorityTitle)}</div>
-                <div class="text-secondary small" style="font-size: 12px;">${insEscape(priorityDesc)}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- 10. Footer Utility Actions -->
         <div class="d-flex align-items-center justify-content-between pt-2 border-top no-print flex-wrap gap-2" style="border-color: var(--arcade-border) !important;">
           <div class="d-flex align-items-center gap-2">
@@ -795,7 +740,7 @@ function openFullReportModal(dashboard) {
     const summaryText = `⚡ CHESS IQ COMPREHENSIVE GAME REPORT
 Match: ${dashboard.game.white || 'White'} (${whiteElo}) vs ${dashboard.game.black || 'Black'} (${blackElo})
 Result: ${resTitle}
-ECO: ${dashboard.game.ecoCode || 'PGN'} · ${dashboard.game.ecoName || 'Chess Match'}
+ECO: ${dashboard.game.ecoCode || '—'} · ${dashboard.game.ecoName || 'Chess Match'}
 Date: ${dashboard.game.date || 'Recent Match'} | Time Control: ${dashboard.game.isBotGame ? 'Untimed (No limit)' : (dashboard.game.timeControl || 'Standard')}
 Moves: ${totalMoves} moves (${totalPlies} plies)
 
