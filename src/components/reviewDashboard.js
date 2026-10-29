@@ -1452,18 +1452,48 @@ class ReviewDashboard {
           <div class="badge bg-warning text-dark border border-dark rounded-4 p-3 fs-1 mb-3 shadow-sm d-inline-flex align-items-center justify-content-center" style="width: 72px; height: 72px;">
             <span class="lh-1" style="font-size: 2.25rem;">♟</span>
           </div>
-          <h3 class="fw-black mb-2">No Game Currently in Review</h3>
+          <h3 class="fw-black mb-2">Game Analysis</h3>
           <p class="fg-secondary small max-w-md mx-auto mb-4 font-medium leading-relaxed">
-            Import a game from Chess.com to run deep Stockfish engine diagnostics
-            with move quality classifications, phase ratings, and key moment analysis, or challenge our 33-bot arena!
+            Import a game from Chess.com or challenge our 33-bot arena to run deep Stockfish engine diagnostics.
           </p>
-          <div class="d-flex align-items-center justify-content-center flex-wrap gap-2.5">
+          <div class="d-flex align-items-center justify-content-center flex-wrap gap-2.5 mb-4">
             <button type="button" class="btn-solid theme-warning comic-btn px-4 py-2.5" id="zero-btn-import" data-bs-toggle="modal" data-bs-target="#import-modal">
               <i class="bi bi-cloud-arrow-up-fill me-1.5"></i> Import Game
             </button>
             <button type="button" class="btn btn-light comic-btn px-4 py-2.5" id="zero-btn-bots">
               <i class="bi bi-robot me-1.5"></i> Play 33 Bots
             </button>
+          </div>
+          <div class="w-100 text-start p-3 rounded-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
+            <div class="d-flex align-items-center gap-1.5 mb-2 font-monospace small fw-bold text-uppercase text-secondary" style="font-size: 11px; letter-spacing: 0.5px;">
+              <i class="bi bi-info-circle-fill text-warning"></i> How games are evaluated
+            </div>
+            <div class="row g-2.5 small" style="font-size: 12px; line-height: 1.45;">
+              <div class="col-12 col-sm-6">
+                <div class="d-flex align-items-start gap-1.5">
+                  <i class="bi bi-cpu text-warning mt-0.5" style="font-size: 13px; flex-shrink: 0;"></i>
+                  <div><strong>Stockfish Engine:</strong> Depth-based evaluation calculating centipawn advantage and engine top moves.</div>
+                </div>
+              </div>
+              <div class="col-12 col-sm-6">
+                <div class="d-flex align-items-start gap-1.5">
+                  <i class="bi bi-graph-up text-warning mt-0.5" style="font-size: 13px; flex-shrink: 0;"></i>
+                  <div><strong>Win Probability & Accuracy:</strong> Converts engine scores into win chances to measure move precision (0–100%).</div>
+                </div>
+              </div>
+              <div class="col-12 col-sm-6">
+                <div class="d-flex align-items-start gap-1.5">
+                  <i class="bi bi-award text-warning mt-0.5" style="font-size: 13px; flex-shrink: 0;"></i>
+                  <div><strong>Move Quality:</strong> Classifies moves from Brilliant sacrifices and Best moves to Inaccuracies, Mistakes, and Blunders.</div>
+                </div>
+              </div>
+              <div class="col-12 col-sm-6">
+                <div class="d-flex align-items-start gap-1.5">
+                  <i class="bi bi-shield-check text-warning mt-0.5" style="font-size: 13px; flex-shrink: 0;"></i>
+                  <div><strong>4-Pillar Positional X-Ray:</strong> Tracks balance in Material, Piece Activity, King Safety, and Pawn Structure.</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

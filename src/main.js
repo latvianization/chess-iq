@@ -64,9 +64,15 @@ class App {
         onOpenImport: () => this.importModal?.show(),
         onBackToImportedGames: () => this.showImportedGames(),
         onSwitchToBots: (fen, userColor, targetElo) => {
-          this.switchMode('bot');
           if (fen && typeof fen === 'string') {
+            this.switchMode('bot');
             this.botArena?.startFromPosition(fen, userColor || 'w', targetElo || 1200);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            if (this.botArena) {
+              this.botArena.resetToPicker();
+            }
+            this.switchMode('bot');
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }
         },
@@ -317,8 +323,28 @@ class App {
       });
     }
 
-    document.getElementById('nav-mode-review')?.addEventListener('click', () => this.switchMode('review'));
-    document.getElementById('nav-mode-bot')?.addEventListener('click', () => this.switchMode('bot'));
+    document.getElementById('nav-mode-review')?.addEventListener('click', () => {
+      if (this.reviewDashboard) {
+        this.reviewDashboard.hideLoading();
+        this.reviewDashboard.setGame(null);
+      }
+      if (this.botArena) {
+        this.botArena.resetToPicker();
+      }
+      this.switchMode('review');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    document.getElementById('nav-mode-bot')?.addEventListener('click', () => {
+      if (this.botArena) {
+        this.botArena.resetToPicker();
+      }
+      if (this.reviewDashboard) {
+        this.reviewDashboard.hideLoading();
+        this.reviewDashboard.setGame(null);
+      }
+      this.switchMode('bot');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
     document.getElementById('nav-btn-import')?.addEventListener('click', () => {
       this.importModal?.show();
     });
