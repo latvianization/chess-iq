@@ -22,8 +22,6 @@ class BotArena {
     this.userColor = 'w';
     this.selectedBot = BOTS_33[0]; // 400 Elo Pawn Piper
     this.activeTier = 'rookie';
-    this.activeTierFilter = 'all'; // 'all' | 'rookie' | 'challenger' | 'hero' | 'titan'
-    this.botSearchQuery = '';
     this.speechText = this.selectedBot.speech.onStart[0];
     this.isSpeechVisible = false;
     this.speechTimeout = null;
@@ -246,71 +244,128 @@ class BotArena {
     }
   }
 
-  triggerBotMove() {
+  async triggerBotMove() {
     this.clearBotMoveTimeout();
     this.isBotThinking = true;
     this.updateStatusText();
     this.updateControls();
 
-    const thinkTime = Math.min(1200, Math.max(350, 200 + (this.selectedBot.elo - 400) * 0.5));
+    const bot = this.selectedBot;
+    const elo = bot.elo || 1000;
+    const currentFen = this.chess.fen();
+    const minThinkTime = Math.min(1000, Math.max(300, 200 + (elo - 400) * 0.45));
+    const startTime = Date.now();
 
-    this.botMoveTimeout = setTimeout(() => {
-      this.botMoveTimeout = null;
-      if (isChessGameOver(this.chess)) return;
+    let chosenMove = null;
 
+    // 1. Try Stockfish evaluation
+    try {
+      if (typeof stockfishService !== 'undefined' && stockfishService.isAvailable) {
+        let sfDepth = 2;
+        let maxWaitMs = 400;
+        if (elo >= 1800) { sfDepth = 12; maxWaitMs = 900; }
+        else if (elo >= 1500) { sfDepth = 8; maxWaitMs = 750; }
+        else if (elo >= 1200) { sfDepth = 6; maxWaitMs = 600; }
+        else if (elo >= 800) { sfDepth = 4; maxWaitMs = 450; }
+
+        const sfResult = await stockfishService.evaluate(currentFen, sfDepth, maxWaitMs);
+        if (sfResult && sfResult.bestMoveUci && this.isPlaying && this.chess.fen() === currentFen) {
+          const legalMoves = this.chess.moves({ verbose: true });
+          const matchUci = (uci) => {
+            if (!uci || uci.length < 4) return null;
+            const from = uci.slice(0, 2);
+            const to = uci.slice(2, 4);
+            const promo = uci[4];
+            return legalMoves.find((m) => m.from === from && m.to === to && (!promo || m.promotion === promo));
+          };
+
+          const bestMove = matchUci(sfResult.bestMoveUci);
+          const secondBestMove = matchUci(sfResult.secondBestMoveUci);
+
+          const r = Math.random();
+          if (elo >= 1800) {
+            chosenMove = bestMove || secondBestMove;
+          } else if (elo >= 1400) {
+            chosenMove = (r < 0.15 && secondBestMove) ? secondBestMove : (bestMove || secondBestMove);
+          } else if (elo >= 1000) {
+            chosenMove = (r < 0.35 && secondBestMove) ? secondBestMove : (bestMove || secondBestMove);
+          } else if (elo >= 700) {
+            if (r < 0.40 && secondBestMove) chosenMove = secondBestMove;
+            else if (r < 0.50 && legalMoves.length > 2) chosenMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+            else chosenMove = bestMove || secondBestMove;
+          } else {
+            if (r < 0.40 && secondBestMove) chosenMove = secondBestMove;
+            else if (r < 0.65 && legalMoves.length > 1) chosenMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+            else chosenMove = bestMove || secondBestMove;
+          }
+        }
+      }
+    } catch (err) {
+      // Ignore Stockfish error and fall back to local search
+    }
+
+    // 2. Local search fallback if Stockfish was unavailable, timed out, or not matched
+    if (!chosenMove && this.isPlaying && this.chess.fen() === currentFen) {
       const legalMoves = this.chess.moves({ verbose: true });
-      if (legalMoves.length === 0) return;
-
-      let chosenMove = null;
-      const willMakeRandomMistake = Math.random() < this.selectedBot.randomness;
-
-      if (willMakeRandomMistake && legalMoves.length > 1) {
-        chosenMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
-      } else {
-        const botSearchDepth = Math.max(1, Math.min(3, this.selectedBot.depth || 2));
-        const searchResult = findBestMoveLocal(this.chess.fen(), botSearchDepth);
-        if (searchResult && searchResult.bestMoveUci) {
-          const from = searchResult.bestMoveUci.slice(0, 2);
-          const to = searchResult.bestMoveUci.slice(2, 4);
-          const promo = searchResult.bestMoveUci[4];
-          const matched = legalMoves.find((m) => m.from === from && m.to === to && (!promo || m.promotion === promo));
-          if (matched) chosenMove = matched;
-        }
-        if (!chosenMove) {
-          chosenMove = legalMoves[0];
+      if (legalMoves.length > 0) {
+        const willMakeRandomMistake = Math.random() < (this.selectedBot.randomness || 0.1);
+        if (willMakeRandomMistake && legalMoves.length > 1 && elo < 1300) {
+          chosenMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+        } else {
+          const botSearchDepth = Math.max(1, Math.min(3, this.selectedBot.depth || 2));
+          const searchResult = typeof findBestMoveLocal === 'function' ? findBestMoveLocal(this.chess.fen(), botSearchDepth) : null;
+          if (searchResult && searchResult.bestMoveUci) {
+            const from = searchResult.bestMoveUci.slice(0, 2);
+            const to = searchResult.bestMoveUci.slice(2, 4);
+            const promo = searchResult.bestMoveUci[4];
+            chosenMove = legalMoves.find((m) => m.from === from && m.to === to && (!promo || m.promotion === promo));
+          }
+          if (!chosenMove) chosenMove = legalMoves[0];
         }
       }
+    }
 
-      const move = this.chess.move(chosenMove);
+    const elapsed = Date.now() - startTime;
+    const remaining = Math.max(50, minThinkTime - elapsed);
+    if (remaining > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remaining));
+    }
+
+    if (!this.isPlaying || isChessGameOver(this.chess) || this.chess.fen() !== currentFen || !chosenMove) {
       this.isBotThinking = false;
+      this.updateStatusText();
+      this.updateControls();
+      return;
+    }
 
-      if (move) {
-        if (move.captured) soundService.playCapture();
-        else soundService.playMove();
+    const move = this.chess.move(chosenMove);
+    this.isBotThinking = false;
 
-        const isInCheck = isChessInCheck(this.chess);
+    if (move) {
+      if (move.captured) soundService.playCapture();
+      else soundService.playMove();
 
-        const plyCount = this.chess.history().length;
-        const canSpeak = plyCount - this.lastSpeechPly >= 4;
+      const isInCheck = isChessInCheck(this.chess);
+      const plyCount = this.chess.history().length;
+      const canSpeak = plyCount - this.lastSpeechPly >= 4;
 
-        if (isInCheck) {
-          soundService.playCheck();
-          if (canSpeak && Math.random() < 0.18) {
-            this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotCheck));
-          }
-        } else if (canSpeak && Math.random() < 0.04) {
-          const generalQuotes = this.selectedBot.speech.onStart || [];
-          if (generalQuotes.length > 0) {
-            this.setBotSpeech(this.getRandomQuote(generalQuotes));
-          }
+      if (isInCheck) {
+        soundService.playCheck();
+        if (canSpeak && Math.random() < 0.18) {
+          this.setBotSpeech(this.getRandomQuote(this.selectedBot.speech.onBotCheck));
+        }
+      } else if (canSpeak && Math.random() < 0.04) {
+        const generalQuotes = this.selectedBot.speech.onStart || [];
+        if (generalQuotes.length > 0) {
+          this.setBotSpeech(this.getRandomQuote(generalQuotes));
         }
       }
+    }
 
-      this.updateBoard();
-      this.updateControls();
-      this.updateStatusText();
-      this.checkGameOver();
-    }, thinkTime);
+    this.updateBoard();
+    this.updateControls();
+    this.updateStatusText();
+    this.checkGameOver();
   }
 
   getEnrichedPgn() {
@@ -514,8 +569,8 @@ class BotArena {
         this.undoMove();
       });
       actionArea.querySelector('#bot-btn-rematch')?.addEventListener('click', () => {
-        const randomSide = Math.random() < 0.5 ? 'w' : 'b';
-        this.startNewGame(randomSide);
+        const newSide = this.userColor === 'w' ? 'b' : 'w';
+        this.startNewGame(newSide);
       });
       actionArea.querySelector('#bot-btn-change-bot')?.addEventListener('click', () => {
         this.resetToPicker();
@@ -582,48 +637,15 @@ class BotArena {
       document.querySelectorAll('.game-over-modal-backdrop, .modal-backdrop, .why-modal-backdrop').forEach((el) => el.remove());
 
       const records = this.getBotRecords();
-      const currentTierFilter = this.activeTierFilter || 'all';
-      const query = (this.botSearchQuery || '').trim().toLowerCase();
-
-      const displayedTiers = BOT_TIERS.filter((tier) => {
-        if (currentTierFilter !== 'all' && tier.id !== currentTierFilter) return false;
-        return true;
-      });
 
       this.container.innerHTML = `
-        <div class="d-flex flex-column gap-3 w-100 py-1 position-relative">
-          <!-- Bot Filter Bar & Search (De-cluttering 33 bots) -->
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1 p-2 comic-card">
-            <div class="d-flex align-items-center gap-1 flex-wrap p-1 rounded-4 bg-body-tertiary border" role="group" aria-label="Bot Tier Filter">
-              <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-bold ${currentTierFilter === 'all' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-bot-tier-filter="all">All Tiers (33)</button>
-              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'rookie' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-bot-tier-filter="rookie">🌱 Rookies</button>
-              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'challenger' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-bot-tier-filter="challenger">⚡ Challengers</button>
-              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'hero' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-bot-tier-filter="hero">🦸 Heroes</button>
-              <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-bold ${currentTierFilter === 'titan' ? 'btn-warning text-dark shadow-sm' : 'btn-ghost text-secondary'}" data-bot-tier-filter="titan">👑 Titans</button>
-            </div>
-            <div class="d-flex align-items-center gap-1.5 flex-grow-1 max-w-sm ms-auto">
-              <div class="input-group input-group-sm">
-                <span class="input-group-text bg-body-tertiary border-end-0"><i class="bi bi-search text-secondary"></i></span>
-                <input type="text" class="form-control border-start-0" id="bot-search-input" placeholder="Search bots by name, Elo, or style..." value="${typeof insEscape === 'function' ? insEscape(this.botSearchQuery) : this.botSearchQuery}">
-              </div>
-            </div>
-          </div>
-
-          <!-- All Bots Grouped in Separate Cards by Tier -->
-          ${displayedTiers.map((tier) => {
-            let tierBots = BOTS_33.filter((b) => b.tier === tier.id);
-            if (query) {
-              tierBots = tierBots.filter((b) =>
-                b.name.toLowerCase().includes(query) ||
-                String(b.elo).includes(query) ||
-                (b.title && b.title.toLowerCase().includes(query)) ||
-                (b.description && b.description.toLowerCase().includes(query))
-              );
-            }
+        <div class="d-flex flex-column gap-2 gap-sm-3 w-100 py-1 position-relative">
+          ${BOT_TIERS.map((tier) => {
+            const tierBots = BOTS_33.filter((b) => b.tier === tier.id);
             if (tierBots.length === 0) return '';
             return `
-              <div class="comic-card p-3 p-sm-4" id="tier-sec-${tier.id}">
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 pb-2.5 mb-3 border-bottom" style="border-color: var(--arcade-border) !important;">
+              <div class="comic-card p-2.5 p-sm-4" id="tier-sec-${tier.id}">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 pb-2 pb-sm-2.5 mb-2.5 mb-sm-3 border-bottom" style="border-color: var(--arcade-border) !important;">
                   <div class="d-flex align-items-center gap-2">
                     <span class="fs-4">${tier.icon}</span>
                     <h4 class="fw-black mb-0 fs-5">${tier.name}</h4>
@@ -632,25 +654,25 @@ class BotArena {
                   <span class="text-secondary small fw-bold">${tier.subtitle} · ${tierBots.length} Bots</span>
                 </div>
 
-                <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 row-cols-xxl-6">
+                <div class="row g-2 g-sm-3 row-cols-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 row-cols-xxl-6">
                   ${tierBots
                     .map((b) => {
                       const wins = records[b.id]?.wins || 0;
                       return `
                       <div class="col">
-                        <div class="bot-select-card comic-card p-3 d-flex flex-column h-100 cursor-pointer" data-bot-id="${b.id}" role="button" tabindex="0" aria-label="Play against ${b.name} (${b.elo} Elo)" style="cursor: pointer; position: relative; border-radius: 1rem;">
-                          ${wins > 0 ? `<span class="badge bg-success text-white fw-bold position-absolute top-0 end-0 m-2.5" style="font-size: 10.5px;"><i class="bi bi-trophy-fill me-0.5"></i>${wins}W</span>` : ''}
-                          <div class="d-flex align-items-center gap-2.5 mb-2">
+                        <div class="bot-select-card comic-card p-2 p-sm-3 d-flex flex-column h-100 cursor-pointer" data-bot-id="${b.id}" role="button" tabindex="0" aria-label="Play against ${b.name} (${b.elo} Elo)" style="cursor: pointer; position: relative; border-radius: 1rem;">
+                          ${wins > 0 ? `<span class="badge bg-success text-white fw-bold position-absolute top-0 end-0 m-1.5 m-sm-2.5" style="font-size: 10px;"><i class="bi bi-trophy-fill me-0.5"></i>${wins}W</span>` : ''}
+                          <div class="d-flex align-items-center gap-2 gap-sm-2.5 mb-1 mb-sm-2">
                             <span class="bot-avatar-emoji fs-1 lh-1">${b.avatar}</span>
                             <div class="min-w-0 flex-grow-1">
-                              <div class="fw-black text-truncate fs-6">${b.name}</div>
-                              <div class="d-flex align-items-center gap-1.5 mt-0.5">
-                                <span class="badge bg-warning text-dark fw-bold font-monospace" style="font-size: 11px;">${b.elo} Elo</span>
-                                <span class="text-secondary small text-truncate fw-semibold" style="font-size: 11px;">${b.title}</span>
+                              <div class="fw-black text-truncate fs-6 bot-name">${b.name}</div>
+                              <div class="d-flex align-items-center gap-1 gap-sm-1.5 mt-0.5 flex-wrap">
+                                <span class="badge bg-warning text-dark fw-bold font-monospace bot-elo-badge" style="font-size: 11px;">${b.elo} Elo</span>
+                                <span class="text-secondary small text-truncate fw-semibold bot-title" style="font-size: 11px;">${b.title}</span>
                               </div>
                             </div>
                           </div>
-                          <p class="text-secondary small mb-0" style="font-size: 12px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 32px;">
+                          <p class="text-secondary small mb-0 d-none d-sm-block" style="font-size: 12px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 32px;">
                             ${b.description}
                           </p>
                         </div>
@@ -684,28 +706,6 @@ class BotArena {
         }
       };
       window.addEventListener('scroll', this.scrollHandler, { passive: true });
-
-      // Bind Tier Filters
-      this.container.querySelectorAll('[data-bot-tier-filter]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          this.activeTierFilter = btn.getAttribute('data-bot-tier-filter') || 'all';
-          this.render();
-        });
-      });
-
-      // Bind Search Input
-      const searchInput = this.container.querySelector('#bot-search-input');
-      if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-          this.botSearchQuery = e.target.value;
-          this.render();
-          const nextInput = this.container.querySelector('#bot-search-input');
-          if (nextInput) {
-            nextInput.focus();
-            nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
-          }
-        });
-      }
 
       // Bind click and keyboard handlers to each bot card to start new game with random side
       this.container.querySelectorAll('[data-bot-id]').forEach((card) => {

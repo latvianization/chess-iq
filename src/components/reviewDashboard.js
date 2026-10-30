@@ -15,7 +15,6 @@ class ReviewDashboard {
     this.onSelectGame = options.onSelectGame || null;
     this.onReanalyzeGame = options.onReanalyzeGame || null;
     this.theme = 'green';
-    this.reviewTab = 'moves'; // 'moves' | 'coach'
 
     this.game = null; // AnalyzedGame object
     this.isAnalyzing = false;
@@ -1256,7 +1255,9 @@ class ReviewDashboard {
       badgeEl.style.top = '6px';
       badgeEl.style.bottom = 'auto';
     }
-    badgeEl.style.color = isWhiteDominant ? '#0f172a' : '#f8fafc';
+    badgeEl.classList.remove('text-white');
+    const isBadgeOnWhite = (this.orientation === 'w') ? placeAtBottom : !placeAtBottom;
+    badgeEl.style.setProperty('color', isBadgeOnWhite ? '#0f172a' : '#f8fafc', 'important');
   }
 
   updateAdvantageScrubber() {
@@ -1369,20 +1370,6 @@ class ReviewDashboard {
     if (typeof openFullReportModal === 'function') openFullReportModal(this);
   }
 
-
-  setReviewTab(tabName) {
-    if (!['moves', 'coach'].includes(tabName)) return;
-    this.reviewTab = tabName;
-    this.container.querySelectorAll('[data-review-tab]').forEach((btn) => {
-      btn.classList.toggle('active', btn.getAttribute('data-review-tab') === tabName);
-    });
-    this.container.querySelectorAll('.review-tab-pane').forEach((pane) => {
-      pane.classList.toggle('d-none', pane.getAttribute('data-pane-tab') !== tabName);
-    });
-    if (tabName === 'moves') {
-      setTimeout(() => this.renderAdvantageChart(), 10);
-    }
-  }
 
   downloadAnnotatedPgn() {
     if (!this.game) return;
@@ -1625,37 +1612,6 @@ class ReviewDashboard {
               <i class="bi bi-robot me-1.5"></i> Play 33 Bots
             </button>
           </div>
-          <div class="w-100 text-start p-3 rounded-3" style="background: var(--arcade-card-hover, rgba(0,0,0,0.03)); border: 1px solid var(--arcade-border);">
-            <div class="d-flex align-items-center gap-1.5 mb-2 font-monospace small fw-bold text-uppercase text-secondary" style="font-size: 11px; letter-spacing: 0.5px;">
-              <i class="bi bi-info-circle-fill text-warning"></i> How games are evaluated
-            </div>
-            <div class="row g-2.5 small" style="font-size: 12px; line-height: 1.45;">
-              <div class="col-12 col-sm-6">
-                <div class="d-flex align-items-start gap-1.5">
-                  <i class="bi bi-cpu text-warning mt-0.5" style="font-size: 13px; flex-shrink: 0;"></i>
-                  <div><strong>Stockfish Engine:</strong> Depth-based evaluation calculating centipawn advantage and engine top moves.</div>
-                </div>
-              </div>
-              <div class="col-12 col-sm-6">
-                <div class="d-flex align-items-start gap-1.5">
-                  <i class="bi bi-graph-up text-warning mt-0.5" style="font-size: 13px; flex-shrink: 0;"></i>
-                  <div><strong>Win Probability & Accuracy:</strong> Converts engine scores into win chances to measure move precision (0–100%).</div>
-                </div>
-              </div>
-              <div class="col-12 col-sm-6">
-                <div class="d-flex align-items-start gap-1.5">
-                  <i class="bi bi-award text-warning mt-0.5" style="font-size: 13px; flex-shrink: 0;"></i>
-                  <div><strong>Move Quality:</strong> Classifies moves from Brilliant sacrifices and Best moves to Inaccuracies, Mistakes, and Blunders.</div>
-                </div>
-              </div>
-              <div class="col-12 col-sm-6">
-                <div class="d-flex align-items-start gap-1.5">
-                  <i class="bi bi-shield-check text-warning mt-0.5" style="font-size: 13px; flex-shrink: 0;"></i>
-                  <div><strong>4-Pillar Positional X-Ray:</strong> Tracks balance in Material, Piece Activity, King Safety, and Pawn Structure.</div>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         ${savedGames.length > 0 ? `
@@ -1735,7 +1691,6 @@ class ReviewDashboard {
                   // Match Category Badge
                   let typeBadge = '';
                   if (item.isBotGame) {
-                    const botName = item.botInfo?.name || (isUserWhite ? item.black : item.white);
                     typeBadge = `<span class="badge rounded-pill fw-bold" style="font-size: 10px; background: rgba(139, 92, 246, 0.15); color: #8b5cf6; border: 1px solid rgba(139, 92, 246, 0.3);"><i class="bi bi-robot me-1"></i>${insEscape(botName)}</span>`;
                   } else if (item.isImported) {
                     typeBadge = `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle rounded-pill fw-bold" style="font-size: 10px;"><i class="bi bi-people-fill me-1"></i>vs Player</span>`;
@@ -1743,65 +1698,28 @@ class ReviewDashboard {
                     typeBadge = `<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill fw-bold" style="font-size: 10px;"><i class="bi bi-file-earmark-text me-1"></i>Custom</span>`;
                   }
 
-                  // Player Lines Formatting
-                  let whitePlayerHtml = '';
-                  let blackPlayerHtml = '';
-                  if (item.isBotGame) {
-                    const botAvatar = item.botInfo?.avatar || '🤖';
-                    const botName = item.botInfo?.name || (isUserWhite ? item.black : item.white);
-                    if (isUserWhite) {
-                      whitePlayerHtml = `
-                        <div class="d-flex align-items-center gap-1.5 min-w-0">
-                          <span class="fs-6 lh-1">⚪</span>
-                          <span class="fw-black text-warning text-truncate" style="max-width: 110px;">You</span>
-                          <span class="badge saved-game-elo-badge font-monospace">${insEscape(item.whiteElo)} Elo</span>
-                          <span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.2 rounded-pill" style="font-size: 9.5px;">YOU</span>
-                        </div>
-                      `;
-                      blackPlayerHtml = `
-                        <div class="d-flex align-items-center gap-1.5 min-w-0">
-                          <span class="fs-6 lh-1">${botAvatar}</span>
-                          <span class="fw-bold text-truncate" style="max-width: 120px;">${insEscape(botName)}</span>
-                          <span class="badge saved-game-elo-badge font-monospace">${insEscape(item.blackElo)} Elo</span>
-                          <span class="badge rounded-pill font-monospace fw-black px-1.5 py-0.2" style="font-size: 9px; background: #8b5cf6; color: white;">BOT</span>
-                        </div>
-                      `;
-                    } else {
-                      whitePlayerHtml = `
-                        <div class="d-flex align-items-center gap-1.5 min-w-0">
-                          <span class="fs-6 lh-1">${botAvatar}</span>
-                          <span class="fw-bold text-truncate" style="max-width: 120px;">${insEscape(botName)}</span>
-                          <span class="badge saved-game-elo-badge font-monospace">${insEscape(item.whiteElo)} Elo</span>
-                          <span class="badge rounded-pill font-monospace fw-black px-1.5 py-0.2" style="font-size: 9px; background: #8b5cf6; color: white;">BOT</span>
-                        </div>
-                      `;
-                      blackPlayerHtml = `
-                        <div class="d-flex align-items-center gap-1.5 min-w-0">
-                          <span class="fs-6 lh-1">⚫</span>
-                          <span class="fw-black text-warning text-truncate" style="max-width: 110px;">You</span>
-                          <span class="badge saved-game-elo-badge font-monospace">${insEscape(item.blackElo)} Elo</span>
-                          <span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.2 rounded-pill" style="font-size: 9.5px;">YOU</span>
-                        </div>
-                      `;
-                    }
-                  } else {
-                    whitePlayerHtml = `
+                  const botName = item.botInfo?.name || (isUserWhite ? item.black : item.white);
+                  const botAvatar = item.botInfo?.avatar || '🤖';
+                  const playerRow = (isWhite) => {
+                    const isYou = isWhite === isUserWhite;
+                    const isBot = item.isBotGame && !isYou;
+                    const icon = isBot ? botAvatar : (isWhite ? '⚪' : '⚫');
+                    const name = isYou && item.isBotGame ? 'You' : (isBot ? botName : (isWhite ? item.white : item.black));
+                    const elo = isWhite ? item.whiteElo : item.blackElo;
+                    const tag = isYou
+                      ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.2 rounded-pill" style="font-size: 9.5px;">YOU</span>'
+                      : (isBot ? '<span class="badge rounded-pill font-monospace fw-black px-1.5 py-0.2" style="font-size: 9px; background: #8b5cf6; color: white;">BOT</span>' : '');
+                    return `
                       <div class="d-flex align-items-center gap-1.5 min-w-0">
-                        <span class="fs-6 lh-1">⚪</span>
-                        <span class="fw-bold text-truncate ${isUserWhite ? 'text-warning fw-black' : ''}" style="max-width: 120px;">${insEscape(item.white)}</span>
-                        <span class="badge saved-game-elo-badge font-monospace">${insEscape(item.whiteElo)} Elo</span>
-                        ${isUserWhite ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.2 rounded-pill" style="font-size: 9.5px;">YOU</span>' : ''}
+                        <span class="fs-6 lh-1">${icon}</span>
+                        <span class="fw-bold text-truncate ${isYou ? 'text-warning fw-black' : ''}" style="max-width: 120px;">${insEscape(name)}</span>
+                        <span class="badge saved-game-elo-badge font-monospace">${insEscape(elo)} Elo</span>
+                        ${tag}
                       </div>
                     `;
-                    blackPlayerHtml = `
-                      <div class="d-flex align-items-center gap-1.5 min-w-0">
-                        <span class="fs-6 lh-1">⚫</span>
-                        <span class="fw-bold text-truncate ${!isUserWhite ? 'text-warning fw-black' : ''}" style="max-width: 120px;">${insEscape(item.black)}</span>
-                        <span class="badge saved-game-elo-badge font-monospace">${insEscape(item.blackElo)} Elo</span>
-                        ${!isUserWhite ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1.5 py-0.2 rounded-pill" style="font-size: 9.5px;">YOU</span>' : ''}
-                      </div>
-                    `;
-                  }
+                  };
+                  const whitePlayerHtml = playerRow(true);
+                  const blackPlayerHtml = playerRow(false);
 
                   const botClass = item.isBotGame ? 'card-bot-match' : 'card-player-match';
                   return `
@@ -2039,7 +1957,7 @@ class ReviewDashboard {
               <!-- Vertical Animated Eval Bar -->
               <div class="eval-bar-wrapper flex-shrink-0 cursor-help" id="eval-bar" data-iq-tip="metric_eval_bar">
                 <div class="eval-white-fill"></div>
-                <div class="eval-score-badge text-white">0.0</div>
+                <div class="eval-score-badge">0.0</div>
               </div>
 
               <!-- Chessboard Mount -->
@@ -2177,87 +2095,35 @@ class ReviewDashboard {
 
         <!-- Column 2: Review Intelligence Sidebar (Tabbed Layout: Moves & Eval / Coach) -->
         <div class="col-12 col-lg-5 col-xl-6 col-xxl-6 d-flex flex-column gap-2 px-1 px-sm-2 review-sidebar">
-          <!-- Compact PvP Header Card -->
-          <div class="comic-card p-2.5">
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom" style="border-color: var(--arcade-border) !important;">
-              <div class="d-flex align-items-center gap-1.5 flex-wrap min-w-0">
-                <button type="button" class="eco-interactive-btn cursor-pointer" id="btn-open-eco-modal" data-iq-tip="eco_opening" title="Click to view Opening theory, moves & ECO classification">
-                  <span class="badge bg-warning text-dark font-monospace fw-black px-2 py-1 eco-code-badge">${this.game.ecoCode || 'PGN'}</span>
-                  <span class="fw-black text-truncate eco-name-label" style="max-width: 170px; font-size: 13px;">${this.game.ecoName || 'Chess Match'}</span>
-                  <i class="bi bi-info-circle text-secondary" style="font-size: 11px;"></i>
-                </button>
-                ${this.game.date ? `<span class="text-secondary small font-monospace d-none d-sm-inline">· ${this.game.date}</span>` : ''}
+          <!-- One-Line Match Summary Header -->
+          <div class="comic-card p-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap min-w-0">
+              <div class="d-flex align-items-center gap-1 font-monospace small">
+                <span class="lh-1">⚪</span>
+                <span class="fw-bold ${isWhiteUser ? 'text-warning fw-black' : ''} text-truncate" style="max-width: 120px;">${whiteName}</span>
+                <span class="text-secondary">(${whiteAcc}%)</span>
+                ${isWhiteUser ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1 py-0.2 rounded-pill" style="font-size: 8.5px;">YOU</span>' : ''}
               </div>
-              <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-black px-3 py-1 d-inline-flex align-items-center gap-1.5" id="btn-open-full-report-modal" title="View Full Performance & Comprehensive Game Report" style="font-size: 12px;">
-                <i class="bi bi-file-earmark-bar-graph-fill"></i><span>Game Report</span>
+              <span class="badge ${this.game.result === '1-0' ? 'bg-success' : this.game.result === '0-1' ? 'bg-danger' : 'bg-secondary'} font-monospace px-2 py-0.5">${this.game.result}</span>
+              <div class="d-flex align-items-center gap-1 font-monospace small">
+                <span class="lh-1">⚫</span>
+                <span class="fw-bold ${!isWhiteUser ? 'text-warning fw-black' : ''} text-truncate" style="max-width: 120px;">${blackName}</span>
+                <span class="text-secondary">(${blackAcc}%)</span>
+                ${!isWhiteUser ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1 py-0.2 rounded-pill" style="font-size: 8.5px;">YOU</span>' : ''}
+              </div>
+              <button type="button" class="btn btn-ghost btn-xs text-secondary d-inline-flex align-items-center gap-1 p-0 border-0" id="btn-open-eco-modal" title="View Opening theory">
+                <span class="badge bg-warning-subtle text-warning-emphasis font-monospace border border-warning-subtle">${this.game.ecoCode || 'PGN'}</span>
+                <span class="small text-truncate" style="max-width: 130px;">${this.game.ecoName || ''}</span>
               </button>
             </div>
-
-            <!-- Player VS Player Compact Header -->
-            <div class="row g-2 align-items-center">
-              <!-- White Player -->
-              <div class="col-5">
-                <div class="player-pvp-card ${isWhiteUser ? 'is-user' : ''} p-2 d-flex flex-column gap-1">
-                  <div class="d-flex align-items-center justify-content-between gap-1 min-w-0">
-                    <div class="d-flex align-items-center gap-1 min-w-0">
-                      <span class="lh-1" style="font-size: 13px;">⚪</span>
-                      <span class="fw-black text-truncate ${isWhiteUser ? 'text-warning' : 'text-body'}" style="font-size: 12px;">${whiteName}</span>
-                    </div>
-                    ${isWhiteUser ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1 py-0.5 rounded-pill" style="font-size: 9px;">YOU</span>' : ''}
-                  </div>
-                  <div class="d-flex align-items-center flex-wrap gap-1 font-monospace" style="font-size: 11px;">
-                    <span class="fw-bold ${isWhiteUser ? 'text-emerald' : 'text-cyan'}">${whiteAcc}%</span>
-                    <span class="text-secondary">· ${whiteGameElo} Perf</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Center VS & Result -->
-              <div class="col-2 text-center px-0">
-                <div class="d-flex flex-column align-items-center justify-content-center">
-                  <span class="badge ${this.game.result === '1-0' ? 'bg-success' : this.game.result === '0-1' ? 'bg-danger' : 'bg-secondary'} match-result-badge mb-0.5">
-                    ${this.game.result}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Black Player -->
-              <div class="col-5">
-                <div class="player-pvp-card ${!isWhiteUser ? 'is-user' : ''} p-2 d-flex flex-column gap-1">
-                  <div class="d-flex align-items-center justify-content-between gap-1 min-w-0">
-                    <div class="d-flex align-items-center gap-1 min-w-0">
-                      <span class="lh-1" style="font-size: 13px;">⚫</span>
-                      <span class="fw-black text-truncate ${!isWhiteUser ? 'text-warning' : 'text-body'}" style="font-size: 12px;">${blackName}</span>
-                    </div>
-                    ${!isWhiteUser ? '<span class="badge bg-warning text-dark font-monospace fw-black px-1 py-0.5 rounded-pill" style="font-size: 9px;">YOU</span>' : ''}
-                  </div>
-                  <div class="d-flex align-items-center flex-wrap gap-1 font-monospace" style="font-size: 11px;">
-                    <span class="fw-bold ${!isWhiteUser ? 'text-emerald' : 'text-cyan'}">${blackAcc}%</span>
-                    <span class="text-secondary">· ${blackGameElo} Perf</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Segmented Tab Group -->
-          <div class="arcade-tab-group mb-1" role="tablist">
-            <button type="button" class="arcade-tab-btn ${this.reviewTab === 'moves' ? 'active' : ''}" data-review-tab="moves">
-              <i class="bi bi-list-ol me-1.5"></i>Moves & Eval
-            </button>
-            <button type="button" class="arcade-tab-btn ${this.reviewTab === 'coach' ? 'active' : ''}" data-review-tab="coach">
-              <i class="bi bi-mortarboard-fill me-1.5"></i>Coach & Diagnostics
+            <button type="button" class="btn btn-sm btn-warning text-dark comic-btn fw-bold px-2.5 py-1 d-inline-flex align-items-center gap-1 ms-auto" id="btn-open-full-report-modal" title="View Full Report" style="font-size: 11.5px;">
+              <i class="bi bi-file-earmark-bar-graph-fill"></i><span>Report</span>
             </button>
           </div>
 
-          <!-- TAB PANE 1: Moves & Eval -->
-          <div class="review-tab-pane ${this.reviewTab === 'moves' ? '' : 'd-none'}" data-pane-tab="moves">
+          <div class="d-flex flex-column gap-2">
             <!-- Advantage Timeline Line Graph -->
             <div class="comic-card-sm p-2 mb-2" id="advantage-chart-area"></div>
-
-            <!-- Turning Point & Key Moments (Feature 4: Pinned in primary view, no tab-jumping!) -->
-            ${this.buildCoachingCallouts()}
-            ${this.buildKeyMomentsChips(userCounts)}
 
             <!-- Move History Card -->
             <div class="comic-card p-2 mb-2" id="review-moves-card">
@@ -2286,10 +2152,10 @@ class ReviewDashboard {
             <div class="comic-card-sm p-2.5" id="positional-pillars-area"></div>
           </div>
 
-          <!-- TAB PANE 2: Coach & Diagnostics -->
-          <div class="review-tab-pane ${this.reviewTab === 'coach' ? '' : 'd-none'}" data-pane-tab="coach" id="pane-tab-coach">
+          <details class="comic-card-sm p-2 review-details" id="pane-tab-coach">
+            <summary class="fw-black text-uppercase small review-details-summary">Coach &amp; Diagnostics</summary>
             ${this.renderCoachTabHtml(userCounts, userOpeningAcc, userMiddleAcc, userEndAcc, userOpeningElo, userMiddlegameElo, userEndgameElo)}
-          </div>
+          </details>
         </div>
       </div>
     `;
@@ -2381,14 +2247,6 @@ class ReviewDashboard {
       if (!this.sandboxState) {
         this.nextKeyMoment();
       }
-    });
-
-    // Bind Tab Switching
-    this.container.querySelectorAll('[data-review-tab]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const tab = btn.getAttribute('data-review-tab');
-        if (tab) this.setReviewTab(tab);
-      });
     });
 
     // Bind Train Dropdown Actions

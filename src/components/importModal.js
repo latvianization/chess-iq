@@ -234,12 +234,12 @@ class ImportModal {
 
   updateProgress() {
     const progressContainer = this.modalEl.querySelector('#import-analysis-progress');
-    const tabsContainer = this.modalEl.querySelector('#import-tabs-content');
-    if (!progressContainer || !tabsContainer) return;
+    const bodyContainer = this.modalEl.querySelector('#import-tab-body');
+    if (!progressContainer || !bodyContainer) return;
 
     if (this.isAnalyzing) {
       progressContainer.classList.remove('d-none');
-      tabsContainer.classList.add('d-none');
+      bodyContainer.classList.add('d-none');
 
       const pct = this.analysisProgress.total > 0
         ? (this.analysisProgress.current / this.analysisProgress.total) * 100
@@ -259,7 +259,7 @@ class ImportModal {
       `;
     } else {
       progressContainer.classList.add('d-none');
-      tabsContainer.classList.remove('d-none');
+      bodyContainer.classList.remove('d-none');
     }
   }
 
@@ -270,7 +270,7 @@ class ImportModal {
     const unanalyzedGames = this.fetchedGames.filter((g) => !this.isGameAnalyzed(g));
 
     container.innerHTML = `
-      <div class="d-flex flex-column gap-3">
+      <div class="d-flex flex-column gap-3 h-100 flex-grow-1">
         <div class="input-group">
           <span class="input-group-text bg-body-secondary border-end-0 text-secondary"><i class="bi bi-person-fill"></i></span>
           <input type="text" class="form-control border-start-0 ps-1" id="platform-username-input"
@@ -328,7 +328,7 @@ class ImportModal {
                 ` : ''}
               </div>
             </div>
-            <div class="d-flex flex-column gap-2 overflow-y-auto overflow-x-hidden pe-1.5 w-100 pretty-scrollbar" style="max-height: 280px;">
+            <div class="d-flex flex-column gap-2 w-100">
               ${unanalyzedGames.map((g) => {
                 const isUserWhite = g.white.toLowerCase() === this.username.trim().toLowerCase();
                 const isUserBlack = g.black.toLowerCase() === this.username.trim().toLowerCase();
@@ -528,9 +528,9 @@ class ImportModal {
 
   render() {
     this.modalEl.innerHTML = `
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content comic-card overflow-hidden">
-          <div class="modal-header border-bottom bg-body-tertiary px-3 px-sm-4 py-3 d-flex align-items-center justify-content-between">
+      <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+        <div class="modal-content comic-card">
+          <div class="modal-header border-bottom bg-body-tertiary px-3 px-sm-4 py-2.5 py-sm-3 d-flex align-items-center justify-content-between flex-shrink-0">
             <h5 class="modal-title fw-black fs-5 mb-0 d-flex align-items-center">
               <i class="bi bi-cloud-arrow-up-fill me-2 fg-warning"></i>Import from Chess.com
             </h5>
@@ -538,12 +538,10 @@ class ImportModal {
           </div>
 
           <!-- Progress overlay when analyzing -->
-          <div id="import-analysis-progress" class="d-none px-4"></div>
+          <div id="import-analysis-progress" class="d-none px-4 py-4 flex-grow-1 overflow-y-auto"></div>
 
-          <!-- Content -->
-          <div id="import-tabs-content">
-            <div class="modal-body p-3 p-sm-4 overflow-x-hidden" id="import-tab-body"></div>
-          </div>
+          <!-- Modal Body (Direct single scroll container) -->
+          <div class="modal-body p-3 p-sm-4 flex-grow-1 overflow-y-auto" id="import-tab-body"></div>
         </div>
       </div>
     `;
