@@ -348,11 +348,24 @@ class ReviewDashboard {
     }
     this.updateBoardAndControls();
 
-    if (!currentStep.evalResult && !currentStep.isEvaluating && clamped > 0 && typeof evaluateFenHybrid === 'function') {
+    if (!currentStep.evalResult && !currentStep.isEvaluating && typeof evaluateFenHybrid === 'function') {
+      currentStep.evalResult = typeof localEvaluation === 'function' ? localEvaluation(currentStep.fen, 2) : null;
       currentStep.isEvaluating = true;
       this.syncSandboxState();
+      this.updateBoardAndControls();
       evaluateFenHybrid(currentStep.fen, false).then((evalRes) => {
-        currentStep.evalResult = evalRes;
+        if (evalRes && evalRes.bestMoveUci && !evalRes.bestMoveSan) {
+          try {
+            const c2 = new Chess(currentStep.fen);
+            const m = c2.move({
+              from: evalRes.bestMoveUci.slice(0, 2),
+              to: evalRes.bestMoveUci.slice(2, 4),
+              promotion: evalRes.bestMoveUci[4] || 'q'
+            });
+            if (m) evalRes.bestMoveSan = m.san;
+          } catch {}
+        }
+        currentStep.evalResult = evalRes || currentStep.evalResult;
         currentStep.isEvaluating = false;
         if (this.sandboxState && this.sandboxState.sandboxIndex === clamped) {
           this.syncSandboxState();
@@ -360,6 +373,10 @@ class ReviewDashboard {
         }
       }).catch(() => {
         currentStep.isEvaluating = false;
+        if (this.sandboxState && this.sandboxState.sandboxIndex === clamped) {
+          this.syncSandboxState();
+          this.updateBoardAndControls();
+        }
       });
     }
   }
@@ -670,13 +687,17 @@ class ReviewDashboard {
     this.updatePositionalPillars(fen);
 
     // Update Eval Bar
-    if (isSandboxMode && this.sandboxState.evalResult) {
-      const sbEval = this.sandboxState.evalResult;
-      this.updateEvalBar({
-        scoreCp: sbEval.scoreCp,
-        mate: sbEval.mate,
-        winProb: cpToWinProb(sbEval.scoreCp, sbEval.mate)
-      });
+    if (isSandboxMode) {
+      const sbEval = this.sandboxState.evalResult || (typeof localEvaluation === 'function' ? localEvaluation(fen, 2) : null);
+      if (sbEval) {
+        this.updateEvalBar({
+          scoreCp: sbEval.scoreCp,
+          mate: sbEval.mate,
+          winProb: typeof cpToWinProb === 'function' ? cpToWinProb(sbEval.scoreCp, sbEval.mate) : 0.5
+        });
+      } else {
+        this.updateEvalBar(null);
+      }
     } else {
       this.updateEvalBar(cur);
     }
@@ -1238,7 +1259,7 @@ class ReviewDashboard {
     let evalStr = '0.0';
     if (cur) {
       if (cur.mate !== null && typeof cur.mate !== 'undefined') {
-        evalStr = `M${Math.abs(cur.mate)}`;
+        evalStr = cur.mate > 0 ? `+M${Math.abs(cur.mate)}` : (cur.mate < 0 ? `-M${Math.abs(cur.mate)}` : 'M0');
       } else {
         const cpVal = (cur.scoreCp || 0) / 100;
         evalStr = cpVal > 0 ? `+${cpVal.toFixed(1)}` : cpVal.toFixed(1);

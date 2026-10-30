@@ -11,11 +11,14 @@ async function handleReviewBoardMove(dashboard, from, to) {
     if (!dashboard.sandboxState || !Array.isArray(dashboard.sandboxState.history)) {
       const baseFen = dashboard.getActiveBoardFen();
       const curEval = dashboard.getCurrentEval();
+      const baseEval = curEval
+        ? { scoreCp: curEval.scoreCp, mate: curEval.mate, bestMoveUci: curEval.bestMoveUci, bestMoveSan: curEval.bestMoveSan }
+        : (typeof localEvaluation === 'function' ? localEvaluation(baseFen, 2) : null);
       const baseStep = {
         fen: baseFen,
         lastMove: curEval ? { from: curEval.from, to: curEval.to } : null,
         san: null,
-        evalResult: curEval ? { scoreCp: curEval.scoreCp, mate: curEval.mate, bestMoveUci: curEval.bestMoveUci, bestMoveSan: curEval.bestMoveSan } : null,
+        evalResult: baseEval,
         isEvaluating: false
       };
       dashboard.sandboxState = {
@@ -34,11 +37,12 @@ async function handleReviewBoardMove(dashboard, from, to) {
     else soundService.playMove();
 
     const newFen = c.fen();
+    const instantEval = typeof localEvaluation === 'function' ? localEvaluation(newFen, 2) : null;
     const newStep = {
       fen: newFen,
       lastMove: { from: move.from, to: move.to },
       san: move.san,
-      evalResult: null,
+      evalResult: instantEval,
       isEvaluating: true
     };
 
@@ -51,17 +55,34 @@ async function handleReviewBoardMove(dashboard, from, to) {
     dashboard.updateBoardAndControls();
 
     if (typeof evaluateFenHybrid === 'function') {
-      const evalRes = await evaluateFenHybrid(newFen, false);
-      if (dashboard.sandboxState) {
-        newStep.evalResult = evalRes;
-        newStep.isEvaluating = false;
-        if (dashboard.sandboxState.history[dashboard.sandboxState.sandboxIndex] === newStep) {
-          if (typeof dashboard.syncSandboxState === 'function') {
-            dashboard.syncSandboxState();
+      try {
+        const evalRes = await evaluateFenHybrid(newFen, false);
+        if (dashboard.sandboxState) {
+          if (evalRes && evalRes.bestMoveUci && !evalRes.bestMoveSan) {
+            try {
+              const c2 = new Chess(newFen);
+              const m = c2.move({
+                from: evalRes.bestMoveUci.slice(0, 2),
+                to: evalRes.bestMoveUci.slice(2, 4),
+                promotion: evalRes.bestMoveUci[4] || 'q'
+              });
+              if (m) evalRes.bestMoveSan = m.san;
+            } catch {}
           }
-          dashboard.updateBoardAndControls();
+          newStep.evalResult = evalRes || newStep.evalResult;
+          newStep.isEvaluating = false;
+          if (dashboard.sandboxState.history[dashboard.sandboxState.sandboxIndex] === newStep) {
+            if (typeof dashboard.syncSandboxState === 'function') {
+              dashboard.syncSandboxState();
+            }
+            dashboard.updateBoardAndControls();
+          }
         }
+      } catch {
+        newStep.isEvaluating = false;
       }
+    } else {
+      newStep.isEvaluating = false;
     }
   } catch {}
 }
