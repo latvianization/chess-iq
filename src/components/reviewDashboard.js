@@ -1709,6 +1709,9 @@ class ReviewDashboard {
                     resultBadge = `<span class="badge bg-body-secondary text-secondary fw-bold px-2 py-1">${item.result}</span>`;
                   }
 
+                  const botName = item.botInfo?.name || (isUserWhite ? item.black : item.white);
+                  const botAvatar = item.botInfo?.avatar || '🤖';
+
                   // Match Category Badge
                   let typeBadge = '';
                   if (item.isBotGame) {
@@ -1719,8 +1722,6 @@ class ReviewDashboard {
                     typeBadge = `<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill fw-bold" style="font-size: 10px;"><i class="bi bi-file-earmark-text me-1"></i>Custom</span>`;
                   }
 
-                  const botName = item.botInfo?.name || (isUserWhite ? item.black : item.white);
-                  const botAvatar = item.botInfo?.avatar || '🤖';
                   const playerRow = (isWhite) => {
                     const isYou = isWhite === isUserWhite;
                     const isBot = item.isBotGame && !isYou;

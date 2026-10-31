@@ -30,7 +30,7 @@ const IQ_TOOLTIPS = {
   nav_review: {
     title: 'Game Review Mode',
     category: 'MODE',
-    what: 'Deep Stockfish analysis engine for games imported from Chess.com or pasted PGNs.',
+    what: 'Deep Stockfish analysis engine for games imported from Chess.com or played against bots.',
     why: 'Uncovers your move accuracy, performance Elo, tactical blunders, positional pillars, and coaching drills.',
   },
   nav_bots: {
@@ -54,8 +54,8 @@ const IQ_TOOLTIPS = {
   nav_import: {
     title: 'Import Game',
     category: 'ACTION',
-    what: 'Fetch matches directly from your Chess.com public profile archive or paste any PGN notation.',
-    why: 'Bring any online or tournament game into Chess IQ for instant engine review with zero server latency.',
+    what: 'Fetch matches directly from your Chess.com public profile archive.',
+    why: 'Bring your Chess.com games into Chess IQ for instant engine review with zero server latency.',
   },
 
   // ==========================================
@@ -458,12 +458,6 @@ const IQ_TOOLTIPS = {
     category: 'IMPORT',
     what: 'Fetches recent public matches played on Chess.com using your public username via the official API.',
     why: 'Fast, one-click access to all your rapid, blitz, and bullet games with zero manual copy-pasting.',
-  },
-  import_pgn: {
-    title: 'Custom PGN / FEN Import',
-    category: 'IMPORT',
-    what: 'Paste any PGN (Portable Game Notation) text or FEN string from Lichess, books, or tournaments.',
-    why: 'Analyze classical games, master miniatures, or study puzzle positions in Chess IQ.',
   }
 };
 

@@ -33,6 +33,8 @@ class BotArena {
     this.lastSpeechPly = -10;
     this.isPlaying = false; // False = showing all bots by tier; True = live match
     this.scrollHandler = null;
+    this.activeHint = null;
+    this.isHintLoading = false;
 
     this.render();
   }
@@ -66,6 +68,8 @@ class BotArena {
 
     this.clearBotMoveTimeout();
     this.isBotThinking = false;
+    this.activeHint = null;
+    this.isHintLoading = false;
 
     let undone = this.chess.undo();
     while (undone && undone.color !== this.userColor) {
@@ -99,6 +103,8 @@ class BotArena {
     this.chess.reset();
     this.gameResult = null;
     this.isBotThinking = false;
+    this.activeHint = null;
+    this.isHintLoading = false;
     this.gameStartTime = Date.now();
     this.closeGameOverModal();
     this.speechText = this.getRandomQuote(this.selectedBot.speech.onStart);
@@ -134,6 +140,8 @@ class BotArena {
     this.chess = new Chess(fen);
     this.gameResult = null;
     this.isBotThinking = false;
+    this.activeHint = null;
+    this.isHintLoading = false;
     this.gameStartTime = Date.now();
     this.closeGameOverModal();
     this.speechText = `Playing from custom position! Let's see how you play this out!`;
@@ -159,6 +167,8 @@ class BotArena {
     this.clearBotMoveTimeout();
     this.isPlaying = false;
     this.isBotThinking = false;
+    this.activeHint = null;
+    this.isHintLoading = false;
     this.gameResult = null;
     this.chess.reset();
     this.closeGameOverModal();
@@ -193,6 +203,7 @@ class BotArena {
 
   handleUserMove(from, to) {
     if (this.isBotThinking || this.gameResult) return;
+    this.activeHint = null;
 
     // Evaluate position before move to detect quality
     const prevFen = this.chess.fen();
@@ -247,6 +258,7 @@ class BotArena {
   async triggerBotMove() {
     this.clearBotMoveTimeout();
     this.isBotThinking = true;
+    this.activeHint = null;
     this.updateStatusText();
     this.updateControls();
 
@@ -481,10 +493,10 @@ class BotArena {
       showPlayerBars: true,
       interactive: !this.isBotThinking && !this.gameResult,
       showLoosePieces: false,
-      showBestMove: false,
+      showBestMove: Boolean(this.activeHint),
       visionOverlay: 'none',
       badge: null,
-      bestMove: null,
+      bestMove: this.activeHint || null,
       secondBestMove: null,
       threatMove: null,
       legalMovesFrom: (sq) => {
@@ -538,11 +550,70 @@ class BotArena {
     }
   }
 
+  async showHint() {
+    if (this.isHintLoading || this.isBotThinking || this.gameResult || this.chess.turn() !== this.userColor) {
+      return;
+    }
+
+    const currentFen = this.chess.fen();
+    this.isHintLoading = true;
+    this.updateControls();
+
+    let hintMove = null;
+
+    try {
+      if (typeof stockfishService !== 'undefined' && stockfishService.isAvailable) {
+        const sfResult = await stockfishService.evaluate(currentFen, 8, 800);
+        if (sfResult?.bestMoveUci && sfResult.bestMoveUci.length >= 4) {
+          hintMove = {
+            from: sfResult.bestMoveUci.slice(0, 2),
+            to: sfResult.bestMoveUci.slice(2, 4)
+          };
+        }
+      }
+    } catch {}
+
+    if (!hintMove && typeof findBestMoveLocal === 'function') {
+      try {
+        const local = findBestMoveLocal(currentFen, 2);
+        if (local?.bestMoveUci && local.bestMoveUci.length >= 4) {
+          hintMove = {
+            from: local.bestMoveUci.slice(0, 2),
+            to: local.bestMoveUci.slice(2, 4)
+          };
+        }
+      } catch {}
+    }
+
+    if (!hintMove) {
+      const legal = this.chess.moves({ verbose: true });
+      if (legal.length > 0) {
+        hintMove = { from: legal[0].from, to: legal[0].to };
+      }
+    }
+
+    this.isHintLoading = false;
+
+    if (this.isPlaying && !this.gameResult && this.chess.fen() === currentFen && hintMove) {
+      this.activeHint = hintMove;
+      this.updateBoard();
+      this.updateControls();
+      this.setBotSpeech(`Psst! Look at ${hintMove.from.toUpperCase()} → ${hintMove.to.toUpperCase()}!`);
+      if (typeof soundService !== 'undefined' && soundService.playSuccess) {
+        soundService.playSuccess();
+      }
+    } else {
+      this.updateControls();
+    }
+  }
+
   updateControls() {
     const actionArea = this.container.querySelector('.bot-game-actions');
     if (!actionArea) return;
 
     const canUndo = this.canUndo();
+    const isUserTurn = !this.gameResult && !this.isBotThinking && this.chess.turn() === this.userColor;
+    const canHint = isUserTurn && !this.isHintLoading;
 
     if (this.gameResult && this.onAnalyzeGame) {
       actionArea.innerHTML = `
@@ -578,11 +649,16 @@ class BotArena {
     } else {
       actionArea.innerHTML = `
         <div class="d-flex align-items-center flex-wrap justify-content-center gap-2">
-          <button type="button" class="btn btn-light comic-btn px-3 py-1.5" id="bot-btn-new">
-            <i class="bi bi-plus-circle me-1"></i> New Game
+          <button type="button" class="btn btn-light comic-btn px-3 py-1.5" id="bot-btn-hint" ${!canHint ? 'disabled' : ''}>
+            ${this.isHintLoading
+              ? '<span class="spinner-border spinner-border-sm text-warning me-1"></span>Hint'
+              : '<i class="bi bi-lightbulb-fill text-warning me-1"></i>Hint'}
           </button>
           <button type="button" class="btn btn-light comic-btn px-3 py-1.5" id="bot-btn-undo" ${!canUndo ? 'disabled' : ''}>
             <i class="bi bi-arrow-counterclockwise me-1"></i> Undo
+          </button>
+          <button type="button" class="btn btn-light comic-btn px-3 py-1.5" id="bot-btn-new">
+            <i class="bi bi-plus-circle me-1"></i> New Game
           </button>
           <button type="button" class="btn btn-light comic-btn px-3 py-1.5" id="bot-btn-flip">
             <i class="bi bi-arrow-left-right me-1"></i> Flip Sides
@@ -596,6 +672,9 @@ class BotArena {
         </div>
       `;
 
+      actionArea.querySelector('#bot-btn-hint')?.addEventListener('click', () => {
+        this.showHint();
+      });
       actionArea.querySelector('#bot-btn-new')?.addEventListener('click', () => {
         const randomSide = Math.random() < 0.5 ? 'w' : 'b';
         this.startNewGame(randomSide);
@@ -780,10 +859,10 @@ class BotArena {
       showPlayerBars: true,
       interactive: !this.isBotThinking && !this.gameResult,
       showLoosePieces: false,
-      showBestMove: false,
+      showBestMove: Boolean(this.activeHint),
       visionOverlay: 'none',
       badge: null,
-      bestMove: null,
+      bestMove: this.activeHint || null,
       secondBestMove: null,
       threatMove: null,
       legalMovesFrom: (sq) => {
