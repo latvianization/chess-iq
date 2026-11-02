@@ -775,7 +775,7 @@ ${tp.bestMoveSan ? `Stockfish Recommended: ${tp.bestMoveSan}` : ''}` : ''}`.trim
     btn.addEventListener('click', () => {
       const ply = parseInt(btn.getAttribute('data-report-jump'), 10);
       if (!isNaN(ply)) {
-        closeFn();
+        safeClose();
         dashboard.goToPly(ply);
       }
     });

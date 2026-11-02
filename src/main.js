@@ -124,6 +124,10 @@ class App {
     });
 
     window.addEventListener('popstate', (e) => {
+      if (window.__chessIqModalClosing) {
+        window.__chessIqModalClosing = false;
+        return;
+      }
       if (e.state && e.state.chessIqModal) return;
       if (document.querySelector('.modal.show') || document.querySelector('.why-modal-backdrop') || document.body.classList.contains('modal-open')) return;
 

@@ -30,7 +30,11 @@ function setupModalSwipeAndHistory(modalEl, dialogEl, closeFn) {
     window.removeEventListener('popstate', handlePopState);
     try {
       if (history.state && history.state.chessIqModal) {
+        window.__chessIqModalClosing = true;
         history.back();
+        setTimeout(() => {
+          window.__chessIqModalClosing = false;
+        }, 150);
       }
     } catch {}
     closeFn();
